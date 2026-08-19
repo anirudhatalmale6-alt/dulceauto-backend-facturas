@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{#
+  El marcado de cada bloque es el que espera el CSS de la maqueta: .grid con la
+  clase de columnas al lado, .card.stat con <small>/<strong>, .template con <dl>
+  y .event con .eico y <time>. Inventarse la estructura hace que el CSS no
+  enganche y la pantalla salga descolocada aunque las clases parezcan correctas.
+#}
+{% block content %}
+
+<div class="grid stats">
+  <div class="card stat">
+    <div><small>Facturas en el sistema</small><strong>{{ total }}</strong>
+      <span class="small muted">{{ por_estado.get('draft', 0) }} en borrador</span></div>
+    <div class="stat-ico">▤</div>
+  </div>
+  <div class="card stat">
+    <div><small>Vehículos por VIN</small><strong>{{ vehiculos }}</strong>
+      <span class="small muted">Agrupados por número de bastidor</span></div>
+    <div class="stat-ico">◈</div>
+  </div>
+  <div class="card stat">
+    <div><small>Varios interesados</small><strong>{{ compartidos }}</strong>
+      <span class="small muted">Vehículos con más de una factura</span></div>
+    <div class="stat-ico">◎</div>
+  </div>
+  <div class="card stat">
+    <div><small>Plantillas activas</small><strong>3</strong>
+      <span class="small muted">MX · EN · AR</span></div>
+    <div class="stat-ico">◫</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="toolbar">
+    <div>
+      <h2>Reparto por mercado</h2>
+      <div class="small muted">Un solo backend sirviendo las tres plantillas aprobadas.</div>
+    </div>
+    <a class="btn ghost" href="/plantillas">Ver plantillas</a>
+  </div>
+  <div class="grid template-grid">
+    {% for code, market in markets.items() %}
+      <div class="card template">
+        <h3>{{ market.label }}</h3>
+        <span class="status generated">{{ por_mercado.get(code, 0) }} factura{{ '' if por_mercado.get(code, 0) == 1 else 's' }}</span>
+        <div class="file">{{ market.template }}</div>
+        <dl>
+          <dt>Locale</dt><dd>{{ code }}</dd>
+          <dt>Moneda</dt><dd>{{ market.currency }}</dd>
+          <dt>Cuenta</dt><dd>{{ market.account_digits }} dígitos</dd>
+          <dt>Formato</dt><dd>{{ money(329000, code, false) }}</dd>
+        </dl>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="toolbar">
+    <div><h2>Últimas facturas</h2></div>
+    <a class="btn ghost" href="/facturas">Ver todas</a>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Folio</th><th>Cliente</th><th>Vehículo</th><th>Mercado</th><th>Estado</th><th>Última edición</th></tr>
+    </thead>
+    <tbody>
+      {% for inv in recientes %}
+        {% set label, css = status_labels.get(inv.status, (inv.status, 'muted')) %}
+        <tr>
+          <td><a class="folio-link" href="/facturas/{{ inv.id }}/editar">{{ inv.folio }}</a></td>
+          <td>{{ inv.customer_name or '—' }}</td>
+          <td>{{ inv.vehicle_title or '—' }}</td>
+          <td>{{ markets[inv.locale].label if inv.locale in markets else inv.locale }}</td>
+          <td><span class="status {{ css }}">{{ label }}</span></td>
+          <td class="small muted">{{ inv.updated_at.strftime('%d %b %Y · %H:%M') }}</td>
+        </tr>
+      {% else %}
+        <tr class="empty-row"><td colspan="6">Todavía no hay facturas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="toolbar">
+    <div><h2>Actividad reciente</h2></div>
+    <a class="btn ghost" href="/actividad">Ver registro</a>
+  </div>
+  <div class="activity-list">
+    {% for e in acciones %}
+      <div class="event">
+        <div class="eico">{{ '⚿' if 'master' in e.action else ('⇥' if 'login' in e.action else '✎') }}</div>
+        <div>
+          <b>{{ action_labels.get(e.action, e.action) }}{% if e.folio %} · {{ e.folio }}{% endif %}</b>
+          <span class="small muted">{{ e.actor }}{% if e.detail %} · {{ e.detail }}{% endif %}</span>
+        </div>
+        <time>{{ e.created_at.strftime('%d %b · %H:%M') }}</time>
+      </div>
+    {% else %}
+      <div class="small muted">Sin actividad registrada todavía.</div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}

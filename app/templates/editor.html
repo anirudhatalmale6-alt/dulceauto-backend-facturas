@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{#
+  Editor. En Fase A el formulario ya se pinta con los datos reales de la
+  factura y con las claves fijas como atributo data-field, que es lo que
+  consumira el motor de plantillas. Guardar llega en Fase B.
+#}
+{% set groups = [
+  ('1 · Plantilla y estado', [
+    ('locale', 'Plantilla', 'locale'),
+    ('status', 'Estado', 'status'),
+    ('folio', 'Folio', 'text'),
+    ('issue_date', 'Fecha emisión', 'date'),
+    ('valid_until', 'Vigencia protección', 'date'),
+    ('authorization', 'Autorización', 'text'),
+  ]),
+  ('2 · Cliente', [
+    ('customer_name', 'Nombre completo', 'text'),
+    ('customer_email', 'Email', 'email'),
+    ('customer_phone', 'Teléfono', 'text'),
+    ('customer_city', 'Ciudad', 'text'),
+  ]),
+  ('3 · Vehículo', [
+    ('vehicle_title', 'Título del vehículo', 'full'),
+    ('vehicle_vin', 'VIN', 'text'),
+    ('vehicle_location', 'Ubicación', 'text'),
+    ('vehicle_year', 'Año', 'text'),
+    ('vehicle_type', 'Tipo', 'text'),
+    ('vehicle_mileage', 'Kilometraje', 'text'),
+    ('vehicle_fuel', 'Combustible', 'text'),
+    ('vehicle_transmission', 'Transmisión', 'text'),
+    ('vehicle_carfax', 'CARFAX / referencia', 'text'),
+  ]),
+  ('4 · Importes', [
+    ('pricing_vehicle_price', 'Precio vehículo', 'number'),
+    ('pricing_reservation_amount', 'Importe pre-reserva', 'number'),
+    ('pricing_discount', 'Descuento', 'text'),
+    ('pricing_coverage', 'Seguro', 'text'),
+    ('pricing_transport', 'Transporte', 'text'),
+    ('pricing_currency', 'Moneda', 'text'),
+  ]),
+  ('6 · Entrega', [
+    ('delivery_date', 'Fecha entrega', 'date'),
+    ('delivery_mode', 'Modalidad', 'text'),
+  ]),
+  ('7 · Representante', [
+    ('representative_name', 'Nombre', 'text'),
+    ('representative_role', 'Cargo', 'text'),
+    ('representative_phone', 'Teléfono', 'text'),
+    ('representative_email', 'Email', 'email'),
+    ('representative_hours', 'Horario', 'text'),
+  ])
+] %}
+
+{% macro value_of(name) %}{% if invoice %}{{ invoice[name] if invoice[name] is not none else '' }}{% endif %}{% endmacro %}
+
+{% block content %}
+
+<div class="sticky-actions">
+  <div class="toolbar">
+    <div>
+      <h2>{{ 'Editar factura' if invoice else 'Crear factura' }}</h2>
+      <div class="small muted">Una sola pantalla operativa para las 3 plantillas aprobadas.</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <a class="btn ghost" href="/facturas">Volver al listado</a>
+      <button class="btn" type="button" disabled>Guardar borrador <span class="phase-tag">Fase B</span></button>
+      <button class="btn gold" type="button" disabled>Generar PDF <span class="phase-tag">Fase D</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="editor-topline">
+  <span class="info-chip">Plantilla <b>{{ markets[invoice.locale].label if invoice and invoice.locale in markets else 'México · es-MX' }}</b></span>
+  <span class="info-chip">Folio <b>{{ invoice.folio if invoice else '—' }}</b></span>
+  <span class="info-chip">PDF <b>A4 · 1 página</b></span>
+  <span class="info-chip">Moneda <b>{{ markets[invoice.locale].currency if invoice and invoice.locale in markets else 'MXN' }}</b></span>
+</div>
+
+<div class="editor-help">
+  <div>
+    <b>Flujo diario:</b> se completan solo los datos variables. FAQ, protección,
+    textos legales y estructura visual permanecen bloqueados por plantilla para
+    no romper la página A4.
+  </div>
+</div>
+
+<div class="editor-panel">
+  {% for title, fields in groups %}
+    <details class="section" {% if loop.first %}open{% endif %}>
+      <summary>{{ title }} <span>⌄</span></summary>
+      <div class="section-body">
+        <div class="form-grid">
+          {% for name, label, kind in fields %}
+            <label class="{{ 'full' if kind == 'full' else '' }}">{{ label }}
+              {% if kind == 'locale' %}
+                <select name="{{ name }}" disabled>
+                  {% for code, m in markets.items() %}
+                    <option value="{{ code }}" {% if invoice and invoice.locale == code %}selected{% endif %}>{{ m.label }} · {{ code }}</option>
+                  {% endfor %}
+                </select>
+              {% elif kind == 'status' %}
+                <select name="{{ name }}" disabled>
+                  {% for code, pair in status_labels.items() %}
+                    <option value="{{ code }}" {% if invoice and invoice.status == code %}selected{% endif %}>{{ pair[0] }}</option>
+                  {% endfor %}
+                </select>
+              {% else %}
+                <input
+                  name="{{ name }}"
+                  type="{{ 'date' if kind == 'date' else ('number' if kind == 'number' else 'text') }}"
+                  value="{{ value_of(name)|trim }}"
+                  readonly>
+              {% endif %}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+    </details>
+  {% endfor %}
+
+  <details class="section">
+    <summary>5 · Pago / datos bancarios <span>⌄</span></summary>
+    <div class="section-body">
+      <div class="lock">
+        <b>🔒 Super-admin</b>
+        <span>Los datos bancarios se heredan de Configuración y se congelan en la
+        factura al crearla. Un operador no puede cambiarlos desde aquí.</span>
+      </div>
+      <div class="form-grid" style="margin-top:12px">
+        <label>Banco receptor<div class="readonly-wrap"><input value="{{ value_of('banking_bank')|trim }}" readonly></div></label>
+        <label>Beneficiario<div class="readonly-wrap"><input value="{{ value_of('banking_beneficiary')|trim }}" readonly></div></label>
+        <label>{{ markets[invoice.locale].account_label if invoice and invoice.locale in markets else 'CLABE / CBU' }}<div class="readonly-wrap"><input value="{{ value_of('banking_account_number')|trim }}" readonly></div></label>
+        <label>Cuenta bancaria<div class="readonly-wrap"><input value="{{ value_of('banking_bank_account')|trim }}" readonly></div></label>
+        <label>Referencia de pago<div class="readonly-wrap"><input value="{{ value_of('banking_payment_reference')|trim }}" readonly></div></label>
+      </div>
+    </div>
+  </details>
+
+  <details class="section">
+    <summary>Claves fijas <span>⌄</span></summary>
+    <div class="section-body">
+      <p class="small muted">
+        Estas son las claves que consumirán las tres plantillas. Sustituyen a las
+        claves derivadas del texto del Milestone 1: ahora se puede cambiar
+        cualquier frase de la factura sin desenganchar ningún idioma.
+      </p>
+      <div class="key-grid">
+        <div class="key"><code>customer.name</code><br>Nombre cliente</div>
+        <div class="key"><code>transaction.folio</code><br>Folio</div>
+        <div class="key"><code>vehicle.vin</code><br>VIN</div>
+        <div class="key"><code>vehicle.price</code><br>Precio</div>
+        <div class="key"><code>payment.amount</code><br>Pre-reserva</div>
+        <div class="key"><code>payment.account</code><br>CLABE / CBU</div>
+        <div class="key"><code>delivery.date</code><br>Entrega</div>
+        <div class="key"><code>representative.name</code><br>Representante</div>
+        <div class="key"><code>template.locale</code><br>MX / EN / AR</div>
+      </div>
+    </div>
+  </details>
+</div>
+
+<div class="devnote" style="margin-top:16px">
+  <b>Fase A.</b> El formulario se pinta con los datos reales de la base y con el
+  modelo definitivo detrás. Los campos están en solo lectura porque guardar,
+  duplicar y generar son el contenido de las fases B y D; se activan sin tocar
+  esta pantalla.
+</div>
+
+{% endblock %}

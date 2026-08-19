@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="locked-panel">
+  <div class="lock-icon">🔒</div>
+  <h2>Configuración bloqueada</h2>
+  <p>
+    Esta sección exige una segunda contraseña, independiente de la del panel.
+    Protege los datos bancarios, el beneficiario, la CLABE o el CBU, el logo de
+    las facturas y la configuración del QR.
+  </p>
+
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/configuracion/desbloquear" autocomplete="off">
+    <input name="master_password" type="password" placeholder="Master Password" required autofocus autocomplete="off">
+    <button class="btn gold" type="submit">Desbloquear</button>
+  </form>
+
+  <p class="small muted" style="margin-top:20px">
+    Se vuelve a bloquear sola tras {{ minutes }} minutos sin actividad, y también
+    al cerrar sesión. La contraseña se comprueba en el servidor contra un hash:
+    no aparece en el HTML ni en el JavaScript de esta página.
+  </p>
+</div>
+
+{% endblock %}

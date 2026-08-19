@@ -1,0 +1,12 @@
+# Backend DulceAuto — Facturas Premium
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+jinja2==3.1.5
+SQLAlchemy==2.0.36
+alembic==1.14.0
+python-multipart==0.0.20
+itsdangerous==2.2.0
+pydantic-settings==2.7.1
+# Motor de PDF. Se usa a partir de la Fase D, pero se fija aqui para que el
+# contenedor sea el mismo en todas las fases y no cambie el render a mitad.
+playwright==1.49.1

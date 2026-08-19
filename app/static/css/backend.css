@@ -1,0 +1,148 @@
+/*
+  Anadidos propios del backend real.
+
+  El aspecto del panel es el de la maqueta V1.3 y vive en panel.css, que se
+  copio tal cual. Aqui solo van las piezas que la maqueta no tenia porque no le
+  hacian falta: la pantalla de acceso, el bloqueo de Configuracion, los avisos y
+  el enlace de navegacion, que en la maqueta era un <button> y ahora es un <a>.
+*/
+
+/* --- navegacion: el <a> tiene que comportarse como el <button> original --- */
+.nav a.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, .78);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background .18s, color .18s;
+}
+.nav a.nav-link:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.nav a.nav-link.active { background: rgba(255, 255, 255, .14); color: #fff; }
+
+a.avatar { text-decoration: none; display: grid; place-items: center; }
+
+/* --- avisos --- */
+.alert {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--blue);
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 13px 16px;
+  margin-bottom: 16px;
+  font-size: 13.5px;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.alert b { font-weight: 700; }
+.alert.warn { border-left-color: var(--gold); background: var(--cream2); }
+.alert.error { border-left-color: var(--danger); }
+.alert.ok { border-left-color: var(--ok); }
+
+/* --- pantalla de acceso --- */
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(160deg, var(--navy) 0%, var(--navy2) 55%, #0a1c38 100%);
+}
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border-radius: var(--r);
+  padding: 30px 28px;
+  box-shadow: 0 30px 70px rgba(4, 16, 35, .38);
+}
+.login-card .brand-mark { width: 46px; height: 46px; font-size: 16px; margin-bottom: 16px; }
+.login-card h1 { font-size: 21px; margin: 0 0 4px; color: var(--ink); }
+.login-card p.sub { font-size: 13px; color: var(--muted); margin: 0 0 22px; }
+.login-card label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 14px; }
+.login-card input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+}
+.login-card input:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+.login-card button[type="submit"] { width: 100%; margin-top: 6px; }
+.login-foot { margin-top: 18px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
+/* --- Configuracion bloqueada --- */
+.locked-panel {
+  max-width: 520px;
+  margin: 40px auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 32px 30px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.locked-panel .lock-icon { font-size: 34px; }
+.locked-panel h2 { margin: 12px 0 6px; font-size: 20px; color: var(--ink); }
+.locked-panel p { font-size: 13.5px; color: var(--muted); line-height: 1.55; margin: 0 auto 20px; max-width: 400px; }
+.locked-panel form { display: grid; gap: 12px; max-width: 320px; margin: 0 auto; }
+.locked-panel input {
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 14px;
+  text-align: center;
+  letter-spacing: .08em;
+}
+.master-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(31, 157, 99, .12);
+  color: var(--ok);
+}
+
+/* --- tabla de facturas: la maqueta no preveia el estado vacio --- */
+.empty-row td { text-align: center; color: var(--muted); padding: 32px 12px; font-size: 13.5px; }
+
+/* --- marca de fase, para que se vea que aun no esta cableado --- */
+.phase-tag {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(18, 86, 216, .1);
+  color: var(--blue);
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Los tres temas cambian variables en <body>; estos bloques solo recolocan lo
+   que se anadio aqui, para que no se quede en claro cuando el resto no lo esta. */
+body.theme-night .alert,
+body.theme-night .locked-panel,
+body.theme-night .login-card { background: #0f1927; border-color: rgba(255, 255, 255, .1); }
+body.theme-night .alert.warn { background: #1a1d16; }
+body.theme-night .login-card input,
+body.theme-night .locked-panel input { background: #0b1420; border-color: rgba(255, 255, 255, .14); color: #eaf1fb; }
+
+body.theme-soft .alert,
+body.theme-soft .locked-panel,
+body.theme-soft .login-card { background: var(--cream2); }

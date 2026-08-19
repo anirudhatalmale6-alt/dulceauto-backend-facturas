@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acceso · DulceAuto</title>
+<link rel="stylesheet" href="{{ url_for('static', path='/css/panel.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='/css/backend.css') }}">
+</head>
+<body class="{{ theme_class }}">
+<div class="login-page">
+  <div class="login-card">
+    <div class="brand-mark">DA</div>
+    <h1>Facturas Premium</h1>
+    <p class="sub">Sistema interno · acceso restringido</p>
+
+    {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+    <form method="post" action="/acceso" autocomplete="off">
+      <label>Usuario
+        <input name="username" required autofocus autocomplete="username">
+      </label>
+      <label>Contraseña
+        <input name="password" type="password" required autocomplete="current-password">
+      </label>
+      <button class="btn gold" type="submit">Entrar</button>
+    </form>
+
+    <div class="login-foot">
+      Configuración queda protegida aparte con la Master Password, incluso
+      después de entrar aquí.
+    </div>
+  </div>
+</div>
+</body>
+</html>

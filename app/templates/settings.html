@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="settings-hero">
+  <div>
+    <span class="security-badge">🔓 Área protegida · Super-admin</span>
+    <h2>Configuración maestra</h2>
+    <p>Datos bancarios por mercado, marca, QR, plantillas y contraseñas.</p>
+  </div>
+  <form method="post" action="/configuracion/bloquear">
+    <button class="btn ghost" type="submit">Bloquear configuración</button>
+  </form>
+</div>
+
+<div class="master-note">
+  <span>🛡️</span>
+  <div>
+    <b>Sesión de Configuración abierta.</b> Se cierra sola tras
+    {{ minutes }} minutos sin actividad y al cerrar sesión. Las dos contraseñas
+    se guardan hasheadas con scrypt y se comprueban siempre en el servidor.
+  </div>
+</div>
+
+<div class="settings-section-title">01 · Contraseñas</div>
+<div class="grid settings-grid">
+  <div class="card">
+    <h3>Acceso al panel</h3>
+    <p class="small muted">Cuenta única y compartida por el equipo autorizado.</p>
+    <form method="post" action="/configuracion/contrasenas" autocomplete="off">
+      <input type="hidden" name="which" value="admin">
+      <div class="form-grid">
+        <label>Usuario<input name="username" value="{{ user }}"></label>
+        <label>Nueva contraseña<input name="new_password" type="password" minlength="8" required></label>
+        <label>Repetir contraseña<input name="confirm_password" type="password" minlength="8" required></label>
+      </div>
+      <button class="btn gold" type="submit" style="margin-top:12px">Cambiar contraseña del panel</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Master Password</h3>
+    <p class="small muted">Segunda barrera, solo para esta sección. La conoce únicamente el propietario.</p>
+    <form method="post" action="/configuracion/contrasenas" autocomplete="off">
+      <input type="hidden" name="which" value="master">
+      <div class="form-grid">
+        <label>Nueva Master Password<input name="new_password" type="password" minlength="8" required></label>
+        <label>Repetir Master Password<input name="confirm_password" type="password" minlength="8" required></label>
+      </div>
+      <button class="btn gold" type="submit" style="margin-top:12px">Cambiar Master Password</button>
+    </form>
+  </div>
+</div>
+
+<div class="settings-section-title">02 · Datos bancarios y representante, por mercado</div>
+<div class="grid settings-grid">
+  {% for code, filas in por_mercado.items() %}
+    <div class="card">
+      <h3>{{ markets[code].label }} <span class="badge">{{ code }}</span></h3>
+      <div class="lock">
+        <b>🔒 Super-admin</b>
+        <span>Se copian a cada factura al crearla, de modo que una factura ya
+        emitida conserva la cuenta a la que se pidió pagar.</span>
+      </div>
+      <div class="arch-list" style="margin-top:12px">
+        {% for s in filas %}
+          <div class="arch-row"><div class="dot">·</div><div><b><code>{{ s.key }}</code></b><div class="small muted">{{ s.value or '—' }}</div></div></div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="settings-section-title">03 · Marca, QR y PDF</div>
+<div class="card">
+  <div class="arch-list">
+    {% for s in globales %}
+      <div class="arch-row"><div class="dot">·</div><div><b><code>{{ s.key }}</code></b><div class="small muted">{{ s.value or '—' }}</div></div></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="devnote" style="margin-top:16px">
+  <b>Fase A.</b> La puerta de Configuración, el cambio de las dos contraseñas y
+  el almacén de ajustes ya funcionan de verdad. La edición de los ajustes en sí
+  y la subida de logo y QR son la Fase D, que es donde se usan.
+</div>
+
+{% endblock %}

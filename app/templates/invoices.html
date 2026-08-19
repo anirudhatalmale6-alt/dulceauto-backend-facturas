@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Facturas</h2>
+      <div class="small muted">Consulta la factura enviada, edita o duplica una pre-factura para otro interesado.</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <form method="get" action="/facturas">
+        <input class="search" type="search" name="q" value="{{ q }}" placeholder="Buscar folio, cliente o vehículo">
+      </form>
+      <a class="btn gold" href="/facturas/nueva">+ Nueva factura</a>
+    </div>
+  </div>
+
+  <div class="invoice-group-note">
+    <span>ℹ</span>
+    <div>
+      <b>Varios interesados para un mismo vehículo:</b> duplicar una factura crea
+      un folio nuevo y conserva vehículo, importes y plantilla. El cliente y sus
+      datos se capturan de nuevo. <b>La copia no confirma la reserva.</b>
+    </div>
+  </div>
+
+  {% if q %}
+    <div class="small muted" style="margin-bottom:10px">
+      {{ invoices|length }} resultado{{ '' if invoices|length == 1 else 's' }} para “{{ q }}”.
+      <a class="folio-link" href="/facturas">Quitar filtro</a>
+    </div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Folio</th><th>Cliente</th><th>Vehículo</th><th>Mercado</th>
+        <th>Interesados</th><th>Estado</th><th>Última edición</th><th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in invoices %}
+        {% set label, css = status_labels.get(inv.status, (inv.status, 'muted')) %}
+        {% set n = interesados.get(inv.vehicle_vin, 1) if inv.vehicle_vin else 1 %}
+        <tr>
+          <td><a class="folio-link" href="/facturas/{{ inv.id }}/editar">{{ inv.folio }}</a></td>
+          <td>{{ inv.customer_name or '—' }}</td>
+          <td>
+            {{ inv.vehicle_title or '—' }}
+            {% if inv.vehicle_vin %}<div class="small muted">{{ inv.vehicle_vin }}</div>{% endif %}
+          </td>
+          <td><b class="market {{ 'mx' if inv.locale == 'es-MX' else ('ar' if inv.locale == 'es-AR' else 'en') }}">{{ markets[inv.locale].label if inv.locale in markets else inv.locale }}</b></td>
+          <td><span class="duplicate-badge">{{ n }} interesado{{ '' if n == 1 else 's' }}</span></td>
+          <td><span class="status {{ css }}">{{ label }}</span></td>
+          <td class="small muted">{{ inv.updated_at.strftime('%d %b %Y · %H:%M') }}</td>
+          <td class="actions">
+            <a class="btn ghost" href="/facturas/{{ inv.id }}/editar">Editar</a>
+          </td>
+        </tr>
+      {% else %}
+        <tr class="empty-row">
+          <td colspan="8">
+            {% if q %}Ninguna factura coincide con “{{ q }}”.{% else %}Todavía no hay facturas.{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="devnote" style="margin-top:16px">
+  <b>Fase A.</b> El listado, la búsqueda por folio, cliente, vehículo y VIN, y el
+  recuento de interesados por VIN ya funcionan sobre datos reales. Duplicar,
+  guardar borrador y generar PDF se cablean en las fases B y D.
+</div>
+
+{% endblock %}

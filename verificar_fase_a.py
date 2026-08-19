@@ -1,0 +1,132 @@
+"""
+Comprobacion de la Fase A de punta a punta.
+
+No comprueba que las paginas "carguen": comprueba que hagan lo que tienen que
+hacer. En concreto, que la puerta de Configuracion no se pueda saltar, que es lo
+unico de esta fase que seria grave si fallara.
+
+    python verificar_fase_a.py [http://127.0.0.1:8731]
+"""
+import sys
+
+from playwright.sync_api import sync_playwright
+
+BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8731"
+SHOTS = sys.argv[2] if len(sys.argv) > 2 else "/tmp/fase-a"
+
+USER, PASSWORD = "admin", "DulceAuto2026"
+MASTER = "Master2026"
+
+ok, fallos = [], []
+
+
+def check(nombre, condicion, extra=""):
+    (ok if condicion else fallos).append(nombre)
+    print(("  OK   " if condicion else "  FALLA") + f" {nombre}" + (f"  [{extra}]" if extra else ""))
+
+
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+
+    print("\n1 · Acceso")
+    page.goto(f"{BASE}/facturas")
+    check("sin sesion, cualquier vista lleva al acceso", page.url.endswith("/acceso"), page.url)
+
+    page.fill('input[name="username"]', USER)
+    page.fill('input[name="password"]', "contrasena-incorrecta")
+    page.click('button[type="submit"]')
+    check("contrasena incorrecta no entra", page.url.endswith("/acceso"))
+    check("el error se muestra", page.locator(".alert.error").count() == 1)
+
+    page.fill('input[name="username"]', USER)
+    page.fill('input[name="password"]', PASSWORD)
+    page.click('button[type="submit"]')
+    check("credenciales correctas entran", page.url.rstrip("/") == BASE.rstrip("/"), page.url)
+    page.screenshot(path=f"{SHOTS}/01-dashboard.png")
+
+    print("\n2 · Las seis vistas")
+    for ruta, marca, archivo in [
+        ("/", "Dashboard", "01-dashboard"),
+        ("/facturas", "Facturas", "02-facturas"),
+        ("/facturas/nueva", "Crear", "03-editor"),
+        ("/plantillas", "Plantillas", "04-plantillas"),
+        ("/actividad", "Actividad", "05-actividad"),
+    ]:
+        page.goto(BASE + ruta)
+        check(f"{ruta} responde", marca.lower() in page.locator("h1").inner_text().lower())
+        page.screenshot(path=f"{SHOTS}/{archivo}.png")
+
+    print("\n3 · Busqueda")
+    page.goto(f"{BASE}/facturas?q=Audi")
+    filas = page.locator("tbody tr:not(.empty-row)").count()
+    check("buscar 'Audi' devuelve solo el Audi", filas == 1, f"{filas} filas")
+    page.goto(f"{BASE}/facturas?q=RES-87240")
+    check("buscar por folio funciona", page.locator("tbody tr:not(.empty-row)").count() == 1)
+    page.goto(f"{BASE}/facturas?q=zzzzz")
+    check("busqueda sin resultados no rompe", page.locator(".empty-row").count() == 1)
+
+    print("\n4 · Master Password")
+    page.goto(f"{BASE}/configuracion")
+    check("Configuracion arranca bloqueada aun con sesion", page.locator(".locked-panel").count() == 1)
+    check("los datos bancarios no se filtran en el HTML bloqueado", "012180001234567899" not in page.content())
+    check("la Master Password no viaja al navegador", MASTER not in page.content())
+
+    page.fill('input[name="master_password"]', "master-incorrecta")
+    page.click('button[type="submit"]')
+    check("Master incorrecta no abre", page.locator(".locked-panel").count() == 1)
+    check("avisa del error", page.locator(".alert.error").count() == 1)
+
+    page.fill('input[name="master_password"]', MASTER)
+    page.click('button[type="submit"]')
+    check("Master correcta abre", page.locator(".settings-hero").count() == 1)
+    check("ahora si se ven los datos bancarios", "012180001234567899" in page.content())
+    page.screenshot(path=f"{SHOTS}/06-configuracion.png")
+
+    print("\n5 · El bloqueo vuelve a cerrarse")
+    page.click('form[action="/configuracion/bloquear"] button')
+    check("bloquear cierra la seccion", page.locator(".locked-panel").count() == 1)
+
+    page.fill('input[name="master_password"]', MASTER)
+    page.click('button[type="submit"]')
+    page.goto(f"{BASE}/salir")
+    page.goto(f"{BASE}/acceso")
+    page.fill('input[name="username"]', USER)
+    page.fill('input[name="password"]', PASSWORD)
+    page.click('button[type="submit"]')
+    page.goto(f"{BASE}/configuracion")
+    check("cerrar sesion tambien cierra Configuracion", page.locator(".locked-panel").count() == 1)
+
+    print("\n6 · Los tres modos visuales")
+    page.goto(BASE + "/")
+    for tema, clase, archivo in [
+        ("light", "", "07-tema-claro"),
+        ("soft", "theme-soft", "08-tema-suave"),
+        ("night", "theme-night", "09-tema-noche"),
+    ]:
+        page.evaluate(f"setTheme('{tema}')")
+        page.wait_for_timeout(250)
+        clases = page.locator("body").get_attribute("class") or ""
+        check(f"tema {tema} se aplica", clase in clases if clase else "theme-" not in clases)
+        page.screenshot(path=f"{SHOTS}/{archivo}.png")
+
+    # El tema tiene que sobrevivir a una recarga: si no, no sirve de nada.
+    page.reload()
+    check("el tema persiste al recargar", "theme-night" in (page.locator("body").get_attribute("class") or ""))
+
+    print("\n7 · Registro de actividad")
+    page.goto(f"{BASE}/actividad")
+    texto = page.locator("table").inner_text()
+    for evento in ["Inicio de sesión", "Intento de acceso fallido", "Master Password incorrecta",
+                   "Configuración desbloqueada", "Configuración bloqueada", "Cierre de sesión"]:
+        check(f"queda registrado: {evento}", evento in texto)
+    page.screenshot(path=f"{SHOTS}/05-actividad.png")
+
+    browser.close()
+
+print(f"\n{'=' * 58}\n{len(ok)} comprobaciones correctas, {len(fallos)} fallos")
+if fallos:
+    for f in fallos:
+        print(f"  FALLA: {f}")
+    sys.exit(1)
+print("Fase A verificada.")

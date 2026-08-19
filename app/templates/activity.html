@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Actividad</h2>
+      <div class="small muted">
+        Últimos {{ entries|length }} movimientos. La cuenta del panel es única y
+        compartida, así que el actor es siempre Admin.
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Fecha (UTC)</th><th>Acción</th><th>Folio</th><th>Usuario</th><th>Detalle</th><th>IP</th></tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+        <tr>
+          <td class="small">{{ e.created_at.strftime('%d %b %Y · %H:%M:%S') }}</td>
+          <td><b>{{ action_labels.get(e.action, e.action) }}</b></td>
+          <td>{% if e.folio %}<span class="folio-link">{{ e.folio }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>{{ e.actor }}</td>
+          <td class="small muted">{{ e.detail or '—' }}</td>
+          <td class="small muted">{{ e.ip or '—' }}</td>
+        </tr>
+      {% else %}
+        <tr class="empty-row"><td colspan="6">Sin actividad registrada todavía.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="devnote" style="margin-top:16px">
+  <b>Fase A.</b> Ya se registran los accesos, los intentos fallidos, el
+  desbloqueo y bloqueo de Configuración y los cambios de contraseña. Los eventos
+  de factura y de PDF se añaden solos según se cableen las fases B y D, porque
+  el registro ya está montado.
+</div>
+
+{% endblock %}

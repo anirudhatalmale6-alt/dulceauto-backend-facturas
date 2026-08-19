@@ -1,0 +1,12 @@
+Vehicle sample photography
+
+- vehicle-front.jpg: “Audi A3 2.0 TDI 8V Ice Silver Metallic (1)” by Damian B Oh, licensed CC BY-SA 4.0.
+  Source: https://commons.wikimedia.org/wiki/File:Audi_A3_2.0_TDI_8V_Ice_Silver_Metallic_(1).jpg
+- vehicle-main.jpg: “Audi A3 8V silver (2)” by Damian B Oh, licensed CC BY-SA 4.0.
+  Source: https://commons.wikimedia.org/wiki/File:Audi_A3_8V_silver_(2).jpg
+- vehicle-rear.jpg: “Audi A3 (rear)” by Jason Lawrence, licensed CC BY 4.0.
+  Source: https://commons.wikimedia.org/wiki/File:Audi_A3_(rear).jpg
+- vehicle-interior.jpg: “Audi A3 8V 1.4 TFSI Ambiente Misanorot Interieur” by Thomas doerfer, licensed CC BY.
+  Source: https://commons.wikimedia.org/wiki/File:Audi_A3_8V_1.4_TFSI_Ambiente_Misanorot_Interieur.JPG
+
+Images are used as local demonstration assets for the invoice mockup.

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Plantillas</h2>
+      <div class="small muted">Tres HTML aprobados, un CSS compartido y reglas por mercado.</div>
+    </div>
+  </div>
+
+  <div class="grid template-grid">
+    {% for t in plantillas %}
+      <div class="card template">
+        <h3>{{ t.market.label }}</h3>
+        {% if t.exists %}
+          <span class="status generated">Activa · {{ t.size_kb }} KB</span>
+        {% else %}
+          <span class="status draft">No encontrada</span>
+        {% endif %}
+        <div class="file">{{ t.path }}</div>
+        <dl>
+          <dt>Locale</dt><dd>{{ t.market.code }}</dd>
+          <dt>Moneda</dt><dd>{{ t.market.currency }}</dd>
+          <dt>Cuenta</dt><dd>{{ t.market.account_label }}</dd>
+          <dt>Documento</dt><dd>{{ t.market.document_label }}</dd>
+          <dt>Formato</dt><dd>{{ money(329000, t.market.code, false) }}</dd>
+          <dt>Facturas</dt><dd>{{ t.count }}</dd>
+        </dl>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3>Regla de mantenimiento</h3>
+  <p class="muted small">
+    La maquetación de cada plantilla se mantiene tal cual fue aprobada. Todos los
+    campos dinámicos usan las mismas claves fijas y los textos estáticos viven en
+    cada plantilla. Así, cambiar una frase no rompe la integración de ningún
+    idioma, que era exactamente el problema del sistema de claves anterior.
+  </p>
+  <div class="arch-list" style="margin-top:12px">
+    <div class="arch-row"><div class="dot">·</div><div><b><code>template.locale</code></b><div class="small muted">"es-MX" · "en" · "es-AR"</div></div></div>
+    <div class="arch-row"><div class="dot">·</div><div><b><code>customer.name</code></b><div class="small muted">Invoice.customer_name</div></div></div>
+    <div class="arch-row"><div class="dot">·</div><div><b><code>vehicle.vin</code></b><div class="small muted">Invoice.vehicle_vin</div></div></div>
+    <div class="arch-row"><div class="dot">·</div><div><b><code>pricing.vehicle_price</code></b><div class="small muted">Invoice.pricing_vehicle_price</div></div></div>
+    <div class="arch-row"><div class="dot">·</div><div><b><code>banking.account_number</code></b><div class="small muted">Invoice.banking_account_number</div></div></div>
+    <div class="arch-row"><div class="dot">·</div><div><b><code>delivery.date</code></b><div class="small muted">Invoice.delivery_date</div></div></div>
+  </div>
+</div>
+
+<div class="devnote" style="margin-top:16px">
+  <b>Fase A.</b> Esta pantalla comprueba de verdad que los tres archivos
+  aprobados estén en su sitio y muestra su tamaño real: no dice “Activa” por
+  costumbre. La vista previa y la generación llegan en las fases C y D.
+</div>
+
+{% endblock %}

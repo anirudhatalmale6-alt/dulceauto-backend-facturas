@@ -1,0 +1,28 @@
+# Despliegue del backend en el VPS.
+#
+#   docker compose up -d --build
+#
+# Antes hay que crear el archivo .env a partir de .env.example y cambiar la
+# clave de firma y las dos contrasenas iniciales.
+
+services:
+  backend:
+    build: .
+    image: dulceauto-facturas:v1
+    container_name: dulceauto-facturas
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Solo escucha en localhost. Delante va nginx o Traefik con el
+      # certificado; exponer el 8000 a internet dejaria el panel en claro.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Base de datos, fotografias subidas y snapshots historicos.
+      - ./data:/app/data
+      # Las tres plantillas aprobadas, montadas de solo lectura: el contenedor
+      # las lee para generar, nunca las escribe.
+      - ./templates_html:/app/templates_html:ro
+    # Chromium usa /dev/shm y el limite de 64 MB por defecto de Docker se le
+    # queda corto al renderizar; sin esto el PDF falla de forma intermitente,
+    # que es la peor manera de fallar.
+    shm_size: "512mb"

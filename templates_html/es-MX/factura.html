@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DulceAuto — Pre-factura de reserva</title>
+  <link rel="stylesheet" href="../assets/css/factura.css">
+  <style>
+    /* Ajuste de impresión propio de esta versión de idioma.
+       --print-scale   : ancho útil del A4 (194mm) dividido entre 900px de diseño.
+       --print-height  : altura real del documento ya escalada.
+       Se recalcula si cambian los textos. Ver sección 11 de factura.css. */
+    :root { --print-scale: 0.8066; --print-height: 1051px; }
+  </style>
+</head>
+<body>
+
+  <!-- Sprite de iconos. Va incrustado y no en un archivo aparte a propósito:
+       <use href="sprite.svg#id"> externo no carga bajo file:// en Chrome por
+       CORS, y rompería la vista previa local y algunos generadores de PDF.
+       Los iconos sueltos están en assets/icons/ como archivos fuente. -->
+  <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute;overflow:hidden">
+    <defs>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M5 4v3M19 4v3M4 9h16M5 6h14a1 1 0 0 1 1 1v13H4V7a1 1 0 0 1 1-1Z"></path><path d="M8 13h3M8 16h3"></path></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="7" r="3.2"></circle><path d="M5 20c.5-4 2.8-6 7-6s6.5 2 7 6H5Z"></path></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2.5"></circle></symbol>
+      <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></symbol>
+      <symbol id="i-car" viewBox="0 0 24 24"><path d="m4 15 2-6h12l2 6M3 15h18v5h-2M5 20H3v-5"></path><circle cx="7" cy="16.5" r="1.2"></circle><circle cx="17" cy="16.5" r="1.2"></circle></symbol>
+      <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3h14v18l-2-1.5L15 21l-2-1.5L11 21l-2-1.5L5 21V3Z"></path><path d="M8 8h8M8 12h8M8 16h5"></path></symbol>
+      <symbol id="i-bank" viewBox="0 0 24 24"><path d="m3 9 9-5 9 5H3ZM5 10v7M10 10v7M14 10v7M19 10v7M3 20h18"></path></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 4.5-2.8 7.9-7 10-4.2-2.1-7-5.5-7-10V6l7-3Z"></path><path d="m9 12 2 2 4-5"></path></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="M12 4v3M5 12h3M16 12h3M12 12l4-4"></path></symbol>
+      <symbol id="i-fuel" viewBox="0 0 24 24"><path d="M5 3h9v18H5zM7 6h5v5H7zM14 8h3l2 3v7a2 2 0 0 0 2 2V8l-3-3"></path></symbol>
+      <symbol id="i-transmission" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M8 7v10M16 7v10M8 12h8"></path></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7h.01"></path></symbol>
+      <symbol id="i-document" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Z"></path><path d="M14 3v5h5M9 12h6M9 16h6"></path></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><path d="M7 3 4 5c0 7.5 7.5 15 15 15l2-3-5-3-2 2c-3-1.2-4.8-3-6-6l2-2-3-5Z"></path></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><path d="M3 5h18v14H3z"></path><path d="m4 7 8 6 8-6"></path></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V5h7l10 10-5 5L3 12Z"></path><circle cx="8" cy="9" r="1"></circle></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.5 2.5L16 9"></path></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3V6Z"></path></symbol>
+      <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14 6a5 5 0 0 0-6.5 6.5L3 17l4 4 4.5-4.5A5 5 0 0 0 18 10l-3 3-3-3 3-3-1-1Z"></path></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><path d="M9 9h11v11H9z"></path><path d="M15 9V4H4v11h5"></path></symbol>
+    </defs>
+  </svg>
+
+  <div class="page-shell">
+    <article class="invoice">
+
+      <header class="header">
+        <div class="brand" aria-label="DulceAuto">
+          <svg viewBox="0 0 24 21" fill="none" aria-hidden="true">
+            <path d="M4 8.5 6.1 3h11.8L20 8.5m-17 0h18v8.2H3V8.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+            <circle cx="6.5" cy="14" r="1.5" fill="currentColor"></circle><circle cx="17.5" cy="14" r="1.5" fill="currentColor"></circle>
+          </svg>
+          <span class="brand-name">DulceAuto</span>
+        </div>
+        <div class="invoice-meta">
+          <h1>Pre-factura de reserva</h1>
+          <img class="barcode" src="../assets/img/reservation-barcode.svg" alt="Código de barras del folio RES-87241">
+          <div class="meta-row">
+            <span>Folio: <strong data-field="folio">RES-87241</strong></span>
+            <span>Fecha: <strong data-field="fecha_emision">22 Jul 2026</strong></span>
+          </div>
+        </div>
+      </header>
+
+      <main>
+
+        <section class="intro">
+          <div class="intro-top">
+            <h2>Tu vehículo está pre-reservado</h2>
+            <span class="status-pill"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg> <span data-field="estado">PAGO PENDIENTE</span></span>
+          </div>
+          <div class="intro-sub">
+            <p>Confirma el pago para iniciar la validación de la operación y continuar con la coordinación de la entrega.</p>
+            <span class="delivery-date"><strong><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Entrega</strong> - <span data-field="fecha_entrega">27 de julio de 2026</span></span>
+          </div>
+          <div class="progress" aria-label="Progreso de la pre-reserva">
+            <div class="step done"><div class="step-track"><span class="step-line"></span><span class="step-dot"></span></div><div class="step-label">Pre-reserva confirmada</div></div>
+            <div class="step active"><div class="step-track"><span class="step-line"></span><span class="step-dot">2</span></div><div class="step-label">Pago pendiente</div></div>
+            <div class="step"><div class="step-track"><span class="step-line"></span><span class="step-dot">3</span></div><div class="step-label">Documentación y trámites</div></div>
+            <div class="step"><div class="step-track"><span class="step-line"></span><span class="step-dot">4</span></div><div class="step-label">Entrega coordinada</div></div>
+          </div>
+        </section>
+
+        <section class="summary-grid">
+          <div class="card customer-card">
+            <div class="title-row"><span class="line-icon"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg></span><h3 class="section-title">Información del cliente</h3></div>
+            <div class="customer-fields">
+              <div><svg class="icon field-icon" aria-hidden="true"><use href="#i-user"></use></svg><span class="field-label">Nombre</span><span class="field-value" data-field="cliente_nombre">Juan Pérez García</span></div>
+              <div><svg class="icon field-icon" aria-hidden="true"><use href="#i-mail"></use></svg><span class="field-label">Email</span><span class="field-value" data-field="cliente_email">juan.perez@gmail.com</span></div>
+              <div><svg class="icon field-icon" aria-hidden="true"><use href="#i-phone"></use></svg><span class="field-label">Teléfono</span><span class="field-value" data-field="cliente_telefono">55 1234 5678</span></div>
+              <div><svg class="icon field-icon" aria-hidden="true"><use href="#i-pin"></use></svg><span class="field-label">Ciudad</span><span class="field-value" data-field="cliente_ciudad">Veracruz</span></div>
+            </div>
+          </div>
+
+          <div class="card document-card">
+            <h3 class="section-title"><svg class="icon" aria-hidden="true"><use href="#i-folder"></use></svg>Documentación incluida</h3>
+            <div class="document-list">
+              <span><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>Factura de origen verificada</span>
+              <span><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>Constancia de no adeudo</span>
+              <span><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>Tenencias al corriente</span>
+              <span><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>Reporte REPUVE</span>
+            </div>
+          </div>
+
+          <div class="card transaction-card">
+            <h3>INFORMACIÓN DE LA TRANSACCIÓN</h3>
+            <div class="transaction-grid">
+              <div><svg class="icon" aria-hidden="true"><use href="#i-document"></use></svg><small>Folio</small><b data-field="folio">RES-87241</b></div>
+              <div><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><small>Vigencia de la protección</small><b data-field="vigencia">29/07/2026</b></div>
+              <div><svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg><small>Autorización</small><b data-field="autorizacion">AUT-2026-87241</b></div>
+              <div><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><small>Estado actual</small><b data-field="estado">Pago pendiente</b></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card vehicle-card">
+          <div class="vehicle-media">
+            <img class="vehicle-main-image" src="../assets/img/vehicle-front.jpg" alt="Vista principal del Audi A3 plateado">
+            <div class="vehicle-photo" aria-label="Galería del vehículo">
+              <img src="../assets/img/vehicle-rear.jpg" alt="Vista trasera del Audi A3">
+              <img src="../assets/img/vehicle-interior.jpg" alt="Interior del Audi A3">
+              <img src="../assets/img/vehicle-main.jpg" alt="Vista exterior del Audi A3">
+            </div>
+            <div class="carfax">
+              <div class="carfax-head"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg> VEHÍCULO VERIFICADO <small>por CARFAX</small></div>
+              <div class="vin"><span data-field="vin">19UTC2895KL500992</span> <span class="report">REPORTE</span></div>
+            </div>
+          </div>
+
+          <div class="vehicle-content">
+            <div class="vehicle-heading">
+              <div>
+                <h3 data-field="vehiculo">2015 Audi A3 1.8T S Line Convertible AT</h3>
+                <div class="location"><svg class="icon" aria-hidden="true"><use href="#i-pin"></use></svg><span data-field="vehiculo_ubicacion">Ciudad de México</span></div>
+              </div>
+              <div class="safe-badge">
+                <span class="safe-badge-image"><svg class="icon safe-shield" aria-hidden="true"><use href="#i-shield"></use></svg></span>
+                <b>COMPRA SEGURA</b>
+              </div>
+            </div>
+
+            <div class="vehicle-body">
+              <div>
+                <p><strong><svg class="icon" aria-hidden="true"><use href="#i-truck"></use></svg> Modalidad de entrega</strong></p>
+                <p><a href="#">Entrega a domicilio (transporte terrestre asegurado)</a></p>
+                <p>Traslado asegurado hasta el domicilio registrado.</p>
+              </div>
+              <div>
+                <p><strong>Entrega en una sede o concesionario cercano</strong></p>
+                <p>También puedes solicitar la entrega en una sede o concesionario cercano, sin cargos adicionales. La disponibilidad, ubicación y los detalles de entrega se confirmarán durante la coordinación.</p>
+              </div>
+              <p class="terms">Si el vehículo no coincide con la información indicada en esta pre-factura, se aplicarán los términos de cancelación correspondientes.</p>
+            </div>
+
+            <div class="specs">
+              <div class="spec"><span class="spec-icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg></span><span><small>Año</small><b data-field="anio">2015</b></span></div>
+              <div class="spec"><span class="spec-icon"><svg class="icon" aria-hidden="true"><use href="#i-car"></use></svg></span><span><small>Tipo</small><b data-field="tipo">Convertible</b></span></div>
+              <div class="spec"><span class="spec-icon"><svg class="icon" aria-hidden="true"><use href="#i-gauge"></use></svg></span><span><small>Kilometraje</small><b data-field="kilometraje">16,678 km</b></span></div>
+              <div class="spec"><span class="spec-icon"><svg class="icon" aria-hidden="true"><use href="#i-fuel"></use></svg></span><span><small>Combustible</small><b data-field="combustible">Gasolina</b></span></div>
+              <div class="spec"><span class="spec-icon"><svg class="icon" aria-hidden="true"><use href="#i-transmission"></use></svg></span><span><small>Transmisión</small><b data-field="transmision">Automática</b></span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="payment-grid">
+          <div class="operation">
+            <div class="payment-heading">
+              <div class="title-row"><span class="line-icon"><svg class="icon" aria-hidden="true"><use href="#i-receipt"></use></svg></span><h3 class="section-title">Resumen de la operación</h3></div>
+              <span class="discount-pill"><svg class="icon" aria-hidden="true"><use href="#i-tag"></use></svg> <span data-field="descuento">9% DE DESCUENTO APLICADO</span></span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Concepto</th><th>Cantidad</th><th>Importe</th></tr></thead>
+                <tbody>
+                  <tr><td data-field="vehiculo">2015 Audi A3 1.8T S Line Convertible AT</td><td>1</td><td data-field="precio_vehiculo">$329,000.00 MXN</td></tr>
+                  <tr><td><svg class="icon included" aria-hidden="true"><use href="#i-shield"></use></svg>Seguro de cobertura amplia</td><td>-</td><td class="included">Incluido</td></tr>
+                  <tr><td><svg class="icon" style="color:var(--blue)" aria-hidden="true"><use href="#i-truck"></use></svg>Transporte terrestre</td><td>1</td><td>Incluido</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="total">
+              <div><span class="total-title">IMPORTE DE PRE-RESERVA</span><span class="total-tag">SE DESCONTARÁ DEL PRECIO FINAL</span></div>
+              <div class="amount"><span data-field="importe">$3,240.00</span> <small data-field="moneda">MXN</small></div>
+            </div>
+            <p class="fine-print">El importe de la pre-reserva confirma la reserva del vehículo y se descontará del precio final de la operación. El transporte terrestre asegurado está incluido.</p>
+          </div>
+
+          <div class="transfer">
+            <div class="payment-heading">
+              <div class="title-row"><span class="line-icon" style="color:var(--gold)"><svg class="icon" aria-hidden="true"><use href="#i-bank"></use></svg></span><h3 class="section-title">Datos para realizar tu transferencia SPEI</h3></div>
+            </div>
+            <div class="bank-details">
+              <div class="bank-row"><svg class="icon" aria-hidden="true"><use href="#i-bank"></use></svg><small>Banco receptor</small><b data-field="banco">BBVA México</b></div>
+              <div class="bank-row"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg><small>Beneficiario</small><b data-field="beneficiario">DulceAuto México S.A. de C.V.</b></div>
+              <div class="bank-row"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><small>Referencia de pago</small><b class="pay-code" data-field="folio">RES-87241</b></div>
+            </div>
+            <div class="account-box">
+              <label>CLABE Interbancaria (18 dígitos)</label>
+              <div class="clabe"><span data-field="clabe">012345678901234567</span> <svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg></div>
+              <label>Cuenta bancaria</label>
+              <div class="account-number" data-field="cuenta">1234567890</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="faq">
+          <h3><svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>Preguntas frecuentes</h3>
+          <div class="faq-list">
+            <div class="faq-item">
+              <span class="faq-icon"><svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg></span>
+              <div>
+                <h4>1. ¿El precio indicado incluye comisiones y gastos adicionales?</h4>
+                <p>Sí. El propietario cubre los gastos relacionados con la operación, incluyendo la gestión administrativa y la entrega en una sede cercana o el transporte asegurado a domicilio. El único importe a pagar es el indicado en la factura, sin cargos adicionales.</p>
+              </div>
+            </div>
+            <div class="faq-item">
+              <span class="faq-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg></span>
+              <div>
+                <h4>2. ¿Puedo revisar el vehículo antes de aceptar la entrega?</h4>
+                <p>Sí. Al recibir el vehículo, puedes revisarlo personalmente o con un mecánico de confianza. Si no estás conforme, avísale al representante asignado antes de finalizar la operación.</p>
+              </div>
+            </div>
+            <div class="faq-item">
+              <span class="faq-icon"><svg class="icon" aria-hidden="true"><use href="#i-pin"></use></svg></span>
+              <div>
+                <h4>3. ¿Puedo solicitar la entrega en una dirección distinta a la registrada en mi INE?</h4>
+                <p>Sí. Después de confirmar la pre-reserva, puedes enviar el comprobante y la dirección donde quieres recibir el vehículo. También puedes solicitar la entrega en una sede o concesionario cercano, sujeto a disponibilidad.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="protection-grid">
+          <div class="card protection-card">
+            <h3 class="section-title">Protección y verificación</h3>
+            <div class="protect-group">
+              <b><svg class="icon protect-group-icon" aria-hidden="true"><use href="#i-shield"></use></svg>Compra protegida</b>
+              <p>Transacción supervisada</p><p>Validación ante autoridades</p>
+            </div>
+            <div class="protect-group">
+              <b><svg class="icon protect-group-icon" aria-hidden="true"><use href="#i-wrench"></use></svg>Inspección vehicular</b>
+              <p>Revisión de 150 puntos</p><p>Diagnóstico mecánico</p>
+            </div>
+          </div>
+
+          <div class="protection-details">
+            <h3>Información clave que respalda tu compra.</h3>
+            <div class="protect-features">
+              <div class="feature"><b><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg>PROTECCIÓN DEL IMPORTE</b><p>El pago permanece protegido mientras validamos la operación.</p></div>
+              <div class="feature"><b><svg class="icon" aria-hidden="true"><use href="#i-gauge"></use></svg>LIBERACIÓN SEGURA</b><p>El pago se libera una vez confirmada la recepción del vehículo.</p></div>
+              <div class="feature"><b><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg>TRANSACCIÓN SUPERVISADA</b><p>DulceAuto supervisa y verifica el proceso de pago.</p></div>
+              <div class="feature"><b><svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg>INSPECCIÓN VEHICULAR COMPLETADA</b><p>Revisión estética, mecánica y documental completada y registrada.</p></div>
+            </div>
+          </div>
+
+          <div class="verification-qr">
+            <span class="qr-caption">Escanea para verificar</span>
+            <!-- Al cambiar el destino, regenerar también assets/img/reservation-qr.svg -->
+            <a class="qr-link" href="https://dulceauto.mx/verificar/RES-87241" data-field="url_verificacion" aria-label="Verificar la reserva RES-87241">
+              <img class="qr-code" src="../assets/img/reservation-qr.svg" alt="Código QR para verificar la reserva RES-87241">
+            </a>
+          </div>
+
+          <div class="card agent-card">
+            <div class="agent-head">
+              <span class="avatar" data-field="agente_iniciales">YC</span>
+              <div><small>Tu representante asignado</small><h4 data-field="agente_nombre">Yoselina de la Cruz</h4><small>Representante de operaciones</small></div>
+            </div>
+            <div class="contact-list">
+              <span><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span data-field="agente_horario">Lunes a viernes, 8:00 a. m.–4:00 p. m.</span></span>
+              <span><svg class="icon" aria-hidden="true"><use href="#i-phone"></use></svg><span data-field="agente_telefono">+52 55 9876 5432</span></span>
+              <span><svg class="icon" aria-hidden="true"><use href="#i-mail"></use></svg><span data-field="agente_email">soporte@dulceauto.mx</span></span>
+            </div>
+          </div>
+        </section>
+
+        <footer class="legal">
+          <span class="legal-icon"><svg class="icon" aria-hidden="true"><use href="#i-document"></use></svg></span>
+          <span>Esta pre-factura se emite exclusivamente a nombre de <strong data-field="cliente_nombre">Juan Pérez García</strong> y es de uso personal e intransferible. La información contenida en este documento deberá utilizarse únicamente para el propósito indicado. Queda estrictamente prohibida cualquier distribución, reproducción o uso distinto al autorizado.</span>
+        </footer>
+
+      </main>
+    </article>
+  </div>
+</body>
+</html>

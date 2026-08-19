@@ -1,0 +1,83 @@
+{#
+  Estructura del panel.
+
+  El marcado y las clases son los de la maqueta V1.3 del cliente. Lo unico que
+  cambia es que las vistas ya no se ocultan y se ensenan con JavaScript: cada
+  una es una pagina servida por el backend. Asi el panel funciona con el boton
+  atras del navegador, se puede enlazar una factura concreta y no hay 90 KB de
+  HTML cargandose de golpe.
+
+  El tema se escribe tanto en la cookie como en localStorage. La cookie es la
+  que permite que el servidor pinte ya el tema correcto en la primera respuesta;
+  sin ella el panel arrancaria en claro y saltaria a noche al ejecutarse el JS.
+#}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ page_title }}{% endblock %} · DulceAuto</title>
+<link rel="stylesheet" href="{{ url_for('static', path='/css/panel.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='/css/backend.css') }}">
+</head>
+<body class="{{ theme_class }}">
+<div class="app">
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-mark">DA</div>
+    <div><b>DulceAuto</b><small>Facturas Premium · Backend {{ app_version }}</small></div>
+  </div>
+  <nav class="nav">
+    {% for item in nav_items %}
+      <a href="{{ item.url }}" class="nav-link{% if item.key == active_view %} active{% endif %}">
+        <span class="ico">{{ item.icon }}</span>{{ item.label }}
+      </a>
+    {% endfor %}
+  </nav>
+  <div class="sidebar-note">
+    <b>Backend V1</b><br>
+    Un solo backend para es-MX, English y es-AR. Datos dinámicos con claves
+    fijas, Configuración protegida con Master Password y PDF A4 de una sola
+    página desde las plantillas aprobadas.
+  </div>
+</aside>
+
+<main class="main">
+  <header class="topbar">
+    <div>
+      <h1>{{ page_title }}</h1>
+      <div class="sub">{{ page_sub or 'Sistema interno · edición y generación de pre-facturas' }}</div>
+    </div>
+    <div class="top-actions">
+      <span class="badge gold">A4 · 1 página</span>
+      <span class="badge">3 plantillas activas</span>
+      <div class="theme-picker" aria-label="Apariencia del panel">
+        <button type="button" data-theme-btn="light"{% if theme == 'light' %} class="active"{% endif %} onclick="setTheme('light')">Claro</button>
+        <button type="button" data-theme-btn="soft"{% if theme == 'soft' %} class="active"{% endif %} onclick="setTheme('soft')">Suave</button>
+        <button type="button" data-theme-btn="night"{% if theme == 'night' %} class="active"{% endif %} onclick="setTheme('night')">Noche</button>
+      </div>
+      <a class="avatar" href="{{ url_for('logout') }}" title="Cerrar sesión">{{ (user or 'AD')[:2]|upper }}</a>
+    </div>
+  </header>
+
+  <div class="content">
+    {% if must_change_password %}
+      <div class="alert warn">
+        <b>Contraseñas iniciales sin cambiar.</b>
+        El panel sigue usando las credenciales de arranque. Cámbielas desde
+        Configuración antes de poner el sistema en producción.
+      </div>
+    {% endif %}
+    {% for message in flashes %}
+      <div class="alert {{ message.level }}">{{ message.text }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+    <div class="footer-note">DulceAuto · Backend Facturas Premium {{ app_version }}</div>
+  </div>
+</main>
+
+</div>
+<script src="{{ url_for('static', path='/js/panel.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
