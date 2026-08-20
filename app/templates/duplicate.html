@@ -22,7 +22,7 @@
     <div class="row"><span>VIN</span><b>{{ source.vehicle_vin or '—' }}</b></div>
     <div class="row"><span>Nuevo folio</span><b>{{ folio_previsto }}</b></div>
     <div class="row"><span>Qué se copia</span><b>Vehículo · precios · plantilla · entrega</b></div>
-    <div class="row"><span>Qué se reinicia</span><b>Cliente · folio · fechas · autorización</b></div>
+    <div class="row"><span>Qué se reinicia</span><b>Datos del cliente original · folio · fechas · autorización</b></div>
     <div class="row"><span>Datos bancarios</span><b>Se toman de Configuración, no del original</b></div>
     <div class="row"><span>Estado inicial</span><b>Borrador, siempre</b></div>
   </div>
@@ -44,8 +44,10 @@
 
     <div class="warning-box">
       <b>Duplicar no confirma la reserva.</b> La copia nace siempre como borrador,
-      con folio propio y sin cliente, y no hereda el estado de la factura de
-      origen. Cuando esté completa, se pasa a «Pago pendiente» desde el editor.
+      con folio propio y sin heredar los datos del cliente original, y tampoco
+      hereda el estado de la factura de origen. Los datos que escriba aquí abajo
+      son los del nuevo interesado. Cuando esté completa, se pasa a «Pago
+      pendiente» desde el editor.
       Se permiten varias pre-facturas para un mismo VIN, que es justo el caso de
       varios interesados, pero ninguna queda marcada como reservada por el hecho
       de duplicar.

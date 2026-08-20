@@ -59,8 +59,17 @@ with sync_playwright() as p:
 
     print("\n3 · Busqueda")
     page.goto(f"{BASE}/facturas?q=Audi")
-    filas = page.locator("tbody tr:not(.empty-row)").count()
-    check("buscar 'Audi' devuelve solo el Audi", filas == 1, f"{filas} filas")
+    # Se comprueba que filtre, no que salga una sola fila: duplicar un Audi es
+    # legitimo y entonces tienen que salir los dos. Lo que no puede aparecer es
+    # una factura que no sea de ese vehiculo.
+    filas = page.locator("tbody tr:not(.empty-row)")
+    textos = [filas.nth(i).inner_text() for i in range(filas.count())]
+    check("buscar 'Audi' devuelve al menos un Audi", len(textos) >= 1, f"{len(textos)} filas")
+    check(
+        "y no cuela ninguna factura de otro vehiculo",
+        all("audi" in t.lower() for t in textos),
+        f"{len(textos)} filas",
+    )
     page.goto(f"{BASE}/facturas?q=RES-87240")
     check("buscar por folio funciona", page.locator("tbody tr:not(.empty-row)").count() == 1)
     page.goto(f"{BASE}/facturas?q=zzzzz")

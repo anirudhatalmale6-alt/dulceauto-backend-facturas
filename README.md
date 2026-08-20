@@ -170,7 +170,7 @@ copia.
 
 | Se copia | Se reinicia |
 |---|---|
-| Vehículo completo y VIN | Cliente, email, teléfono, ciudad |
+| Vehículo completo y VIN | Datos del cliente original: nombre, email, teléfono, ciudad (la pantalla de duplicar pide los del nuevo interesado) |
 | Precios, descuento, seguro, transporte | Folio (se genera uno nuevo) |
 | Plantilla y moneda | Fecha de emisión, vigencia, entrega |
 | Modalidad y textos de entrega | Autorización |
@@ -289,17 +289,19 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**126 comprobaciones en total.** No miran que las páginas «carguen», miran que
-hagan lo que tienen que hacer.
+**127 comprobaciones en total.** No miran que las páginas «carguen», miran que
+hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
+quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
+anterior, para que los recuentos por VIN sigan significando algo.
 
-- **Fase A · 31.** Que la contraseña incorrecta no entre, que Configuración no
+- **Fase A · 32.** Que la contraseña incorrecta no entre, que Configuración no
   se pueda abrir sin la Master Password, que los datos bancarios no aparezcan
   en el HTML mientras está bloqueada, que el bloqueo vuelva a cerrarse al salir
   y que cada acción quede registrada.
 - **Fase B · 64.** Que un borrador se guarde a medias pero no pueda salir de
   borrador con huecos, que un VIN inválido se rechace, que un intento fallido
   no borre lo tecleado ni gaste un folio, que la copia nazca en borrador y sin
-  cliente, que use la cuenta bancaria vigente y no la del original, que la
+  heredar los datos del cliente original, que use la cuenta bancaria vigente y no la del original, que la
   factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
   cuente lo que tiene que contar.
 - **Folios · 11.** El contador, el salto cuando un folio ya está ocupado y el

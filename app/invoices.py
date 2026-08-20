@@ -7,9 +7,11 @@ reglas esten en un sitio y no repartidas por las vistas.
 
 Dos reglas que conviene no tocar sin pensarlo:
 
-1. Duplicar no confirma una reserva. La copia nace siempre sin cliente, sin
-   fechas y sin folio heredado. Lo que se copia esta declarado en
-   DUPLICATE_CARRY_FIELDS y nada mas.
+1. Duplicar no confirma una reserva. La copia nace siempre sin heredar los datos
+   del cliente original, sin fechas y sin folio heredado; los datos del nuevo
+   interesado, si se escriben, llegan del formulario de duplicar. Lo que se
+   copia de la factura de origen esta declarado en DUPLICATE_CARRY_FIELDS y
+   nada mas.
 2. Los datos bancarios se copian desde Configuracion en el momento de crear la
    factura. Una factura ya emitida tiene que seguir enseñando la cuenta a la que
    se le pidio pagar al cliente, aunque manana se cambie en Configuracion.

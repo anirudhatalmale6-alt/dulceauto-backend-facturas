@@ -49,6 +49,53 @@ def valor(page, campo):
     return page.input_value(f'[name="{campo}"]')
 
 
+# Clientes que crea esta comprobacion. Se listan aqui para poder borrarlos.
+CLIENTES_DE_PRUEBA = (
+    "Cliente de prueba Fase B",
+    "Folio manipulado",
+    "Segundo interesado",
+    "Estado forzado",
+    "Cliente tras cambiar la cuenta",
+)
+
+
+def limpiar_datos_de_pruebas_anteriores():
+    """Borra lo que dejo la ejecucion anterior.
+
+    Sin esto la comprobacion solo vale la primera vez: a la segunda hay ocho
+    facturas con el mismo VIN y los recuentos ("cuatro interesados") fallan aun
+    estando el codigo bien. Se borra por VIN de prueba y por nombre de cliente,
+    que son los unicos datos que crea este archivo; los tres vehiculos de
+    ejemplo que vienen con la instalacion no se tocan.
+    """
+    if not DB.exists():
+        return
+    con = sqlite3.connect(DB)
+    marcas = ",".join("?" * len(CLIENTES_DE_PRUEBA))
+    ids = [
+        f[0]
+        for f in con.execute(
+            f"SELECT id FROM invoice WHERE vehicle_vin IN (?, ?) OR customer_name IN ({marcas})",
+            (VIN_A, VIN_B, *CLIENTES_DE_PRUEBA),
+        )
+    ]
+    if ids:
+        huecos = ",".join("?" * len(ids))
+        # A mano y no por ON DELETE CASCADE: SQLite ignora las claves ajenas
+        # salvo que se active el PRAGMA en cada conexion.
+        con.execute(f"DELETE FROM invoice_photo WHERE invoice_id IN ({huecos})", ids)
+        con.execute(f"DELETE FROM invoice_snapshot WHERE invoice_id IN ({huecos})", ids)
+        con.execute(f"UPDATE invoice SET duplicated_from_id = NULL WHERE duplicated_from_id IN ({huecos})", ids)
+        con.execute(f"DELETE FROM invoice WHERE id IN ({huecos})", ids)
+        con.commit()
+    con.close()
+    print(f"  (limpieza: {len(ids)} facturas de pruebas anteriores borradas)")
+
+
+print("\n0 · Punto de partida limpio")
+limpiar_datos_de_pruebas_anteriores()
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": 1440, "height": 900})
