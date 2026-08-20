@@ -76,10 +76,13 @@ FIELD_MAP: dict[str, str] = {
 # Campos que el operador edita a mano en el formulario, en el orden de las seis
 # secciones de la maqueta V1.3. Los datos bancarios no estan aqui: se heredan
 # de Configuracion y solo se cambian tras pasar la Master Password.
+#
+# El folio NO esta en esta lista: se asigna solo desde el contador de
+# Configuracion y queda de solo lectura. Un folio editado a mano se
+# desincronizaria de la referencia bancaria, que se genera a partir de el.
 EDITABLE_FIELDS: tuple[str, ...] = (
     "locale",
     "status",
-    "folio",
     "issue_date",
     "valid_until",
     "authorization",
@@ -116,6 +119,13 @@ EDITABLE_FIELDS: tuple[str, ...] = (
 # Campos que se copian tal cual al duplicar una factura. Todo lo que no este en
 # esta lista se reinicia en la copia: cliente, folio, fechas y estado. Es la
 # regla que impide que duplicar confirme una reserva por accidente.
+#
+# Los datos bancarios y los del representante NO se copian del original. Una
+# copia es una operacion nueva para un cliente nuevo, asi que se cargan de la
+# Configuracion vigente en el momento de crearla. De ese modo una factura ya
+# emitida conserva para siempre la cuenta a la que se pidio pagar, pero una
+# duplicacion posterior nunca arrastra por accidente una cuenta que ya se
+# cambio.
 DUPLICATE_CARRY_FIELDS: tuple[str, ...] = (
     "locale",
     "vehicle_title",
@@ -133,20 +143,9 @@ DUPLICATE_CARRY_FIELDS: tuple[str, ...] = (
     "pricing_coverage",
     "pricing_transport",
     "pricing_currency",
-    "banking_bank",
-    "banking_beneficiary",
-    "banking_account_label",
-    "banking_account_number",
-    "banking_bank_account",
     "delivery_mode",
     "delivery_text",
     "delivery_alt",
-    "representative_name",
-    "representative_role",
-    "representative_phone",
-    "representative_email",
-    "representative_hours",
-    "verify_url_base",
 )
 
 

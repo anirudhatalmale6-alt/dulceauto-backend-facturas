@@ -352,14 +352,21 @@ async def invoice_create(request: Request, db: Session = Depends(get_db)):
         return user
 
     form = await request.form()
-    invoice, errores = inv_service.create(db, form)
+
+    # Se valida antes de entrar al bucle de guardado: un error del operador no
+    # tiene por que gastar folios ni reintentos.
+    _, errores = inv_service.create(db, form)
     if errores:
         # Rollback para que el contador de folios no se gaste con un intento
         # fallido: si no, cada error dejaria un hueco en la numeracion.
         db.rollback()
         return editor_page(request, db, None, errors=errores, form=form)
+    db.rollback()
 
-    db.commit()
+    # Y se guarda reintentando: la cuenta Admin es compartida y dos operadores
+    # pueden crear una factura a la vez. Si el folio se ocupa entretanto, se
+    # coge el siguiente libre en lugar de enseñar un error de base de datos.
+    invoice = inv_service.commit_creation(db, lambda s: inv_service.create(s, form)[0])
     accion = act.INVOICE_DRAFT_SAVED if invoice.status == STATUS_DRAFT else act.INVOICE_CREATED
     act.log(db, accion, request=request, entity_type="invoice", entity_id=invoice.id,
             folio=invoice.folio, detail=get_market(invoice.locale).label)
@@ -470,14 +477,20 @@ async def invoice_duplicate(request: Request, invoice_id: int, db: Session = Dep
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
 
     form = await request.form()
-    copia = inv_service.duplicate(db, source, form)
-    db.commit()
+    folio_origen = source.folio
+    # Igual que al crear: si otro operador se lleva el folio, se reintenta con
+    # el siguiente libre. Tras un rollback la factura de origen queda caducada,
+    # asi que se vuelve a leer dentro del propio intento.
+    copia = inv_service.commit_creation(
+        db, lambda s: inv_service.duplicate(s, s.get(Invoice, invoice_id), form)
+    )
     act.log(db, act.INVOICE_DUPLICATED, request=request, entity_type="invoice",
-            entity_id=copia.id, folio=copia.folio, detail=f"copia de {source.folio}")
+            entity_id=copia.id, folio=copia.folio, detail=f"copia de {folio_origen}")
     flash(
         request,
-        f"Creada la copia {copia.folio} a partir de {source.folio}. "
-        "Nace como borrador: duplicar no confirma la reserva.",
+        f"Creada la copia {copia.folio} a partir de {folio_origen}. "
+        "Nace como borrador y con los datos bancarios de Configuración: "
+        "duplicar no confirma la reserva.",
         "ok",
     )
     return RedirectResponse(f"/facturas/{copia.id}/editar", status_code=status.HTTP_303_SEE_OTHER)

@@ -94,7 +94,7 @@
 
 <div class="editor-topline">
   <span class="info-chip">Plantilla <b>{{ markets[current_locale].label if current_locale in markets else 'México' }}</b></span>
-  <span class="info-chip">Folio <b>{{ (val('folio')|trim) or (invoice.folio if invoice else 'automático') }}</b></span>
+  <span class="info-chip">Folio <b>{{ invoice.folio if invoice else 'automático' }}</b></span>
   <span class="info-chip">PDF <b>A4 · 1 página</b></span>
   <span class="info-chip">Moneda <b>{{ markets[current_locale].currency if current_locale in markets else 'MXN' }}</b></span>
   {% if invoice and invoice.duplicated_from_id %}
@@ -143,8 +143,13 @@
                   {% endfor %}
                 </select>
               {% elif kind == 'folio' %}
-                <input name="{{ name }}" type="text" value="{{ val(name)|trim }}"
-                       placeholder="Se asigna solo al guardar">
+                {# El folio lo asigna el contador de Configuracion y no se
+                   edita: cambiarlo a mano lo desincronizaria de la referencia
+                   bancaria, que se genera a partir de el. #}
+                <div class="readonly-wrap">
+                  <input data-folio type="text"
+                         value="{{ invoice.folio if invoice else 'Automático' }}" readonly>
+                </div>
               {% elif kind == 'vin' %}
                 <input name="{{ name }}" type="text" value="{{ val(name)|trim }}"
                        maxlength="17" placeholder="17 caracteres, sin I, O ni Q"

@@ -21,8 +21,10 @@
     <div class="row"><span>Vehículo</span><b>{{ source.vehicle_title or '—' }}</b></div>
     <div class="row"><span>VIN</span><b>{{ source.vehicle_vin or '—' }}</b></div>
     <div class="row"><span>Nuevo folio</span><b>{{ folio_previsto }}</b></div>
-    <div class="row"><span>Qué se copia</span><b>Vehículo · precios · plantilla · entrega · banco</b></div>
-    <div class="row"><span>Qué se reinicia</span><b>Cliente · folio · fechas · autorización · estado</b></div>
+    <div class="row"><span>Qué se copia</span><b>Vehículo · precios · plantilla · entrega</b></div>
+    <div class="row"><span>Qué se reinicia</span><b>Cliente · folio · fechas · autorización</b></div>
+    <div class="row"><span>Datos bancarios</span><b>Se toman de Configuración, no del original</b></div>
+    <div class="row"><span>Estado inicial</span><b>Borrador, siempre</b></div>
   </div>
 
   <form method="post" action="/facturas/{{ source.id }}/duplicar">
@@ -38,29 +40,26 @@
           {% endfor %}
         </select>
       </label>
-      <label>Estado inicial
-        <select name="status">
-          <option value="draft" selected>Borrador</option>
-          <option value="pending">Pago pendiente</option>
-        </select>
-      </label>
     </div>
 
     <div class="warning-box">
-      <b>Duplicar no confirma la reserva.</b> La copia nace con folio propio y sin
-      cliente, y no hereda el estado de la factura de origen. Se permiten varias
-      pre-facturas para un mismo VIN, que es justo el caso de varios interesados,
-      pero ninguna de ellas queda marcada como reservada por el hecho de duplicar.
+      <b>Duplicar no confirma la reserva.</b> La copia nace siempre como borrador,
+      con folio propio y sin cliente, y no hereda el estado de la factura de
+      origen. Cuando esté completa, se pasa a «Pago pendiente» desde el editor.
+      Se permiten varias pre-facturas para un mismo VIN, que es justo el caso de
+      varios interesados, pero ninguna queda marcada como reservada por el hecho
+      de duplicar.
+      <br><br>
+      <b>Los datos bancarios no se copian del original:</b> se cargan de la
+      Configuración vigente del mercado que elija. Una factura ya emitida
+      conserva la cuenta a la que se pidió pagar, pero una copia nueva nunca
+      arrastra una cuenta que ya se haya cambiado.
       {% if comprometidas %}
         <br><br>
         <b>Este vehículo ya tiene {{ comprometidas|length }} factura{{ '' if comprometidas|length == 1 else 's' }} en estado avanzado</b>
         ({% for c in comprometidas %}{{ c.folio }} · {{ c.customer_name or 'sin cliente' }}{{ ', ' if not loop.last }}{% endfor %}).
         Conviene comprobar el estado real antes de comprometer el mismo coche otra vez.
       {% endif %}
-      <br><br>
-      Si elige «Pago pendiente» y faltan datos obligatorios, la copia se guardará
-      igualmente como borrador: es preferible una copia honesta a medias que una
-      factura incompleta presentada como si estuviera lista.
     </div>
 
     <div class="actions" style="justify-content:flex-end;margin-top:14px">

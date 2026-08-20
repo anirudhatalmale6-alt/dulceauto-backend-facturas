@@ -88,6 +88,7 @@ backend/
 │   ├── invoices.py      crear, editar, duplicar, agrupar por VIN
 │   ├── models.py        modelo de datos definitivo
 │   ├── fields.py        claves fijas ← contrato con las plantillas
+│   │                    y qué se copia al duplicar
 │   ├── locales.py       reglas por mercado y validaciones bancarias
 │   ├── security.py      hashing, sesión y puerta de Configuración
 │   ├── activity.py      registro de actividad
@@ -99,6 +100,7 @@ backend/
 ├── data/                base de datos, fotos y snapshots (volumen)
 ├── verificar_fase_a.py  acceso, Master Password, vistas y temas
 ├── verificar_fase_b.py  crear, editar, borrador, duplicar, VIN
+├── verificar_folios.py  contador y choque de folios (sin servidor)
 └── verificar_datos.py   importes, CLABE, CBU y VIN (sin servidor)
 ```
 
@@ -171,13 +173,26 @@ copia.
 | Vehículo completo y VIN | Cliente, email, teléfono, ciudad |
 | Precios, descuento, seguro, transporte | Folio (se genera uno nuevo) |
 | Plantilla y moneda | Fecha de emisión, vigencia, entrega |
-| Banco, beneficiario, cuenta | Autorización |
-| Representante | Estado: la copia **nace como borrador** |
+| Modalidad y textos de entrega | Autorización |
+|  | Estado: la copia **nace siempre como borrador** |
 
-**Duplicar no confirma la reserva.** La copia no hereda el estado del original,
-así que duplicar para un segundo interesado no deja el vehículo marcado como
-comprometido. Si al duplicar se pide «Pago pendiente» pero faltan datos
-obligatorios, la copia se guarda igualmente como borrador.
+**Duplicar no confirma la reserva.** La copia nace siempre en borrador, sin
+excepciones: no hay ninguna opción en pantalla para elegir otro estado, y un
+envío manipulado que intente forzarlo tampoco lo consigue. Cuando la copia esté
+completa se pasa a «Pago pendiente» desde el editor, que es donde se validan los
+campos obligatorios.
+
+### Los datos bancarios de una copia son los de hoy
+
+Banco, beneficiario, CLABE/CBU y representante **no se copian del original**: se
+cargan de la Configuración vigente del mercado en el momento de crear la copia.
+
+Las dos mitades de esta regla importan y tiran en direcciones distintas:
+
+- Una factura **ya emitida** conserva para siempre la cuenta a la que se pidió
+  pagar al cliente, aunque después se cambie en Configuración.
+- Una **copia nueva** es una operación nueva para un cliente nuevo, así que
+  nunca arrastra una cuenta que ya se haya cambiado.
 
 Cuando un vehículo ya tiene alguna factura en estado avanzado (PDF generado o
 enviada), el editor, la pantalla de duplicar y el historial del vehículo lo
@@ -195,7 +210,25 @@ campo y **no se guarda nada**, conservando lo que el operador acababa de
 escribir en pantalla.
 
 También se comprueba que la vigencia y la fecha de entrega no sean anteriores a
-la de emisión, y que el folio no esté repetido.
+la de emisión.
+
+### El folio
+
+Lo asigna siempre el contador de Configuración (`folio.prefix` y `folio.next`) y
+**no se edita a mano**. En una factura nueva el campo muestra «Automático» y una
+vez creada queda de solo lectura. No está en `EDITABLE_FIELDS`, así que un envío
+manipulado tampoco lo cambia.
+
+Es a propósito: la referencia bancaria se genera a partir del folio, y un folio
+editado a mano dejaría la factura y la referencia diciendo cosas distintas.
+
+**Uso simultáneo.** La cuenta de Admin es compartida, así que dos operadores
+pueden crear una factura casi a la vez y el segundo encontrarse el folio ya
+ocupado. `commit_creation()` captura ese choque de clave única, deshace la
+transacción y vuelve a intentarlo con el siguiente folio libre, en lugar de
+enseñar un error de base de datos. Solo se reintenta el choque de folio: un
+`NOT NULL` o cualquier otro error de integridad sale a la superficie, porque
+reintentarlo a ciegas solo serviría para esconderlo.
 
 ### Importes escritos a mano
 
@@ -252,23 +285,33 @@ distintas.
 ```bash
 python3 verificar_fase_a.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_b.py http://127.0.0.1:8000 /tmp/capturas
+python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**106 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**126 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer.
 
 - **Fase A · 31.** Que la contraseña incorrecta no entre, que Configuración no
   se pueda abrir sin la Master Password, que los datos bancarios no aparezcan
   en el HTML mientras está bloqueada, que el bloqueo vuelva a cerrarse al salir
   y que cada acción quede registrada.
-- **Fase B · 55.** Que un borrador se guarde a medias pero no pueda salir de
+- **Fase B · 64.** Que un borrador se guarde a medias pero no pueda salir de
   borrador con huecos, que un VIN inválido se rechace, que un intento fallido
   no borre lo tecleado ni gaste un folio, que la copia nazca en borrador y sin
-  cliente, que la factura de origen no cambie al duplicarla, y que el
-  agrupamiento por VIN cuente lo que tiene que contar.
+  cliente, que use la cuenta bancaria vigente y no la del original, que la
+  factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
+  cuente lo que tiene que contar.
+- **Folios · 11.** El contador, el salto cuando un folio ya está ocupado y el
+  reintento ante un choque simultáneo. Se ejecuta sin servidor, sobre una base
+  de datos temporal, porque el choque entre dos operadores no se puede provocar
+  desde el navegador.
 - **Datos · 20.** Formatos de importe y dígitos de control de CLABE, CBU y VIN.
-  Esta se ejecuta sin servidor.
+  También sin servidor.
+
+Varias comprobaciones no se conforman con que la pantalla no ofrezca algo:
+mandan la petición a mano para verificar que el servidor tampoco lo acepta. Es
+el caso del folio y del estado al duplicar.
 
 Las dos primeras dejan capturas en la carpeta indicada.
 

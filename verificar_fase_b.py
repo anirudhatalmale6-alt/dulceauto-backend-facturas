@@ -10,7 +10,9 @@ tienen que hacer, y sobre todo las dos reglas que serian graves si fallaran:
 
     python verificar_fase_b.py [http://127.0.0.1:8731] [/tmp/fase-b]
 """
+import sqlite3
 import sys
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
@@ -18,6 +20,14 @@ BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8731").rstrip("/
 SHOTS = sys.argv[2] if len(sys.argv) > 2 else "/tmp/fase-b"
 
 USER, PASSWORD = "admin", "DulceAuto2026"
+
+# Para comprobar que una copia coge la cuenta vigente hay que cambiarla en
+# Configuracion, y esa pantalla todavia no permite editarla (es de la Fase D).
+# Se toca la base de datos directamente. Las dos CLABE son validas: si no lo
+# fueran, la propia validacion las rechazaria y la prueba mentiria.
+DB = Path(__file__).parent / "data" / "dulceauto.db"
+CLABE_VIEJA = "012180001234567899"
+CLABE_NUEVA = "002180001234567896"
 
 # VIN validos de 17 caracteres, sin I, O ni Q.
 VIN_A = "1HGCM82633A004352"
@@ -57,13 +67,13 @@ with sync_playwright() as p:
     page.click('button[name="save_as"][value="draft"]')
 
     check("un borrador se guarda aunque falten datos", "/editar" in page.url, page.url)
-    folio_a = valor(page, "folio")
+    folio_a = page.input_value("[data-folio]")
     check("el folio se asigna solo", folio_a.startswith("RES-"), folio_a)
     check("el estado queda en borrador", valor(page, "status") == "draft")
     check("el cliente se ha guardado", valor(page, "customer_name") == "Cliente de prueba Fase B")
     check(
         "los datos bancarios se heredan de Configuracion",
-        page.locator('input[value="012180001234567899"]').count() == 1,
+        page.locator(f'input[value="{CLABE_VIEJA}"]').count() == 1,
     )
     page.screenshot(path=f"{SHOTS}/01-borrador.png")
     url_a = page.url
@@ -117,13 +127,29 @@ with sync_playwright() as p:
     check("ninguno de esos intentos ha llegado a guardarse", valor(page, "vehicle_vin") == VIN_A)
 
     # -------------------------------------------------------------------------
-    print("\n5 · Folio duplicado")
+    print("\n5 · El folio no se toca a mano")
     page.goto(f"{BASE}/facturas/nueva")
-    fill(page, "folio", folio_a)
-    fill(page, "customer_name", "Choque de folio")
-    page.click('button[name="save_as"][value="draft"]')
-    check("no deja repetir un folio", page.locator(".alert.error").count() == 1)
-    check("y lo dice con el folio concreto", folio_a in page.locator(".alert.error").inner_text())
+    check("en una factura nueva el folio dice 'Automatico'",
+          page.input_value("[data-folio]") == "Automático")
+    check("y el campo no es editable",
+          page.get_attribute("[data-folio]", "readonly") is not None)
+
+    page.goto(url_a)
+    check("en una factura ya creada tambien es de solo lectura",
+          page.get_attribute("[data-folio]", "readonly") is not None)
+    check("el campo folio ya no se envia", page.locator('[name="folio"]').count() == 0)
+
+    # Que la pantalla no lo deje editar no basta: hay que comprobar que el
+    # servidor lo ignora aunque alguien lo mande a mano.
+    respuesta = page.request.post(
+        f"{BASE}/facturas/nueva",
+        form={"folio": "RES-99999", "customer_name": "Folio manipulado", "save_as": "draft"},
+    )
+    check("un envio manipulado con folio no cuela", respuesta.ok, str(respuesta.status))
+    page.goto(f"{BASE}/facturas?q=Folio manipulado")
+    folio_manipulado = page.locator("tbody tr:not(.empty-row) a.folio-link").first.inner_text()
+    check("el servidor asigna el suyo e ignora el enviado",
+          folio_manipulado != "RES-99999", folio_manipulado)
 
     # -------------------------------------------------------------------------
     print("\n6 · Duplicar")
@@ -139,7 +165,7 @@ with sync_playwright() as p:
     page.click('button:has-text("Crear factura duplicada")')
     check("la copia se crea y abre su editor", "/editar" in page.url, page.url)
 
-    folio_copia = valor(page, "folio")
+    folio_copia = page.input_value("[data-folio]")
     check("la copia tiene folio propio", folio_copia != folio_a, f"{folio_a} -> {folio_copia}")
     check("la copia NACE COMO BORRADOR", valor(page, "status") == "draft")
     check("la copia no hereda la fecha de emision", valor(page, "issue_date") == "")
@@ -153,32 +179,82 @@ with sync_playwright() as p:
 
     page.goto(url_a)
     check("la factura de origen NO ha cambiado de estado", valor(page, "status") == "pending")
-    check("la factura de origen conserva su folio", valor(page, "folio") == folio_a)
+    check("la factura de origen conserva su folio", page.input_value("[data-folio]") == folio_a)
 
     # -------------------------------------------------------------------------
-    print("\n7 · Duplicar pidiendo 'pago pendiente' sin datos completos")
+    print("\n7 · Duplicar es SIEMPRE borrador, sin excepciones")
     id_a = url_a.split("/facturas/")[1].split("/")[0]
     page.goto(f"{BASE}/facturas/{id_a}/duplicar")
-    page.select_option('[name="status"]', "pending")
-    page.click('button:has-text("Crear factura duplicada")')
     check(
-        "sin cliente ni fechas, la copia se queda en borrador",
-        valor(page, "status") == "draft",
-        valor(page, "status"),
+        "la pantalla ya no ofrece elegir estado",
+        page.locator('[name="status"]').count() == 0,
     )
+    check("y lo dice por escrito", "Borrador, siempre" in page.locator(".duplicate-summary").inner_text())
+
+    # Igual que con el folio: que la pantalla no lo ofrezca no basta.
+    page.request.post(
+        f"{BASE}/facturas/{id_a}/duplicar",
+        form={"customer_name": "Estado forzado", "status": "generated"},
+    )
+    page.goto(f"{BASE}/facturas?q=Estado forzado")
+    estado = page.locator("tbody tr:not(.empty-row) .status").first.inner_text()
+    check("aunque se fuerce el estado en el envio, nace borrador", estado == "Borrador", estado)
+
+    # -------------------------------------------------------------------------
+    print("\n7bis · Los datos bancarios de una copia son los de hoy")
+    # Una factura emitida conserva la cuenta a la que se pidio pagar. Pero una
+    # copia es una operacion nueva: tiene que coger la cuenta vigente, no
+    # arrastrar la del original.
+    if DB.exists():
+        con = sqlite3.connect(DB)
+        con.execute(
+            "UPDATE setting SET value = ? WHERE key = 'banking.account_number' AND market = 'es-MX'",
+            (CLABE_NUEVA,),
+        )
+        con.commit()
+        con.close()
+
+        page.goto(f"{BASE}/facturas/{id_a}/duplicar")
+        fill(page, "customer_name", "Cliente tras cambiar la cuenta")
+        page.click('button:has-text("Crear factura duplicada")')
+        check(
+            "la copia usa la CLABE nueva de Configuracion",
+            page.locator(f'input[value="{CLABE_NUEVA}"]').count() == 1,
+        )
+        check(
+            "y no la del original",
+            page.locator(f'input[value="{CLABE_VIEJA}"]').count() == 0,
+        )
+        page.goto(url_a)
+        check(
+            "la factura original conserva intacta la suya",
+            page.locator(f'input[value="{CLABE_VIEJA}"]').count() == 1,
+        )
+
+        # Se deja Configuracion como estaba, para no condicionar al resto de
+        # comprobaciones ni a quien mire el panel despues.
+        con = sqlite3.connect(DB)
+        con.execute(
+            "UPDATE setting SET value = ? WHERE key = 'banking.account_number' AND market = 'es-MX'",
+            (CLABE_VIEJA,),
+        )
+        con.commit()
+        con.close()
+    else:
+        print(f"  (omitido: no se encuentra {DB})")
 
     # -------------------------------------------------------------------------
     print("\n8 · Agrupacion por VIN")
     page.goto(f"{BASE}/vehiculos")
     fila = page.locator("tbody tr", has_text=VIN_A)
     check("el vehiculo aparece agrupado", fila.count() == 1)
-    check("y cuenta los tres interesados", "3 interesados" in fila.inner_text(), fila.inner_text().replace("\n", " ")[:80])
+    check("y cuenta los cuatro interesados", "4 interesados" in fila.inner_text(), fila.inner_text().replace("\n", " ")[:80])
     page.screenshot(path=f"{SHOTS}/03-vehiculos.png")
 
     page.goto(f"{BASE}/vehiculos/{VIN_A}")
     filas = page.locator("tbody tr").count()
-    check("el historial del vehiculo lista las tres", filas == 3, f"{filas} filas")
-    check("el historial marca cuales son copias", page.locator("td", has_text="copia").count() >= 2)
+    check("el historial del vehiculo lista las cuatro", filas == 4, f"{filas} filas")
+    check("el historial marca cuales son copias", page.locator("td", has_text="copia").count() >= 3)
     page.screenshot(path=f"{SHOTS}/04-historial-vin.png")
 
     page.goto(url_copia)
@@ -209,7 +285,7 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/facturas?q=Segundo interesado")
     check("buscar por cliente encuentra la copia", page.locator("tbody tr:not(.empty-row)").count() == 1)
     page.goto(f"{BASE}/facturas?q={VIN_A}")
-    check("buscar por VIN devuelve las tres", page.locator("tbody tr:not(.empty-row)").count() == 3)
+    check("buscar por VIN devuelve las cuatro", page.locator("tbody tr:not(.empty-row)").count() == 4)
     page.goto(f"{BASE}/facturas?q={folio_a}")
     check("buscar por folio devuelve una", page.locator("tbody tr:not(.empty-row)").count() == 1)
 

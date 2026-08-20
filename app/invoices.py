@@ -18,6 +18,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .fields import DUPLICATE_CARRY_FIELDS, EDITABLE_FIELDS
@@ -25,7 +26,6 @@ from .locales import DEFAULT_LOCALE, MARKETS, validate_account, validate_vin
 from .models import (
     STATUS_DRAFT,
     STATUS_GENERATED,
-    STATUS_PENDING,
     STATUS_SENT,
     STATUSES,
     Invoice,
@@ -308,19 +308,14 @@ def vin_groups(db: Session) -> list[dict]:
 
 
 def create(db: Session, form) -> tuple[Invoice | None, list[str]]:
-    """Crea una factura a partir del formulario. No hace commit: lo hace la
-    ruta, para que un error de validacion no deje nada a medias."""
+    """Crea una factura a partir del formulario. No hace commit: de eso se
+    encarga commit_creation, que ademas reintenta si el folio se ocupa."""
     invoice = Invoice(status=STATUS_DRAFT, locale=DEFAULT_LOCALE)
     apply_form(invoice, form)
-    if not (invoice.folio or "").strip():
-        invoice.folio = next_folio(db)
-    else:
-        repetido = db.execute(
-            select(Invoice.id).where(Invoice.folio == invoice.folio)
-        ).first()
-        if repetido:
-            return None, [f"Ya existe una factura con el folio {invoice.folio}."]
-
+    # El folio siempre lo pone el contador. No se lee del formulario ni aunque
+    # llegue: el campo es de solo lectura en pantalla y ademas no esta en
+    # EDITABLE_FIELDS, de modo que un envio manipulado tampoco lo cambia.
+    invoice.folio = next_folio(db)
     inherit_settings(db, invoice)
     errores = validate(invoice)
     if errores:
@@ -334,18 +329,23 @@ def duplicate(db: Session, source: Invoice, form=None) -> Invoice:
     """Copia una factura para otro interesado.
 
     Se copia lo declarado en DUPLICATE_CARRY_FIELDS: vehiculo, precios,
-    plantilla, entrega, banco y representante. Todo lo demas se reinicia. La
-    copia nace en borrador y con folio propio, de modo que duplicar no confirma
-    una reserva ni hereda el estado de la factura de origen.
+    plantilla y entrega. Todo lo demas se reinicia.
+
+    Dos reglas estrictas, acordadas con el cliente:
+
+    1. La copia nace SIEMPRE en borrador. No hay forma de que duplicar deje una
+       factura en ningun otro estado. El operador abre la copia, la completa y
+       decide desde el editor si la pasa a pago pendiente.
+    2. Los datos bancarios y los del representante no se heredan del original:
+       se cargan de la Configuracion vigente. Una copia es una operacion nueva y
+       no puede arrastrar una cuenta que quiza ya se cambio.
     """
     copia = Invoice()
     for name in DUPLICATE_CARRY_FIELDS:
         setattr(copia, name, getattr(source, name))
 
-    copia.folio = next_folio(db)
     copia.status = STATUS_DRAFT
     copia.duplicated_from_id = source.id
-    copia.banking_payment_reference = copia.folio
     # Cliente, fechas y autorizacion se capturan de nuevo. No se heredan.
     copia.customer_name = None
     copia.customer_email = None
@@ -362,21 +362,62 @@ def duplicate(db: Session, source: Invoice, form=None) -> Invoice:
             if valor:
                 setattr(copia, name, valor)
         locale = form.get("locale")
-        if locale in MARKETS and locale != copia.locale:
+        if locale in MARKETS:
             copia.locale = locale
-            # Cambiar de mercado obliga a rehacer los datos bancarios: la cuenta
-            # de Mexico no sirve para una factura argentina.
-            inherit_settings(db, copia)
-        estado = form.get("status")
-        # Solo se admiten estados que no comprometen el vehiculo. Duplicar no
-        # puede dejar una copia como generada o enviada. Y si le faltan datos
-        # para salir de borrador, se queda en borrador aunque se pida otra cosa:
-        # vale mas una copia honesta a medias que una factura incompleta
-        # presentada como si estuviera lista.
-        if estado == STATUS_PENDING:
-            copia.status = STATUS_PENDING
-            if validate(copia):
-                copia.status = STATUS_DRAFT
+
+    copia.folio = next_folio(db)
+    copia.banking_payment_reference = copia.folio
+    # Se llama despues de fijar el mercado: la cuenta depende de el, y la de
+    # Mexico no sirve para una factura argentina.
+    inherit_settings(db, copia)
 
     db.add(copia)
     return copia
+
+
+# --- guardado con reintento de folio -----------------------------------------
+
+
+class FolioOcupado(Exception):
+    """No se ha conseguido un folio libre tras varios intentos."""
+
+
+def _es_choque_de_folio(exc: IntegrityError) -> bool:
+    """Distingue el folio repetido de cualquier otro error de integridad.
+
+    No basta con buscar la palabra "folio": un NOT NULL sobre esa misma columna
+    tambien la lleva, y reintentarlo seis veces solo serviria para esconder el
+    fallo. Se exige ademas que el motor este hablando de una clave duplicada.
+
+      sqlite      UNIQUE constraint failed: invoice.folio
+      postgres    duplicate key value violates unique constraint "invoice_folio_key"
+      mysql       Duplicate entry 'RES-87241' for key 'invoice.folio'
+    """
+    mensaje = str(getattr(exc, "orig", exc)).lower()
+    return "folio" in mensaje and ("unique" in mensaje or "duplicate" in mensaje)
+
+
+def commit_creation(db: Session, construir, intentos: int = 6) -> Invoice:
+    """Crea y guarda reintentando si otro operador se lleva el folio primero.
+
+    La cuenta de Admin es compartida, asi que dos personas pueden crear una
+    factura casi a la vez. La columna folio es unica, de modo que el segundo en
+    llegar recibiria un error de base de datos en plena pantalla.
+
+    Aqui se captura ese choque, se deshace la transaccion y se vuelve a
+    construir la factura. Como next_folio comprueba contra la base de datos
+    antes de proponer un numero, el reintento coge ya el siguiente libre y
+    converge en la primera vuelta.
+
+    construir(db) -> Invoice, ya anadida a la sesion y con su folio puesto.
+    """
+    for _ in range(intentos):
+        invoice = construir(db)
+        try:
+            db.commit()
+            return invoice
+        except IntegrityError as exc:
+            db.rollback()
+            if not _es_choque_de_folio(exc):
+                raise
+    raise FolioOcupado("No se ha podido asignar un folio libre.")
