@@ -11,6 +11,7 @@
       <form method="get" action="/facturas">
         <input class="search" type="search" name="q" value="{{ q }}" placeholder="Buscar folio, cliente o vehículo">
       </form>
+      <a class="btn ghost" href="/vehiculos">Por vehículo</a>
       <a class="btn gold" href="/facturas/nueva">+ Nueva factura</a>
     </div>
   </div>
@@ -47,7 +48,9 @@
           <td>{{ inv.customer_name or '—' }}</td>
           <td>
             {{ inv.vehicle_title or '—' }}
-            {% if inv.vehicle_vin %}<div class="small muted">{{ inv.vehicle_vin }}</div>{% endif %}
+            {% if inv.vehicle_vin %}
+              <div class="small muted"><a class="folio-link" href="/vehiculos/{{ inv.vehicle_vin }}">{{ inv.vehicle_vin }}</a></div>
+            {% endif %}
           </td>
           <td><b class="market {{ 'mx' if inv.locale == 'es-MX' else ('ar' if inv.locale == 'es-AR' else 'en') }}">{{ markets[inv.locale].label if inv.locale in markets else inv.locale }}</b></td>
           <td><span class="duplicate-badge">{{ n }} interesado{{ '' if n == 1 else 's' }}</span></td>
@@ -55,6 +58,7 @@
           <td class="small muted">{{ inv.updated_at.strftime('%d %b %Y · %H:%M') }}</td>
           <td class="actions">
             <a class="btn ghost" href="/facturas/{{ inv.id }}/editar">Editar</a>
+            <a class="btn ghost" href="/facturas/{{ inv.id }}/duplicar">Duplicar</a>
           </td>
         </tr>
       {% else %}
@@ -69,9 +73,10 @@
 </div>
 
 <div class="devnote" style="margin-top:16px">
-  <b>Fase A.</b> El listado, la búsqueda por folio, cliente, vehículo y VIN, y el
-  recuento de interesados por VIN ya funcionan sobre datos reales. Duplicar,
-  guardar borrador y generar PDF se cablean en las fases B y D.
+  <b>Fase B.</b> Listado, búsqueda por folio, cliente, vehículo y VIN, creación,
+  edición, borradores, duplicado y agrupación por VIN funcionan sobre la base de
+  datos real. La vista previa con la plantilla aprobada es la Fase C y la
+  generación del PDF la Fase D.
 </div>
 
 {% endblock %}

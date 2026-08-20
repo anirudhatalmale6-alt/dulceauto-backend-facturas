@@ -119,6 +119,10 @@ a.avatar { text-decoration: none; display: grid; place-items: center; }
 /* --- tabla de facturas: la maqueta no preveia el estado vacio --- */
 .empty-row td { text-align: center; color: var(--muted); padding: 32px 12px; font-size: 13.5px; }
 
+/* El contador de interesados parte "3 interesados" en dos lineas dentro de la
+   celda estrecha de la tabla; con el texto entero se lee de un vistazo. */
+.duplicate-badge { white-space: nowrap; }
+
 /* --- marca de fase, para que se vea que aun no esta cableado --- */
 .phase-tag {
   display: inline-block;
@@ -133,6 +137,17 @@ a.avatar { text-decoration: none; display: grid; place-items: center; }
   margin-left: 8px;
   vertical-align: middle;
 }
+
+/* --- bloques de la maqueta a los que les faltaba la version en oscuro ---
+
+   .duplicate-summary y .invoice-group-note fijan un fondo claro pero dejan que
+   el texto herede su color. En modo Noche el texto es claro, asi que quedaban
+   blanco sobre blanco. Se arregla aqui y no en panel.css para no tocar el CSS
+   original de la maqueta, que se copio tal cual. */
+body.theme-night .duplicate-summary { background: #0f1927; border-color: #2a3a50; }
+body.theme-soft .duplicate-summary { background: var(--cream2); }
+body.theme-night .invoice-group-note { background: #13263d; border-color: #244363; color: #bcd0e8; }
+body.theme-night .invoice-group-note b { color: #eaf1fb; }
 
 /* Los tres temas cambian variables en <body>; estos bloques solo recolocan lo
    que se anadio aqui, para que no se quede en claro cuando el resto no lo esta. */

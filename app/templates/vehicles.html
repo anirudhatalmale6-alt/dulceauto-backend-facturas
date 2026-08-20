@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{#
+  Agrupacion por VIN. El marcado reutiliza .grid + .template-grid con .card
+  .template y su <dl>, que es el bloque que la maqueta usa para tarjetas con
+  ficha; inventarse otra estructura haria que el CSS no enganchara.
+#}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Vehículos</h2>
+      <div class="small muted">Un registro por VIN, con todas sus pre-facturas enlazadas.</div>
+    </div>
+    <a class="btn ghost" href="/facturas">Ver todas las facturas</a>
+  </div>
+
+  <div class="invoice-group-note">
+    <span>ℹ</span>
+    <div>
+      <b>Por qué se agrupa por VIN:</b> el número de bastidor identifica al coche
+      y no cambia. Varias personas pueden interesarse por el mismo vehículo y
+      cada una tiene su pre-factura; agrupadas por VIN se ven juntas.
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>VIN</th><th>Vehículo</th><th>Facturas</th><th>Estados</th><th>Última edición</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for g in grupos %}
+        <tr>
+          <td><a class="folio-link" href="/vehiculos/{{ g.vin }}">{{ g.vin }}</a></td>
+          <td>{{ g.title or '—' }}</td>
+          <td><span class="duplicate-badge">{{ g.count }} interesado{{ '' if g.count == 1 else 's' }}</span></td>
+          <td>
+            {% for i in g.invoices %}
+              {% set label, css = status_labels.get(i.status, (i.status, 'muted')) %}
+              <span class="status {{ css }}">{{ label }}</span>
+            {% endfor %}
+          </td>
+          <td class="small muted">{{ g.ultima.strftime('%d %b %Y · %H:%M') }}</td>
+          <td class="actions"><a class="btn ghost" href="/vehiculos/{{ g.vin }}">Historial</a></td>
+        </tr>
+      {% else %}
+        <tr class="empty-row"><td colspan="6">Todavía no hay facturas con VIN.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

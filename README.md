@@ -14,7 +14,7 @@ tocado sus estilos.
 | Fase | Contenido | Estado |
 |------|-----------|--------|
 | **A** | Base del proyecto, acceso, Master Password, modelo de datos, panel con las 6 vistas y los 3 modos visuales | **Entregada** |
-| B | Crear, editar, borrador, buscar, duplicar, agrupación por VIN | Pendiente |
+| **B** | Crear, editar, borrador, buscar, duplicar, agrupación por VIN | **Entregada** |
 | C | Motor de plantillas, claves fijas en las 3 plantillas, vista previa real, validaciones | Pendiente |
 | D | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | Pendiente |
 
@@ -85,6 +85,7 @@ un panel interno la diferencia real de seguridad es nula.
 backend/
 ├── app/
 │   ├── main.py          rutas y vistas
+│   ├── invoices.py      crear, editar, duplicar, agrupar por VIN
 │   ├── models.py        modelo de datos definitivo
 │   ├── fields.py        claves fijas ← contrato con las plantillas
 │   ├── locales.py       reglas por mercado y validaciones bancarias
@@ -96,7 +97,9 @@ backend/
 ├── templates_html/      LAS TRES PLANTILLAS APROBADAS (no tocar la maquetación)
 ├── alembic/             migraciones de base de datos
 ├── data/                base de datos, fotos y snapshots (volumen)
-└── verificar_fase_a.py  comprobación de punta a punta
+├── verificar_fase_a.py  acceso, Master Password, vistas y temas
+├── verificar_fase_b.py  crear, editar, borrador, duplicar, VIN
+└── verificar_datos.py   importes, CLABE, CBU y VIN (sin servidor)
 ```
 
 ---
@@ -157,6 +160,64 @@ cliente. Lo mismo se aplicará al snapshot y a sus activos en la Fase D.
 
 ---
 
+## Duplicar: qué se copia y qué no
+
+La regla está declarada en `app/fields.py`, en `DUPLICATE_CARRY_FIELDS`, y no
+repartida por el código. Todo lo que no esté en esa lista se reinicia en la
+copia.
+
+| Se copia | Se reinicia |
+|---|---|
+| Vehículo completo y VIN | Cliente, email, teléfono, ciudad |
+| Precios, descuento, seguro, transporte | Folio (se genera uno nuevo) |
+| Plantilla y moneda | Fecha de emisión, vigencia, entrega |
+| Banco, beneficiario, cuenta | Autorización |
+| Representante | Estado: la copia **nace como borrador** |
+
+**Duplicar no confirma la reserva.** La copia no hereda el estado del original,
+así que duplicar para un segundo interesado no deja el vehículo marcado como
+comprometido. Si al duplicar se pide «Pago pendiente» pero faltan datos
+obligatorios, la copia se guarda igualmente como borrador.
+
+Cuando un vehículo ya tiene alguna factura en estado avanzado (PDF generado o
+enviada), el editor, la pantalla de duplicar y el historial del vehículo lo
+avisan. Es un aviso, no un bloqueo: varias pre-facturas por VIN son
+precisamente el caso de varios interesados.
+
+---
+
+## Borradores y campos obligatorios
+
+Un borrador se guarda a medias, que es para lo que sirve. Para que una factura
+deje de ser borrador se exigen: cliente, vehículo, VIN válido, precio, importe
+de pre-reserva y fecha de emisión. Si falta algo, el panel lo dice campo por
+campo y **no se guarda nada**, conservando lo que el operador acababa de
+escribir en pantalla.
+
+También se comprueba que la vigencia y la fecha de entrega no sean anteriores a
+la de emisión, y que el folio no esté repetido.
+
+### Importes escritos a mano
+
+El mismo panel sirve a México y a Argentina, así que se aceptan las dos
+escrituras: `412.500,00` y `412,500.00` se guardan como el mismo número. Debajo
+del campo se muestra cómo quedará escrito en la factura de ese mercado.
+
+---
+
+## Agrupación por VIN
+
+`/vehiculos` lista un registro por número de bastidor y `/vehiculos/{VIN}`
+enseña el historial completo de ese coche, con todas sus pre-facturas, sus
+clientes y sus estados. El editor muestra también las demás facturas del mismo
+VIN.
+
+Se agrupa por VIN y no por el título del vehículo porque el bastidor identifica
+al coche y no cambia, mientras que el título es texto libre y se escribe
+distinto cada vez.
+
+---
+
 ## Validaciones bancarias
 
 Comprobar la longitud detecta un número incompleto, pero no un dígito mal
@@ -190,13 +251,26 @@ distintas.
 
 ```bash
 python3 verificar_fase_a.py http://127.0.0.1:8000 /tmp/capturas
+python3 verificar_fase_b.py http://127.0.0.1:8000 /tmp/capturas
+python3 verificar_datos.py
 ```
 
-31 comprobaciones. No mira que las páginas «carguen», mira que hagan lo que
-tienen que hacer: que la contraseña incorrecta no entre, que Configuración no se
-pueda abrir sin la Master Password, que los datos bancarios no aparezcan en el
-HTML mientras está bloqueada, que el bloqueo vuelva a cerrarse al salir, que la
-búsqueda filtre de verdad y que cada acción quede registrada.
+**106 comprobaciones en total.** No miran que las páginas «carguen», miran que
+hagan lo que tienen que hacer.
+
+- **Fase A · 31.** Que la contraseña incorrecta no entre, que Configuración no
+  se pueda abrir sin la Master Password, que los datos bancarios no aparezcan
+  en el HTML mientras está bloqueada, que el bloqueo vuelva a cerrarse al salir
+  y que cada acción quede registrada.
+- **Fase B · 55.** Que un borrador se guarde a medias pero no pueda salir de
+  borrador con huecos, que un VIN inválido se rechace, que un intento fallido
+  no borre lo tecleado ni gaste un folio, que la copia nazca en borrador y sin
+  cliente, que la factura de origen no cambie al duplicarla, y que el
+  agrupamiento por VIN cuente lo que tiene que contar.
+- **Datos · 20.** Formatos de importe y dígitos de control de CLABE, CBU y VIN.
+  Esta se ejecuta sin servidor.
+
+Las dos primeras dejan capturas en la carpeta indicada.
 
 ---
 

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{#
+  Duplicar. En la maqueta V1.3 esto era un modal de JavaScript; aqui es una
+  pagina propia con el mismo marcado (.duplicate-summary con .row, .duplicate-grid
+  y .warning-box), de modo que se puede enlazar, funciona el boton atras y no
+  hace falta JavaScript para algo que escribe en la base de datos.
+#}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Duplicar pre-factura</h2>
+      <div class="small muted">Mismo vehículo · nuevo cliente · nuevo folio</div>
+    </div>
+    <a class="btn ghost" href="/facturas/{{ source.id }}/editar">Cancelar</a>
+  </div>
+
+  <div class="duplicate-summary">
+    <div class="row"><span>Factura origen</span><b>{{ source.folio }}</b></div>
+    <div class="row"><span>Vehículo</span><b>{{ source.vehicle_title or '—' }}</b></div>
+    <div class="row"><span>VIN</span><b>{{ source.vehicle_vin or '—' }}</b></div>
+    <div class="row"><span>Nuevo folio</span><b>{{ folio_previsto }}</b></div>
+    <div class="row"><span>Qué se copia</span><b>Vehículo · precios · plantilla · entrega · banco</b></div>
+    <div class="row"><span>Qué se reinicia</span><b>Cliente · folio · fechas · autorización · estado</b></div>
+  </div>
+
+  <form method="post" action="/facturas/{{ source.id }}/duplicar">
+    <div class="duplicate-grid">
+      <label>Nombre del nuevo cliente<input name="customer_name" placeholder="Nombre completo"></label>
+      <label>Email<input name="customer_email" type="email" placeholder="cliente@email.com"></label>
+      <label>Teléfono<input name="customer_phone" placeholder="Teléfono"></label>
+      <label>Ciudad<input name="customer_city" placeholder="Ciudad"></label>
+      <label>Plantilla
+        <select name="locale">
+          {% for code, m in markets.items() %}
+            <option value="{{ code }}" {% if source.locale == code %}selected{% endif %}>{{ m.label }} · {{ code }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Estado inicial
+        <select name="status">
+          <option value="draft" selected>Borrador</option>
+          <option value="pending">Pago pendiente</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="warning-box">
+      <b>Duplicar no confirma la reserva.</b> La copia nace con folio propio y sin
+      cliente, y no hereda el estado de la factura de origen. Se permiten varias
+      pre-facturas para un mismo VIN, que es justo el caso de varios interesados,
+      pero ninguna de ellas queda marcada como reservada por el hecho de duplicar.
+      {% if comprometidas %}
+        <br><br>
+        <b>Este vehículo ya tiene {{ comprometidas|length }} factura{{ '' if comprometidas|length == 1 else 's' }} en estado avanzado</b>
+        ({% for c in comprometidas %}{{ c.folio }} · {{ c.customer_name or 'sin cliente' }}{{ ', ' if not loop.last }}{% endfor %}).
+        Conviene comprobar el estado real antes de comprometer el mismo coche otra vez.
+      {% endif %}
+      <br><br>
+      Si elige «Pago pendiente» y faltan datos obligatorios, la copia se guardará
+      igualmente como borrador: es preferible una copia honesta a medias que una
+      factura incompleta presentada como si estuviera lista.
+    </div>
+
+    <div class="actions" style="justify-content:flex-end;margin-top:14px">
+      <a class="btn ghost" href="/facturas/{{ source.id }}/editar">Cancelar</a>
+      <button class="btn gold" type="submit">Crear factura duplicada</button>
+    </div>
+  </form>
+</div>
+
+{% if historial %}
+<div class="card" style="margin-top:16px">
+  <div class="toolbar">
+    <div>
+      <h2>Otras facturas de este vehículo</h2>
+      <div class="small muted">Agrupadas por VIN {{ source.vehicle_vin }}</div>
+    </div>
+    <a class="btn ghost" href="/vehiculos/{{ source.vehicle_vin }}">Ver historial completo</a>
+  </div>
+  <table>
+    <thead><tr><th>Folio</th><th>Cliente</th><th>Mercado</th><th>Estado</th><th>Creada</th></tr></thead>
+    <tbody>
+      {% for h in historial %}
+        {% set label, css = status_labels.get(h.status, (h.status, 'muted')) %}
+        <tr>
+          <td><a class="folio-link" href="/facturas/{{ h.id }}/editar">{{ h.folio }}</a></td>
+          <td>{{ h.customer_name or '—' }}</td>
+          <td>{{ markets[h.locale].label if h.locale in markets else h.locale }}</td>
+          <td><span class="status {{ css }}">{{ label }}</span></td>
+          <td class="small muted">{{ h.created_at.strftime('%d %b %Y') }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

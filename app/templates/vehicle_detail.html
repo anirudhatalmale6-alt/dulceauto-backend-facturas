@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>{{ page_sub }}</h2>
+      <div class="small muted">VIN {{ vin }} · {{ historial|length }} factura{{ '' if historial|length == 1 else 's' }}</div>
+    </div>
+    <a class="btn ghost" href="/vehiculos">Volver a vehículos</a>
+  </div>
+
+  {% if comprometidas %}
+    <div class="warning-box">
+      <b>{{ comprometidas|length }} factura{{ '' if comprometidas|length == 1 else 's' }} de este vehículo
+      {{ 'está' if comprometidas|length == 1 else 'están' }} en estado avanzado</b>
+      ({% for c in comprometidas %}{{ c.folio }}{{ ', ' if not loop.last }}{% endfor %}).
+      El sistema permite varios interesados por el mismo coche; este aviso está
+      para que no se comprometa dos veces sin querer.
+    </div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr><th>Folio</th><th>Cliente</th><th>Mercado</th><th>Importe pre-reserva</th><th>Estado</th><th>Creada</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for h in historial %}
+        {% set label, css = status_labels.get(h.status, (h.status, 'muted')) %}
+        <tr>
+          <td>
+            <a class="folio-link" href="/facturas/{{ h.id }}/editar">{{ h.folio }}</a>
+            {% if h.duplicated_from_id %}<div class="small muted">copia</div>{% endif %}
+          </td>
+          <td>{{ h.customer_name or '—' }}</td>
+          <td><b class="market {{ 'mx' if h.locale == 'es-MX' else ('ar' if h.locale == 'es-AR' else 'en') }}">{{ markets[h.locale].label if h.locale in markets else h.locale }}</b></td>
+          <td>{{ money(h.pricing_reservation_amount, h.locale) or '—' }}</td>
+          <td><span class="status {{ css }}">{{ label }}</span></td>
+          <td class="small muted">{{ h.created_at.strftime('%d %b %Y · %H:%M') }}</td>
+          <td class="actions">
+            <a class="btn ghost" href="/facturas/{{ h.id }}/editar">Editar</a>
+            <a class="btn ghost" href="/facturas/{{ h.id }}/duplicar">Duplicar</a>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
