@@ -132,6 +132,29 @@ sleep 8
 docker compose ps
 curl -fsS http://127.0.0.1:8000/salud && echo
 
+# Alembic tiene que saber en que version esta la base, y en una instalacion
+# nueva no lo sabe: las tablas las ha creado create_all al arrancar la
+# aplicacion, no las migraciones, asi que no hay tabla alembic_version y
+# "alembic current" sale en blanco. La proxima migracion intentaria entonces
+# volver a crear columnas que ya estan.
+#
+# Comprobado que el esquema que dejan las migraciones y el que deja create_all
+# son el mismo -mismas tablas, columnas, tipos e indices; solo cambia el orden
+# en que sqlite escribe las clausulas-, asi que en una base recien creada basta
+# con anotar que ya esta al dia. En una que ya venia de antes, se migra.
+if docker compose exec -T backend python -c "
+import sqlite3,sys
+c=sqlite3.connect('data/dulceauto.db')
+sys.exit(0 if c.execute(\"select 1 from sqlite_master where name='alembic_version'\").fetchone() else 1)
+"; then
+  echo "Base ya conocida por Alembic: se aplican las migraciones pendientes."
+  docker compose exec -T backend alembic upgrade head
+else
+  echo "Base recien creada: se anota como al dia (stamp head)."
+  docker compose exec -T backend alembic stamp head
+fi
+docker compose exec -T backend alembic current
+
 log "8/9 · Nginx y HTTPS"
 cat > /etc/nginx/sites-available/dulceauto <<NGINX
 server {
