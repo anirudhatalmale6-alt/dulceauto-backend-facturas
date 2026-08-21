@@ -25,6 +25,24 @@ etiqueta de fase en lugar de ofrecer un botón que no hace nada.
 
 ## Puesta en marcha
 
+### En el VPS, de una vez
+
+```bash
+bash despliegue/instalar.sh admin.midominio.com correo@midominio.com
+```
+
+Deja el sistema al día, el cortafuegos puesto, Docker instalado, el backend en
+marcha, nginx con certificado HTTPS y una copia de seguridad diaria de la carpeta
+de datos. Se puede volver a ejecutar cuantas veces haga falta: comprueba antes de
+instalar y no repite lo que ya está.
+
+Lo que **no** hace, a propósito: poner las contraseñas definitivas ni los datos
+bancarios reales. Eso se hace desde el panel, y las contraseñas las escribe el
+cliente.
+
+La lista de comprobación de la instalación está en
+`despliegue/CHECKLIST-INSTALACION.md`.
+
 ### Con Docker, que es como irá en el servidor
 
 ```bash
@@ -102,6 +120,7 @@ backend/
 ├── templates_html/      LAS TRES PLANTILLAS APROBADAS (no tocar la maquetación)
 │   ├── aprobado-original/  copia intacta, para poder comparar contra ella
 │   └── marcar_campos.py    qué atributos se les añadieron, y solo atributos
+├── despliegue/          instalacion en el VPS: script y lista de comprobacion
 ├── alembic/             migraciones de base de datos
 ├── data/                base de datos, fotos y snapshots (volumen)
 ├── verificar_fase_a.py     acceso, Master Password, vistas y temas

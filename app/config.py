@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # Minutos de inactividad tras los que se cierra la sesion del panel.
     session_minutes: int = 480
 
+    # Cookie de sesion solo por HTTPS. En el servidor con certificado tiene que
+    # estar a true: sin eso, la cookie viaja tambien por http y basta con que
+    # alguien fuerce una peticion sin cifrar para verla pasar.
+    #
+    # En local se deja a false porque no hay certificado y el panel no
+    # arrancaria sesion. Es la unica diferencia entre los dos entornos.
+    https_only: bool = False
+
     # Credenciales iniciales. Solo se usan para sembrar la base la primera
     # vez; despues viven hasheadas en la tabla credential y se cambian desde
     # el panel. Nunca se comparan contra estos valores en caliente.

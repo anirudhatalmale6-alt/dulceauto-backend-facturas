@@ -59,14 +59,15 @@ from .seed import run as run_seed
 
 app = FastAPI(title=settings.app_name, docs_url=None, redoc_url=None)
 
-# La cookie de sesion va firmada. https_only se deja en manos del entorno: en
-# el VPS con certificado hay que ponerlo a true, en desarrollo local rompe.
+# La cookie de sesion va firmada, y en produccion viaja solo por HTTPS. El
+# valor viene del entorno (HTTPS_ONLY): en el VPS con certificado va a true y en
+# local a false, porque sin certificado la sesion no llegaria a abrirse.
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.secret_key,
     session_cookie="da_session",
     same_site="lax",
-    https_only=False,
+    https_only=settings.https_only,
     max_age=settings.session_minutes * 60,
 )
 
