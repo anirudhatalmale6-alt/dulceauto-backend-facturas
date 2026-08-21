@@ -180,13 +180,13 @@ Atributos, y nada más:
 aprobaron. La comprobación quita esos atributos del archivo marcado y exige que
 el resultado sea idéntico al original.
 
-Son 41 huecos por plantilla, y los mismos 41 en las tres.
+Son 43 huecos por plantilla, y los mismos 43 en las tres.
 
 ### Lo que decide el backend, y lo que no
 
 | Decide el backend | Es fijo de la plantilla |
 |---|---|
-| El contenido de los 41 huecos | Textos legales, FAQ, protección, documentación |
+| El contenido de los 43 huecos | Textos legales, FAQ, protección, documentación |
 | El formato de fechas e importes del mercado | Toda la maquetación y el CSS |
 | Qué paso de la barra de progreso está activo | Los nombres de los cuatro pasos |
 | Cuál de las dos modalidades de entrega va primero | Los textos de las dos modalidades |
