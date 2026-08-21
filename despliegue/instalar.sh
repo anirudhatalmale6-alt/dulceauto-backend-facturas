@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 #
-# Instalacion del backend en el VPS. Ubuntu 22.04 o 24.04, como root.
+# Instalacion del backend en el VPS. Ubuntu 22.04 o 24.04.
 #
-#   bash instalar.sh admin.midominio.com correo@midominio.com
+#   sudo bash instalar.sh admin.midominio.com correo@midominio.com
+#
+# Se puede ejecutar como root, pero es preferible con sudo desde un usuario de
+# despliegue.
 #
 # El correo es el que pide Let's Encrypt para avisar si un certificado va a
 # caducar sin renovarse. No se usa para nada mas.
@@ -17,13 +20,19 @@ CORREO="${2:?Falta el correo para el aviso de caducidad del certificado}"
 DESTINO="/opt/dulceauto"
 REPO="https://github.com/anirudhatalmale6-alt/dulceauto-backend-facturas.git"
 
+# Se puede ejecutar como root o con sudo desde un usuario de despliegue, que es
+# lo recomendable. En el segundo caso el proyecto queda a nombre de ese usuario
+# para que pueda trabajar despues sin sudo.
+[ "$(id -u)" -eq 0 ] || { echo "Hay que ejecutarlo con sudo:  sudo bash $0 $*"; exit 1; }
+OPERADOR="${SUDO_USER:-root}"
+
 log() { printf "\n\033[1;34m==> %s\033[0m\n" "$*"; }
 
 log "1/9 · Sistema al dia"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get upgrade -y -qq
-apt-get install -y -qq ca-certificates curl git ufw nginx unattended-upgrades
+apt-get install -y -qq ca-certificates curl git ufw nginx unattended-upgrades sqlite3
 
 log "2/9 · Cortafuegos"
 # Se abre SSH antes que nada: activar ufw sin esa regla deja el servidor
@@ -35,15 +44,19 @@ ufw status verbose
 
 log "3/9 · Acceso SSH mas seguro"
 # Sin contrasena: solo con clave. Se comprueba que haya al menos una autorizada
-# antes de desactivar la contrasena, para no quedarse fuera.
-if [ -s /root/.ssh/authorized_keys ]; then
+# -del usuario que ejecuta esto o de root- antes de desactivar la contrasena,
+# para no quedarse fuera del propio servidor.
+CLAVES_OPERADOR="$(getent passwd "$OPERADOR" | cut -d: -f6)/.ssh/authorized_keys"
+if [ -s /root/.ssh/authorized_keys ] || [ -s "$CLAVES_OPERADOR" ]; then
   sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
   sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
   systemctl reload ssh || systemctl reload sshd
   echo "Acceso por contrasena desactivado."
 else
-  echo "AVISO: no hay ninguna clave en /root/.ssh/authorized_keys."
-  echo "No se desactiva la contrasena para no dejar el servidor inaccesible."
+  echo "AVISO: no hay ninguna clave autorizada, ni en /root/.ssh/authorized_keys"
+  echo "ni en ${CLAVES_OPERADOR}."
+  echo "No se desactiva el acceso por contrasena: hacerlo ahora dejaria el"
+  echo "servidor inaccesible para todos."
 fi
 
 log "4/9 · Docker"
@@ -51,6 +64,13 @@ if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh
 fi
 docker --version
+# Docker arranca solo tras un reinicio del servidor. Sin esto, el panel no
+# vuelve hasta que alguien entre a levantarlo a mano.
+systemctl enable --now docker
+if [ "$OPERADOR" != "root" ]; then
+  usermod -aG docker "$OPERADOR"
+  echo "Usuario ${OPERADOR} anadido al grupo docker (tendra efecto al volver a entrar)."
+fi
 
 log "5/9 · Codigo"
 if [ -d "$DESTINO/.git" ]; then
@@ -58,6 +78,7 @@ if [ -d "$DESTINO/.git" ]; then
 else
   git clone --depth 1 "$REPO" "$DESTINO"
 fi
+[ "$OPERADOR" = "root" ] || chown -R "$OPERADOR":"$OPERADOR" "$DESTINO"
 cd "$DESTINO/backend"
 
 log "6/9 · Configuracion"
@@ -110,6 +131,9 @@ apt-get install -y -qq certbot python3-certbot-nginx
 certbot --nginx -d "${DOMINIO}" --non-interactive --agree-tos -m "${CORREO}" --redirect
 systemctl reload nginx
 
+# nginx tambien tiene que volver solo despues de un reinicio.
+systemctl enable nginx
+
 log "9/9 · Copias de seguridad"
 install -d /opt/dulceauto-backups
 cat > /usr/local/bin/dulceauto-backup <<'BACKUP'
@@ -129,6 +153,9 @@ cat > /etc/cron.d/dulceauto-backup <<'CRON'
 CRON
 /usr/local/bin/dulceauto-backup
 ls -lh /opt/dulceauto-backups | tail -3
+# Una copia recien hecha que no se puede abrir no sirve de nada, y es mejor
+# saberlo ahora que el dia que haga falta restaurarla.
+bash "${DESTINO}/backend/despliegue/restaurar.sh"
 
 log "Listo"
 cat <<FIN
@@ -137,6 +164,9 @@ cat <<FIN
   Codigo:     ${DESTINO}
   Datos:      ${DESTINO}/backend/data      (base, fotos y snapshots)
   Copias:     /opt/dulceauto-backups       (diaria a las 3:30, se guardan 14)
+
+  Comprobar la ultima copia:  bash despliegue/restaurar.sh
+  Restaurarla de verdad:      bash despliegue/restaurar.sh <archivo> --en-serio
 
   Pendiente y a proposito:
    - cambiar las dos contrasenas desde Configuracion;

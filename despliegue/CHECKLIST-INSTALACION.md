@@ -7,7 +7,8 @@ Para repasarla juntos en el servidor. Cada punto se marca cuando se ha
 
 ## 1 · Servidor
 
-- [ ] Es un VPS con acceso root por SSH, no un alojamiento compartido.
+- [ ] Es un **VPS**, no un alojamiento web compartido.
+- [ ] Usuario de despliegue con `sudo`, en lugar de trabajar como root.
 - [ ] Ubuntu 22.04 o 24.04.
 - [ ] Sistema actualizado.
 - [ ] Cortafuegos activo: solo SSH, 80 y 443. `ufw status`
@@ -129,14 +130,43 @@ Para cada uno de **México**, **English** y **Argentina**:
 > / 8,6 s tres seguidos; panel a 3 ms de mediana y 34 ms de máximo. Aquí lo
 > repetimos y comparamos: si los números salen muy peores, se sube a 2 vCPU.
 
-## 13 · Copias de seguridad
+## 13 · Reinicio del servidor
+
+Un servidor se reinicia solo antes o después: por una actualización del núcleo,
+por un corte de luz o porque lo reinicia el proveedor. Hay que saber ya que
+vuelve solo.
+
+- [ ] `reboot` del VPS.
+- [ ] Docker arranca solo.
+- [ ] El contenedor del backend vuelve a levantarse solo.
+- [ ] Nginx arranca solo.
+- [ ] El panel responde en `https://admin.sudominio.com` sin tocar nada.
+- [ ] Cuánto tardó desde el reinicio hasta que el panel volvió a responder.
+
+## 14 · Copias de seguridad, con restauración de verdad
+
+Una copia que no se ha restaurado nunca no es una copia de seguridad: es un
+archivo que parece una copia.
 
 - [ ] Copia diaria programada.
-- [ ] La primera copia existe y **se puede abrir**.
+- [ ] La primera copia existe.
 - [ ] Se guardan 14 días y las viejas se borran solas.
+- [ ] **Comprobar la copia**: `bash despliegue/restaurar.sh`
+      Descomprime en una carpeta temporal, comprueba que la base no está dañada
+      (`integrity_check`) y cuenta facturas, snapshots, PDF y archivos subidos.
+      No toca nada del servidor.
+- [ ] Los números que devuelve cuadran con lo que hay en el panel.
+- [ ] **Restauración real de prueba**: generar una factura nueva después de la
+      copia, restaurar con `--en-serio`, y comprobar que esa factura ha
+      desaparecido y que las anteriores están intactas. Es la única forma de
+      saber que la restauración funciona.
+- [ ] La restauración deja guardado lo que había antes, por si hubiera que
+      deshacerla.
+- [ ] Volver a dejar el sistema como estaba.
 
-## 14 · Al terminar
+## 15 · Al terminar
 
-- [ ] Retirar mi clave SSH de `/root/.ssh/authorized_keys`.
+- [ ] Retirar mi clave SSH (de `~/.ssh/authorized_keys` del usuario de
+      despliegue, y de root si también se añadió allí).
 - [ ] Comprobar que ya no puedo entrar.
 - [ ] Guía de trabajo para los empleados.
