@@ -233,6 +233,117 @@ DOC_STATUS = {
 }
 
 
+# Titular y linea de debajo, por estado.
+#
+# Hasta ahora eran fijos y estaban escritos para el momento del pago. En una
+# factura ya entregada, "Confirma el pago para iniciar la validacion" contradice
+# al resto del documento.
+#
+# En "Pago pendiente" son **exactamente** los textos aprobados en el Milestone 1,
+# palabra por palabra: esa es la version base de la factura y no se toca. Los de
+# los demas estados los redacto el cliente el 21-ago-2026.
+DOC_HEADLINE = {
+    "es-MX": {
+        "draft": (
+            "Pre-factura en preparación",
+            "Completa los datos requeridos antes de continuar con la operación.",
+        ),
+        "pending": (
+            "Tu vehículo está pre-reservado",
+            "Confirma el pago para iniciar la validación de la operación y continuar "
+            "con la coordinación de la entrega.",
+        ),
+        "payment_validated": (
+            "Tu pago ha sido validado",
+            "Continuamos con la documentación y los trámites necesarios para coordinar "
+            "la entrega de tu vehículo.",
+        ),
+        "delivery_scheduled": (
+            "La entrega de tu vehículo está coordinada",
+            "La entrega ha sido programada de acuerdo con la modalidad y fecha indicadas "
+            "en esta pre-factura.",
+        ),
+        "delivered": (
+            "Entrega completada",
+            "La recepción del vehículo ha sido confirmada correctamente.",
+        ),
+        "cancelled": (
+            "Operación cancelada",
+            "Esta pre-factura ya no se encuentra activa. Para cualquier aclaración, "
+            "comunícate con tu representante asignado.",
+        ),
+    },
+    "en": {
+        "draft": (
+            "Proforma invoice in preparation",
+            "Complete the required information before continuing with the transaction.",
+        ),
+        "pending": (
+            "Your vehicle is pre-reserved",
+            "Confirm your payment to begin validating the transaction and continue with "
+            "delivery coordination.",
+        ),
+        "payment_validated": (
+            "Your payment has been verified",
+            "We are continuing with the documentation and processing required to coordinate "
+            "delivery of your vehicle.",
+        ),
+        "delivery_scheduled": (
+            "Your vehicle delivery has been scheduled",
+            "Delivery has been arranged according to the method and date shown on this "
+            "proforma invoice.",
+        ),
+        "delivered": (
+            "Delivery completed",
+            "Receipt of the vehicle has been successfully confirmed.",
+        ),
+        "cancelled": (
+            "Transaction cancelled",
+            "This proforma invoice is no longer active. Please contact your assigned "
+            "representative if you need assistance.",
+        ),
+    },
+    # Argentina lleva las mismas frases en voseo, y en "Pago pendiente" el texto
+    # argentino aprobado, copiado del archivo tal cual.
+    "es-AR": {
+        "draft": (
+            "Pre-factura en preparación",
+            "Completá los datos requeridos antes de continuar con la operación.",
+        ),
+        "pending": (
+            "Tu vehículo está pre-reservado",
+            "Confirmá el pago para iniciar la validación de la operación y continuar "
+            "con la coordinación de la entrega.",
+        ),
+        "payment_validated": (
+            "Tu pago ha sido validado",
+            "Continuamos con la documentación y los trámites necesarios para coordinar "
+            "la entrega de tu vehículo.",
+        ),
+        "delivery_scheduled": (
+            "La entrega de tu vehículo está coordinada",
+            "La entrega ha sido programada de acuerdo con la modalidad y fecha indicadas "
+            "en esta pre-factura.",
+        ),
+        "delivered": (
+            "Entrega completada",
+            "La recepción del vehículo ha sido confirmada correctamente.",
+        ),
+        "cancelled": (
+            "Operación cancelada",
+            "Esta pre-factura ya no se encuentra activa. Para cualquier aclaración, "
+            "comunicate con tu representante asignado.",
+        ),
+    },
+}
+
+
+def headline(status: str, locale: str) -> tuple[str, str]:
+    """Titular y linea de debajo para ese estado y ese mercado."""
+    tabla = DOC_HEADLINE.get(locale, DOC_HEADLINE[DEFAULT_LOCALE])
+    return tabla.get(status, tabla["pending"])
+
+
 def status_text(status: str, locale: str) -> str:
     tabla = DOC_STATUS.get(locale, DOC_STATUS[DEFAULT_LOCALE])
     return tabla.get(status, tabla["pending"])

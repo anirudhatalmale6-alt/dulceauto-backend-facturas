@@ -237,6 +237,26 @@ Los cuatro pasos de la barra conservan los nombres del documento aprobado. El
 tercero se llama «Documentación y trámites», que es justo lo que empieza cuando
 el pago queda validado.
 
+### El titular cambia con el estado
+
+El titular y la línea de debajo estaban escritos para el momento del pago. En una
+factura ya entregada, «Confirma el pago para iniciar la validación» contradecía
+al resto del documento.
+
+Ahora los dos dependen del estado. **En «Pago pendiente» son exactamente los
+textos aprobados en el Milestone 1**, y una comprobación los lee del archivo
+aprobado y exige que coincidan palabra por palabra: no se comparan contra lo que
+haya escrito nadie de memoria. Los de los demás estados los redactó el cliente.
+
+| Estado | Titular (es-MX) |
+|---|---|
+| Borrador | Pre-factura en preparación |
+| Pago pendiente | Tu vehículo está pre-reservado *(aprobado, intacto)* |
+| Pago validado | Tu pago ha sido validado |
+| Entrega coordinada | La entrega de tu vehículo está coordinada |
+| Entregada | Entrega completada |
+| Cancelada | Operación cancelada |
+
 ### El vehículo se compromete al validar el pago
 
 `COMMITTED_STATUSES` empieza en «Pago validado». Generar o enviar una
@@ -274,7 +294,15 @@ más largo o un texto de entrega escrito a mano cambian la altura, y una escala
 fija dejaría media factura en una segunda hoja. Si aun así salieran dos páginas,
 la generación se aborta con un aviso en lugar de entregar el PDF.
 
-**Uno cada vez.** La generación pasa por un cerrojo. Cada Chromium ocupa varios
+**Uno cada vez, y el reparto de versión también.** La generación entera pasa por
+un cerrojo, incluido el número de versión, que se confirma antes de soltarlo. Al
+principio el cerrojo solo protegía la parte de Chromium: tres peticiones
+simultáneas calculaban las tres la misma versión, escribían en la misma carpeta y
+una borraba los archivos de otra a media copia. De tres, dos devolvían error 500.
+Hay una comprobación que lanza tres generaciones a la vez y exige que las tres
+salgan bien y con versiones distintas.
+
+El cerrojo Cada Chromium ocupa varios
 cientos de megas mientras imprime; diez peticiones a la vez levantarían diez
 Chromium. Con el cerrojo son diez PDF seguidos: más lento, pero el servidor no
 se cae.
@@ -462,7 +490,7 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**344 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**368 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -482,7 +510,7 @@ anterior, para que los recuentos por VIN sigan significando algo.
   no se cuele dentro, que lo que se escribe en el editor salga en la factura,
   que el zoom no re-maquete el documento, que cambiar de mercado cambie de
   plantilla y de formatos, y que el documento no cambie con el tema del panel.
-- **Plantillas · 81.** Sin navegador: el motor. Incluye la comprobación de que
+- **Plantillas · 97.** Sin navegador: el motor. Incluye la comprobación de que
   el documento generado con los datos de la versión aprobada es idéntico byte a
   byte al archivo aprobado, en los tres mercados.
 - **Folios · 11.** El contador, el salto cuando un folio ya está ocupado y el
@@ -493,7 +521,7 @@ anterior, para que los recuentos por VIN sigan significando algo.
   descargue y sea un PDF de una página, que volver a generarlo cree una versión
   nueva sin borrar la anterior, que la copia congelada conserve los datos de
   entonces y que generar no mueva el estado de la operación.
-- **PDF · 40.** Sin navegador, generando PDF de verdad: A4, una página, la copia
+- **PDF · 48.** Sin navegador, generando PDF de verdad: A4, una página, la copia
   congelada completa (incluidas las tipografías) y la escala recalculada por
   factura.
 - **Datos · 20.** Formatos de importe y dígitos de control de CLABE, CBU y VIN.

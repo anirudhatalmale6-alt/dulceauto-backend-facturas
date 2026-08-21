@@ -267,6 +267,53 @@ check("el documento sale igual con PDF hecho que sin el", con_pdf == html_pendie
 check("el borrador se dice, no se disimula", ">Borrador<" in html_borrador)
 
 
+# --- 5bis · titular y linea de debajo ------------------------------------------
+
+print("\n5bis · Titular y linea de debajo, por estado")
+from app.locales import DOC_HEADLINE, headline  # noqa: E402
+
+# En "Pago pendiente" tienen que ser EXACTAMENTE los textos aprobados. No se
+# comparan contra lo que yo haya escrito: se leen del archivo aprobado.
+for locale in MUESTRAS:
+    original = (documents.TEMPLATES_DIR / "aprobado-original" / documents.get_market(locale).template).read_text(encoding="utf-8")
+    titular_aprobado = re.search(r'<div class="intro-top">\s*\n\s*<h2>([^<]*)</h2>', original).group(1)
+    texto_aprobado = re.search(r'<div class="intro-sub">\s*\n\s*<p>([^<]*)</p>', original).group(1)
+    t, x = headline("pending", locale)
+    check(f"{locale}: en pago pendiente, el titular es el aprobado", t == titular_aprobado,
+          f"{t!r} vs {titular_aprobado!r}")
+    check(f"{locale}: y la linea de debajo tambien", x == texto_aprobado,
+          f"{x[:40]!r} vs {texto_aprobado[:40]!r}")
+
+entregada = documents.render(factura("es-MX", status="delivered")).html
+check("entregada: el titular cambia", ">Entrega completada</h2>" in entregada)
+check("y ya no pide confirmar el pago", "Confirma el pago" not in entregada)
+check("la linea de debajo es la nueva",
+      "La recepción del vehículo ha sido confirmada correctamente." in entregada)
+
+cancelada = documents.render(factura("es-MX", status="cancelled")).html
+check("cancelada lo dice en el titular", ">Operación cancelada</h2>" in cancelada)
+
+borrador = documents.render(factura("es-MX", status="draft")).html
+check("un borrador se anuncia como tal", ">Pre-factura en preparación</h2>" in borrador)
+
+ar = documents.render(factura("es-AR", status="draft")).html
+check("Argentina usa el voseo en el texto nuevo", "Completá los datos requeridos" in ar)
+check("y no el 'completa' mexicano", "Completa los datos requeridos" not in ar)
+
+en_val = documents.render(factura("en", status="payment_validated")).html
+check("en ingles, pago validado", ">Your payment has been verified</h2>" in en_val)
+check("con su linea", "documentation and processing required" in en_val)
+
+# Los seis estados tienen texto en los tres mercados: si manana se anade uno,
+# esta comprobacion lo caza antes de que salga una factura con el titular vacio.
+from app.models import STATUSES  # noqa: E402
+
+faltan = [
+    f"{loc}/{est}" for loc in DOC_HEADLINE for est in STATUSES if est not in DOC_HEADLINE[loc]
+]
+check("los seis estados tienen titular en los tres mercados", not faltan, ", ".join(faltan))
+
+
 # --- 6 · modalidad de entrega -------------------------------------------------
 
 print("\n6 · Modalidad de entrega")

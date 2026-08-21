@@ -191,9 +191,21 @@ def _calibrar(page) -> tuple[float, int, float]:
 
 
 def generar(db: Session, invoice: Invoice) -> Resultado:
-    """Congela la factura, imprime su PDF y deja anotado el snapshot."""
+    """Congela la factura, imprime su PDF y deja anotado el snapshot.
+
+    Todo ocurre dentro del cerrojo, incluido el reparto del numero de version.
+    Antes solo se protegia la parte de Chromium, y dos operadores que pulsaran
+    a la vez calculaban los dos la misma version, escribian en la misma carpeta
+    y uno borraba los archivos del otro a media copia. Se descubrio midiendo:
+    de tres peticiones simultaneas, dos devolvian error 500.
+    """
     from playwright.sync_api import sync_playwright
 
+    with _CERROJO:
+        return _generar_bajo_cerrojo(db, invoice, sync_playwright)
+
+
+def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Resultado:
     version = _siguiente_version(db, invoice.id)
     carpeta = settings.snapshots_dir / str(invoice.id) / f"v{version}"
     if carpeta.exists():
@@ -210,49 +222,48 @@ def generar(db: Session, invoice: Invoice) -> Resultado:
 
     pdf_path = carpeta / f"{invoice.folio}.pdf"
 
-    with _CERROJO:
-        try:
-            with sync_playwright() as p:
-                navegador = p.chromium.launch(args=["--no-sandbox"])
-                pagina = navegador.new_page(viewport={"width": DESIGN_WIDTH + 40, "height": 1400})
-                pagina.goto(html_path.resolve().as_uri())
-                # Las tipografias se cargan aparte del HTML. Medir antes de que
-                # esten listas da una altura equivocada y el PDF sale con una
-                # escala que no es la que toca.
+    try:
+        with sync_playwright() as p:
+            navegador = p.chromium.launch(args=["--no-sandbox"])
+            pagina = navegador.new_page(viewport={"width": DESIGN_WIDTH + 40, "height": 1400})
+            pagina.goto(html_path.resolve().as_uri())
+            # Las tipografias se cargan aparte del HTML. Medir antes de que
+            # esten listas da una altura equivocada y el PDF sale con una
+            # escala que no es la que toca.
+            pagina.wait_for_load_state("networkidle")
+            pagina.evaluate("document.fonts ? document.fonts.ready : null")
+            escala, altura_impresion, altura = _calibrar(pagina)
+
+            # Las fotografias se reducen a la resolucion que pide el papel
+            # y se recarga la pagina para que Chromium imprima las copias
+            # ya reducidas. Sin recargar seguiria usando las que tiene en
+            # memoria y el PDF pesaria igual.
+            if _ajustar_imagenes(pagina, carpeta / "assets", escala):
+                pagina.reload()
                 pagina.wait_for_load_state("networkidle")
-                pagina.evaluate("document.fonts ? document.fonts.ready : null")
                 escala, altura_impresion, altura = _calibrar(pagina)
 
-                # Las fotografias se reducen a la resolucion que pide el papel
-                # y se recarga la pagina para que Chromium imprima las copias
-                # ya reducidas. Sin recargar seguiria usando las que tiene en
-                # memoria y el PDF pesaria igual.
-                if _ajustar_imagenes(pagina, carpeta / "assets", escala):
-                    pagina.reload()
-                    pagina.wait_for_load_state("networkidle")
-                    escala, altura_impresion, altura = _calibrar(pagina)
-
-                pagina.evaluate(
-                    "([e, h]) => {"
-                    " document.documentElement.style.setProperty('--print-scale', e);"
-                    " document.documentElement.style.setProperty('--print-height', h + 'px'); }",
-                    [f"{escala:.4f}", altura_impresion],
-                )
-                pagina.pdf(
-                    path=str(pdf_path),
-                    format="A4",
-                    print_background=True,
-                    margin={
-                        "top": f"{MARGIN_MM}mm",
-                        "bottom": f"{MARGIN_MM}mm",
-                        "left": f"{MARGIN_MM}mm",
-                        "right": f"{MARGIN_MM}mm",
-                    },
-                )
-                navegador.close()
-        except Exception as exc:  # noqa: BLE001 - se le ensena al operador
-            shutil.rmtree(carpeta, ignore_errors=True)
-            raise PdfError(f"No se ha podido generar el PDF: {exc}") from exc
+            pagina.evaluate(
+                "([e, h]) => {"
+                " document.documentElement.style.setProperty('--print-scale', e);"
+                " document.documentElement.style.setProperty('--print-height', h + 'px'); }",
+                [f"{escala:.4f}", altura_impresion],
+            )
+            pagina.pdf(
+                path=str(pdf_path),
+                format="A4",
+                print_background=True,
+                margin={
+                    "top": f"{MARGIN_MM}mm",
+                    "bottom": f"{MARGIN_MM}mm",
+                    "left": f"{MARGIN_MM}mm",
+                    "right": f"{MARGIN_MM}mm",
+                },
+            )
+            navegador.close()
+    except Exception as exc:  # noqa: BLE001 - se le ensena al operador
+        shutil.rmtree(carpeta, ignore_errors=True)
+        raise PdfError(f"No se ha podido generar el PDF: {exc}") from exc
 
     paginas = contar_paginas(pdf_path)
     if paginas != 1:
@@ -276,6 +287,10 @@ def generar(db: Session, invoice: Invoice) -> Resultado:
     )
     db.add(snapshot)
     invoice.pdf_generated_at = utcnow()
+    # Se confirma aqui dentro, todavia con el cerrojo puesto: si se dejara para
+    # la ruta, la siguiente peticion calcularia su version antes de que esta se
+    # hubiera guardado y las dos pedirian el mismo numero.
+    db.commit()
 
     return Resultado(
         snapshot=snapshot,

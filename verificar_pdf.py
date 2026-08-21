@@ -209,6 +209,60 @@ with Session() as db:
         check(f"{locale}: y su formato de importe",
               ("$412.500,00" if locale == "es-AR" else "$412,500.00") in texto)
 
+# --- 8 · dos operadores pulsando a la vez -------------------------------------
+#
+# Este caso costo un error 500 de verdad. El cerrojo solo protegia la parte de
+# Chromium, asi que tres peticiones simultaneas calculaban las tres la misma
+# version, escribian en la misma carpeta y una borraba los archivos de otra a
+# media copia. Ahora el reparto de version va tambien dentro del cerrojo y se
+# confirma antes de soltarlo.
+print("\n8 · Varios operadores generando el mismo PDF a la vez")
+import threading  # noqa: E402
+
+with Session() as db:
+    simultanea = Invoice(folio="RES-99050", **DATOS)
+    db.add(simultanea)
+    db.commit()
+    id_simultanea = simultanea.id
+
+errores, versiones = [], []
+barrera = threading.Barrier(3)
+
+
+def generar_a_la_vez():
+    try:
+        with Session() as propia:
+            factura_propia = propia.get(Invoice, id_simultanea)
+            barrera.wait()          # que salgan los tres a la vez
+            r = pdf_engine.generar(propia, factura_propia)
+            versiones.append(r.snapshot.version)
+    except Exception as exc:  # noqa: BLE001
+        errores.append(f"{type(exc).__name__}: {exc}")
+
+
+hilos = [threading.Thread(target=generar_a_la_vez) for _ in range(3)]
+for h in hilos:
+    h.start()
+for h in hilos:
+    h.join()
+
+check("ninguno de los tres falla", not errores, " | ".join(errores)[:120])
+check("cada uno recibe una version distinta", sorted(versiones) == [1, 2, 3], str(sorted(versiones)))
+with Session() as db:
+    guardados = pdf_engine.snapshots_de(db, id_simultanea)
+    check("quedan las tres anotadas", len(guardados) == 3, f"{len(guardados)}")
+    archivos = [pdf_engine.ruta_absoluta(s.pdf_path) for s in guardados]
+    check("y los tres PDF estan en el disco", all(a and a.exists() for a in archivos))
+    check("cada uno en su carpeta",
+          len({a.parent for a in archivos if a}) == 3)
+    # Si una carpeta hubiera pisado a otra, faltarian archivos en alguna.
+    for a in archivos:
+        if a:
+            check(f"{a.parent.name}: la copia esta completa",
+                  (a.parent / "assets/css/factura.css").exists()
+                  and len(list((a.parent / "assets/fonts").glob("*.woff2"))) >= 4)
+
+
 print(f"\n{'=' * 58}\n{len(ok)} comprobaciones correctas, {len(fallos)} fallos")
 for f in fallos:
     print(f"  FALLA: {f}")

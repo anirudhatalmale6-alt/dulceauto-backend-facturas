@@ -75,6 +75,20 @@ def marcar(html: str) -> str:
         html,
     )
 
+    # 4bis · Titular y linea de debajo. Dependen del estado: en "Pago pendiente"
+    #        son los textos aprobados, pero en una factura ya entregada decir
+    #        "Confirma el pago" contradice al resto del documento.
+    html = re.sub(
+        r"(<div class=\"intro-top\">\s*\n\s*)<h2>([^<]*)</h2>",
+        lambda m: f'{m.group(1)}<h2 data-field="titular">{m.group(2)}</h2>',
+        html,
+    )
+    html = re.sub(
+        r"(<div class=\"intro-sub\">\s*\n\s*)<p>([^<]*)</p>",
+        lambda m: f'{m.group(1)}<p data-field="titular_texto">{m.group(2)}</p>',
+        html,
+    )
+
     # 5 · Cargo del representante: el <small> que va justo detras de su nombre.
     html = html.replace("</h4><small>", '</h4><small data-field="agente_cargo">')
 

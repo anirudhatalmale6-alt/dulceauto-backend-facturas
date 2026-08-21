@@ -44,6 +44,7 @@ from .fields import FIELD_MAP
 from .locales import (
     delivery_texts,
     doc_text,
+    headline,
     format_amount,
     format_date_long,
     format_date_numeric,
@@ -241,6 +242,8 @@ HUECO_A_CLAVE = {
 # Huecos que no son una lectura directa: llevan formato, dependen del mercado o
 # se calculan. El texto de cada uno se explica en construir_valores().
 CALCULADOS = (
+    "titular",
+    "titular_texto",
     "fecha_emision",
     "vigencia",
     "fecha_entrega",
@@ -302,6 +305,11 @@ def construir_valores(invoice) -> dict[str, str]:
 
     # Estado: el texto que ve el cliente, en el idioma del documento.
     valores["estado"] = status_text(invoice.status, locale)
+
+    # Titular y linea de debajo. Dependen del estado: en una factura ya
+    # entregada, "Confirma el pago" contradice al resto del documento. En "Pago
+    # pendiente" son los textos aprobados, sin tocar.
+    valores["titular"], valores["titular_texto"] = headline(invoice.status, locale)
 
     # Importes. El precio lleva la moneda al lado; el de la pre-reserva no,
     # porque la plantilla la saca aparte en <small>.
@@ -498,6 +506,8 @@ ETIQUETAS_HUECO = {
     "vigencia": "Vigencia de la protección",
     "autorizacion": "Autorización",
     "estado": "Estado",
+    "titular": "Titular del documento",
+    "titular_texto": "Línea bajo el titular",
     "fecha_entrega": "Fecha de entrega",
     "cliente_nombre": "Nombre del cliente",
     "cliente_email": "Email del cliente",
