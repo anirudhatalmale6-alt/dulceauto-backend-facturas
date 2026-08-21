@@ -39,4 +39,16 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # Un solo worker a proposito. Chromium consume bastante memoria al generar el
 # PDF y con 2 GB de RAM varios workers compiten por ella. Si el volumen crece,
 # se sube aqui y se sube la RAM a la vez, no por separado.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+#
+# --forwarded-allow-ips es imprescindible detras de nginx. Sin el, uvicorn
+# ignora la cabecera X-Forwarded-Proto que envia nginx, cree que la peticion
+# llego por http y construye las direcciones de las hojas de estilo y del
+# JavaScript como "http://...". El navegador, en una pagina https, bloquea ese
+# contenido mixto: el panel se ve sin estilos y sin JavaScript.
+#
+# No vale con el valor por defecto -127.0.0.1-, porque nginx no entra por
+# localhost sino por la pasarela de la red de Docker, con otra IP. Poner "*" es
+# seguro aqui porque el puerto solo esta publicado en 127.0.0.1 del servidor:
+# lo unico que puede llegar a uvicorn es el propio nginx.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
