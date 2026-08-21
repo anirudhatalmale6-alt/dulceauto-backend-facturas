@@ -162,7 +162,7 @@ for locale in MUESTRAS:
 # --- 2 · las plantillas solo llevan atributos anadidos ------------------------
 
 print("\n2 · A la plantilla aprobada solo se le han anadido atributos")
-QUITAR = re.compile(r' data-(field|step|hide-if-empty)="[^"]*"')
+QUITAR = re.compile(r' data-(field|step|hide-if-empty)="[^"]*"| data-logo\b')
 for locale in MUESTRAS:
     rel = documents.get_market(locale).template
     marcada = QUITAR.sub("", (documents.TEMPLATES_DIR / rel).read_text(encoding="utf-8"))

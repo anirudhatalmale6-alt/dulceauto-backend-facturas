@@ -23,6 +23,7 @@ from . import codes
 from . import documents as doc_engine
 from . import invoices as inv_service
 from . import pdf as pdf_engine
+from . import uploads
 from .config import BASE_DIR, settings
 from .db import Base, engine, get_db
 from .fields import EDITABLE_FIELDS
@@ -38,6 +39,7 @@ from .models import (
     ActivityLog,
     Credential,
     Invoice,
+    InvoicePhoto,
     Setting,
     utcnow,
 )
@@ -351,6 +353,7 @@ def editor_page(
         errors=errors or [],
         form=form,
         historial=historial,
+        fotos={f.position: f for f in invoice.photos} if invoice else {},
         comprometidas=[i for i in historial if i.status in inv_service.COMMITTED_STATUSES],
     )
 
@@ -534,7 +537,116 @@ def invoice_document(request: Request, invoice_id: int, db: Session = Depends(ge
     if invoice is None:
         flash(request, "Esa factura ya no existe.", "error")
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
-    return HTMLResponse(doc_engine.render(invoice, codigos="panel").html)
+    logo = "/configuracion/logo.img" if _logo_actual(db) else None
+    return HTMLResponse(doc_engine.render(invoice, codigos="panel", logo=logo).html)
+
+
+@app.post("/facturas/{invoice_id}/fotos")
+async def invoice_photos(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    """Sube las fotografias del vehiculo. Cuatro posiciones, como el diseno."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    form = await request.form()
+    puestas, errores = [], []
+    for posicion in range(1, 5):
+        archivo = form.get(f"foto_{posicion}")
+        if archivo is None or not getattr(archivo, "filename", ""):
+            continue
+        try:
+            guardado = uploads.guardar_imagen(
+                await archivo.read(), archivo.filename, f"facturas/{invoice.id}"
+            )
+        except uploads.SubidaInvalida as exc:
+            errores.append(f"Foto {posicion}: {exc}")
+            continue
+
+        anterior = next((f for f in invoice.photos if f.position == posicion), None)
+        if anterior is not None:
+            uploads.borrar(anterior.file_path)
+            anterior.file_path = guardado.relativa
+            anterior.original_name = archivo.filename[:255]
+        else:
+            db.add(
+                InvoicePhoto(
+                    invoice_id=invoice.id,
+                    position=posicion,
+                    file_path=guardado.relativa,
+                    original_name=archivo.filename[:255],
+                )
+            )
+        puestas.append(posicion)
+
+    if puestas:
+        db.commit()
+        act.log(
+            db,
+            act.INVOICE_UPDATED,
+            request=request,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            folio=invoice.folio,
+            detail=f"fotografías {', '.join(str(p) for p in puestas)}",
+        )
+        flash(
+            request,
+            f"{len(puestas)} fotografía{'' if len(puestas) == 1 else 's'} actualizada"
+            f"{'' if len(puestas) == 1 else 's'}. Se usarán en el próximo PDF que genere.",
+            "ok",
+        )
+    for e in errores:
+        flash(request, e, "error")
+    if not puestas and not errores:
+        flash(request, "No se ha elegido ninguna fotografía.", "error")
+    return RedirectResponse(
+        f"/facturas/{invoice_id}/editar", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@app.post("/facturas/{invoice_id}/fotos/{posicion}/quitar")
+def invoice_photo_remove(
+    request: Request, invoice_id: int, posicion: int, db: Session = Depends(get_db)
+):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is not None:
+        foto = next((f for f in invoice.photos if f.position == posicion), None)
+        if foto is not None:
+            uploads.borrar(foto.file_path)
+            db.delete(foto)
+            db.commit()
+            flash(
+                request,
+                f"Fotografía {posicion} retirada. Vuelve a usarse la del diseño aprobado.",
+                "ok",
+            )
+    return RedirectResponse(
+        f"/facturas/{invoice_id}/editar", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@app.get("/facturas/{invoice_id}/foto/{posicion}")
+def invoice_photo_file(
+    request: Request, invoice_id: int, posicion: int, db: Session = Depends(get_db)
+):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        return Response(status_code=404)
+    foto = next((f for f in invoice.photos if f.position == posicion), None)
+    ruta = uploads.ruta_absoluta(foto.file_path if foto else None)
+    if ruta is None:
+        return Response(status_code=404)
+    return FileResponse(ruta)
 
 
 @app.get("/facturas/{invoice_id}/codigo-qr.svg")
@@ -829,6 +941,31 @@ def activity_view(request: Request, db: Session = Depends(get_db)):
 # --- configuracion -----------------------------------------------------------
 
 
+# Nombre legible de cada ajuste. La clave tecnica se sigue viendo en el codigo,
+# pero el operador no tiene por que saber que es "banking.beneficiary".
+ETIQUETAS_AJUSTE = {
+    "banking.bank": "Banco receptor",
+    "banking.beneficiary": "Beneficiario",
+    "banking.account_label": "Etiqueta de la cuenta",
+    "banking.account_number": "Número de cuenta (CLABE / CBU)",
+    "banking.bank_account": "Cuenta bancaria",
+    "representative.name": "Representante",
+    "representative.role": "Cargo",
+    "representative.phone": "Teléfono",
+    "representative.email": "Email",
+    "representative.hours": "Horario de atención",
+    "qr.base_url": "URL base del QR de verificación",
+    "qr.mode": "Modo del QR",
+    "qr.image_path": "Imagen de QR fija (si no se genera)",
+    "brand.logo_path": "Logotipo",
+    "pdf.engine": "Motor de PDF",
+    "pdf.page_size": "Tamaño de página",
+    "pdf.single_page": "Forzar una sola página",
+    "folio.prefix": "Prefijo del folio",
+    "folio.next": "Siguiente folio",
+}
+
+
 @app.get("/configuracion", response_class=HTMLResponse)
 def settings_view(request: Request, db: Session = Depends(get_db)):
     user = require_login(request)
@@ -866,8 +1003,169 @@ def settings_view(request: Request, db: Session = Depends(get_db)):
         page_sub="Segunda capa de seguridad para datos bancarios, marca, QR y plantillas.",
         globales=globales,
         por_mercado=por_mercado,
+        etiquetas=ETIQUETAS_AJUSTE,
+        logo_url="/configuracion/logo.img" if _logo_actual(db) else None,
         minutes=settings.master_session_minutes,
     )
+
+
+def _logo_actual(db: Session) -> str | None:
+    fila = db.execute(
+        select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
+    ).scalar_one_or_none()
+    return fila.value if fila and fila.value else None
+
+
+@app.post("/configuracion/guardar")
+async def settings_save(request: Request, db: Session = Depends(get_db)):
+    """Guarda los ajustes de un bloque de Configuracion.
+
+    Nunca se crean claves nuevas desde el formulario: solo se actualizan las que
+    ya existen. Un campo con un nombre inventado se ignora en lugar de sembrar
+    la tabla de ajustes fantasma que nadie lee despues.
+    """
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not master_unlocked(request):
+        flash(request, "La Configuración está bloqueada.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    touch_master(request)
+    form = await request.form()
+    market = form.get("market") or None
+
+    cambios, errores = [], []
+    for campo, valor in form.multi_items():
+        if not campo.startswith("ajuste:"):
+            continue
+        clave = campo.split(":", 1)[1]
+        fila = db.execute(
+            select(Setting).where(Setting.key == clave, Setting.market == market)
+        ).scalar_one_or_none()
+        if fila is None:
+            continue
+        nuevo = (valor or "").strip()
+        if nuevo == (fila.value or ""):
+            continue
+
+        problema = inv_service.validar_ajuste(clave, nuevo, market)
+        if problema:
+            errores.append(problema)
+            continue
+        cambios.append((clave, fila.value, nuevo))
+        fila.value = nuevo
+
+    if errores:
+        db.rollback()
+        for e in errores:
+            flash(request, e, "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    if not cambios:
+        flash(request, "No había nada que cambiar.", "ok")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    db.commit()
+    act.log(
+        db,
+        act.SETTINGS_UPDATED,
+        request=request,
+        detail=f"{market or 'global'}: " + ", ".join(c[0] for c in cambios),
+    )
+    flash(
+        request,
+        f"Guardado. {len(cambios)} ajuste{'' if len(cambios) == 1 else 's'} actualizado"
+        f"{'' if len(cambios) == 1 else 's'}. "
+        "Las facturas ya emitidas no cambian: conservan los datos con los que se crearon.",
+        "ok",
+    )
+    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/configuracion/logo")
+async def settings_logo(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not master_unlocked(request):
+        flash(request, "La Configuración está bloqueada.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    touch_master(request)
+    form = await request.form()
+    archivo = form.get("logo")
+    if archivo is None or not getattr(archivo, "filename", ""):
+        flash(request, "No se ha elegido ningún archivo.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        guardado = uploads.guardar_imagen(await archivo.read(), archivo.filename, "logo")
+    except uploads.SubidaInvalida as exc:
+        flash(request, str(exc), "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    fila = db.execute(
+        select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
+    ).scalar_one_or_none()
+    anterior = fila.value if fila else None
+    if fila is None:
+        fila = Setting(key="brand.logo_path", market=None, value="", is_sensitive=True)
+        db.add(fila)
+    fila.value = guardado.relativa
+    db.commit()
+
+    # El anterior se borra despues de guardar el nuevo: si se borrara antes y
+    # algo fallara al guardar, se quedarian sin ninguno.
+    if anterior and anterior != guardado.relativa:
+        uploads.borrar(anterior)
+
+    act.log(request=request, db=db, action=act.SETTINGS_UPDATED, detail="logotipo actualizado")
+    medida = f"{guardado.ancho}×{guardado.alto} px" if guardado.ancho else guardado.formato
+    flash(
+        request,
+        f"Logotipo actualizado ({guardado.formato}, {medida}). "
+        "Las facturas ya emitidas no cambian: cada PDF lleva dentro su propia copia.",
+        "ok",
+    )
+    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/configuracion/logo/quitar")
+def settings_logo_remove(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not master_unlocked(request):
+        flash(request, "La Configuración está bloqueada.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    touch_master(request)
+    fila = db.execute(
+        select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
+    ).scalar_one_or_none()
+    if fila and fila.value:
+        uploads.borrar(fila.value)
+        fila.value = ""
+        db.commit()
+        act.log(request=request, db=db, action=act.SETTINGS_UPDATED, detail="logotipo retirado")
+        flash(request, "Logotipo retirado. La factura vuelve a la marca del diseño aprobado.", "ok")
+    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/configuracion/logo.img")
+def settings_logo_file(request: Request, db: Session = Depends(get_db)):
+    """Sirve el logotipo guardado. No se expone la carpeta de subidas entera."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    fila = db.execute(
+        select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
+    ).scalar_one_or_none()
+    ruta = uploads.ruta_absoluta(fila.value if fila else None)
+    if ruta is None:
+        return Response(status_code=404)
+    return FileResponse(ruta)
 
 
 @app.post("/configuracion/desbloquear")

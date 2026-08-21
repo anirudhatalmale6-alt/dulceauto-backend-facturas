@@ -11,6 +11,7 @@ Ni una etiqueta, ni una clase, ni un texto, ni un espacio se han tocado.
 Los atributos que se anaden son tres:
 
   data-field="..."         el hueco lleva un dato de la factura
+  data-logo                bloque de marca: se sustituye si hay logotipo propio
   data-step="1..4"         paso de la barra de progreso, para poder marcar
                            cual esta hecho y cual activo segun el estado
   data-hide-if-empty="..." el elemento entero desaparece si ese dato esta
@@ -88,6 +89,28 @@ def marcar(html: str) -> str:
         lambda m: f'{m.group(1)}<p data-field="titular_texto">{m.group(2)}</p>',
         html,
     )
+
+    # 4ter · Las cuatro fotografias del vehiculo, numeradas en el orden en que
+    #        estan: la grande primero y las tres pequenas despues. El texto
+    #        alternativo tambien se marca, porque el aprobado nombra al Audi de
+    #        la maqueta y en una factura de otro coche es incorrecto.
+    fotos = {"n": 0}
+
+    def numerar_foto(m):
+        fotos["n"] += 1
+        return f'{m.group(1)} data-field="foto_{fotos["n"]}"{m.group(2)}'
+
+    html = re.sub(
+        r'(<img(?![^>]*\bclass="(?:barcode|qr-code)")[^>]*src="\.\./assets/img/vehicle-[^"]+")([^>]*>)',
+        numerar_foto,
+        html,
+    )
+
+    # 4quater · Bloque de marca. Si hay logotipo propio en Configuracion, su
+    #           contenido se sustituye por la imagen; si no, se queda la marca
+    #           del diseno aprobado tal cual.
+    html = html.replace('<div class="brand" aria-label="DulceAuto">',
+                        '<div class="brand" data-logo aria-label="DulceAuto">')
 
     # 5 · Cargo del representante: el <small> que va justo detras de su nombre.
     html = html.replace("</h4><small>", '</h4><small data-field="agente_cargo">')

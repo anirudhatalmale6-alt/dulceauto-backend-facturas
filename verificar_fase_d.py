@@ -183,6 +183,47 @@ with sync_playwright() as p:
     check("y con el folio de la factura", "RES-" in texto)
 
     # -------------------------------------------------------------------------
+    print("\n7bis · Configuracion se edita y se valida")
+    page.goto(f"{BASE}/configuracion")
+    check("arranca bloqueada", page.locator(".locked-panel").count() == 1)
+    page.fill('[name="master_password"]', "Master2026")
+    page.click('button[type="submit"]')
+    check("con la Master Password se abre", page.locator(".settings-hero").count() == 1)
+
+    # Una CLABE con el digito de control mal no puede guardarse: se copiaria a
+    # cada factura nueva y el cliente transferiria a una cuenta que no existe.
+    page.fill('[name="ajuste:banking.account_number"] >> nth=0', "012180001234567890")
+    page.click('button:has-text("Guardar México")')
+    page.wait_for_load_state()
+    avisos = page.locator(".alert").all_inner_texts()
+    check("una CLABE con el digito mal se rechaza",
+          any("dígito de control" in a for a in avisos), " | ".join(a[:60] for a in avisos))
+
+    page.goto(f"{BASE}/configuracion")
+    valor = page.input_value('[name="ajuste:banking.account_number"] >> nth=0')
+    check("y no se ha guardado", valor != "012180001234567890", valor)
+
+    # La URL del QR tiene que poder cambiarse sin tocar codigo: es lo que pidio
+    # el cliente para cuando tenga el dominio definitivo.
+    page.fill('[name="ajuste:qr.base_url"]', "https://ejemplo-de-prueba.mx/verificar/")
+    page.click('button:has-text("Guardar marca")')
+    page.wait_for_load_state()
+    page.goto(f"{BASE}/configuracion")
+    check("la URL del QR se guarda",
+          page.input_value('[name="ajuste:qr.base_url"]') == "https://ejemplo-de-prueba.mx/verificar/",
+          page.input_value('[name="ajuste:qr.base_url"]'))
+
+    # Una factura ya emitida no puede cambiar porque se toque Configuracion.
+    page.goto(f"{BASE}/facturas/{factura_id}/documento")
+    check("la factura ya creada conserva su URL de verificacion",
+          "ejemplo-de-prueba" not in page.content())
+
+    page.goto(f"{BASE}/configuracion")
+    page.fill('[name="ajuste:qr.base_url"]', "https://dulceauto.mx/verificar/")
+    page.click('button:has-text("Guardar marca")')
+    page.wait_for_load_state()
+
+    # -------------------------------------------------------------------------
     print("\n8 · Nada de esto sin sesion")
     page.context.clear_cookies()
     r = page.request.post(f"{BASE}/facturas/{factura_id}/pdf", max_redirects=0)

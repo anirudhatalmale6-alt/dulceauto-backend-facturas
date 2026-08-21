@@ -58,31 +58,88 @@
       <h3>{{ markets[code].label }} <span class="badge">{{ code }}</span></h3>
       <div class="lock">
         <b>🔒 Super-admin</b>
-        <span>Se copian a cada factura al crearla, de modo que una factura ya
-        emitida conserva la cuenta a la que se pidió pagar.</span>
+        <span>Se copian a cada factura <b>al crearla</b>. Cambiar algo aquí no
+        toca ninguna factura ya emitida: esa conserva para siempre la cuenta a
+        la que se le pidió pagar al cliente.</span>
       </div>
-      <div class="arch-list" style="margin-top:12px">
-        {% for s in filas %}
-          <div class="arch-row"><div class="dot">·</div><div><b><code>{{ s.key }}</code></b><div class="small muted">{{ s.value or '—' }}</div></div></div>
-        {% endfor %}
-      </div>
+      <form method="post" action="/configuracion/guardar">
+        <input type="hidden" name="market" value="{{ code }}">
+        <div class="form-grid" style="margin-top:12px">
+          {% for s in filas %}
+            <label class="{{ 'full' if s.key.endswith(('.hours', '.beneficiary')) else '' }}">
+              {{ etiquetas.get(s.key, s.key) }}
+              <input name="ajuste:{{ s.key }}" value="{{ s.value or '' }}"
+                     {% if s.key == 'banking.account_number' %}
+                       inputmode="numeric" maxlength="{{ markets[code].account_digits }}"
+                       placeholder="{{ markets[code].account_label }}"
+                     {% endif %}>
+            </label>
+          {% endfor %}
+        </div>
+        <button class="btn gold" type="submit" style="margin-top:12px">Guardar {{ markets[code].label }}</button>
+      </form>
     </div>
   {% endfor %}
 </div>
 
-<div class="settings-section-title">03 · Marca, QR y PDF</div>
+<div class="settings-section-title">03 · Marca, QR, folios y PDF</div>
 <div class="card">
-  <div class="arch-list">
-    {% for s in globales %}
-      <div class="arch-row"><div class="dot">·</div><div><b><code>{{ s.key }}</code></b><div class="small muted">{{ s.value or '—' }}</div></div></div>
-    {% endfor %}
+  <div class="lock">
+    <b>🔒 Super-admin</b>
+    <span>La URL del QR es la base del enlace de verificación: al folio se le
+    añade detrás. Se puede cambiar al dominio definitivo sin tocar el código.</span>
+  </div>
+  <form method="post" action="/configuracion/guardar">
+    <div class="form-grid" style="margin-top:12px">
+      {% for s in globales %}
+        {% if s.key != 'brand.logo_path' %}
+          <label class="{{ 'full' if s.key.endswith('url') else '' }}">
+            {{ etiquetas.get(s.key, s.key) }}
+            <input name="ajuste:{{ s.key }}" value="{{ s.value or '' }}">
+            {% if s.key == 'qr.base_url' %}
+              <span class="small muted">Ejemplo: {{ (s.value or 'https://dominio.com/verificar/').rstrip('/') }}/RES-87241</span>
+            {% endif %}
+          </label>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <button class="btn gold" type="submit" style="margin-top:12px">Guardar marca, QR y folios</button>
+  </form>
+</div>
+
+<div class="settings-section-title">04 · Logotipo</div>
+<div class="card">
+  <div class="logo-row">
+    <div>
+      <p class="small muted">
+        Sustituye la marca de la cabecera de la factura. Se recomienda PNG o SVG
+        con fondo transparente. Se copia dentro de cada PDF que se genere
+        después, así que cambiarlo no altera los ya emitidos.
+      </p>
+      <form method="post" action="/configuracion/logo" enctype="multipart/form-data">
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" required>
+        <button class="btn gold" type="submit" style="margin-top:10px">Subir logotipo</button>
+      </form>
+      {% if logo_url %}
+        <form method="post" action="/configuracion/logo/quitar" style="margin-top:10px">
+          <button class="btn ghost" type="submit">Quitar el logotipo y volver a la marca original</button>
+        </form>
+      {% endif %}
+    </div>
+    <div class="logo-preview">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="Logotipo actual">
+      {% else %}
+        <span class="small muted">Sin logotipo propio.<br>La factura usa la marca del diseño aprobado.</span>
+      {% endif %}
+    </div>
   </div>
 </div>
 
 <div class="devnote" style="margin-top:16px">
-  <b>Fase A.</b> La puerta de Configuración, el cambio de las dos contraseñas y
-  el almacén de ajustes ya funcionan de verdad. La edición de los ajustes en sí
-  y la subida de logo y QR son la Fase D, que es donde se usan.
+  <b>Fase D.</b> Los ajustes se editan y se validan de verdad: una CLABE o un CBU
+  con un dígito mal no se guardan, porque después se copiarían a cada factura
+  nueva y el cliente transferiría a una cuenta que no existe.
 </div>
 
 {% endblock %}

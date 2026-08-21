@@ -89,6 +89,7 @@ backend/
 │   ├── documents.py     motor de plantillas ← rellena las 3 aprobadas
 │   ├── pdf.py           PDF A4 y copia congelada
 │   ├── codes.py         QR y codigo de barras en SVG
+│   ├── uploads.py       logotipo y fotografias: que se acepta y donde va
 │   ├── models.py        modelo de datos definitivo
 │   ├── fields.py        claves fijas ← contrato con las plantillas
 │   │                    y qué se copia al duplicar
@@ -109,6 +110,7 @@ backend/
 ├── verificar_fase_d.py     PDF desde el panel
 ├── verificar_pdf.py        motor de PDF y snapshot (sin servidor)
 ├── verificar_codigos.py    QR y codigo de barras, leidos con un lector real
+├── verificar_subidas.py    subidas y edicion de Configuracion (sin servidor)
 ├── verificar_plantillas.py el motor de plantillas (sin servidor)
 ├── verificar_folios.py     contador y choque de folios (sin servidor)
 └── verificar_datos.py      importes, CLABE, CBU y VIN (sin servidor)
@@ -176,19 +178,20 @@ Atributos, y nada más:
 | `data-field="..."` | ese hueco lleva un dato de la factura |
 | `data-step="1..4"` | paso de la barra de progreso, para marcarlo según el estado |
 | `data-hide-if-empty="..."` | el elemento desaparece si ese dato está vacío (la pastilla de descuento) |
+| `data-logo` | bloque de marca: se sustituye solo si hay logotipo propio |
 
 `templates_html/marcar_campos.py` deja por escrito exactamente qué se añadió, y
 `templates_html/aprobado-original/` guarda las tres plantillas tal y como se
 aprobaron. La comprobación quita esos atributos del archivo marcado y exige que
 el resultado sea idéntico al original.
 
-Son 43 huecos por plantilla, y los mismos 43 en las tres.
+Son 48 huecos por plantilla, y los mismos 48 en las tres.
 
 ### Lo que decide el backend, y lo que no
 
 | Decide el backend | Es fijo de la plantilla |
 |---|---|
-| El contenido de los 43 huecos | Textos legales, FAQ, protección, documentación |
+| El contenido de los 48 huecos | Textos legales, FAQ, protección, documentación |
 | El formato de fechas e importes del mercado | Toda la maquetación y el CSS |
 | Qué paso de la barra de progreso está activo | Los nombres de los cuatro pasos |
 | Cuál de las dos modalidades de entrega va primero | Los textos de las dos modalidades |
@@ -316,10 +319,62 @@ snapshot con los mismos nombres de archivo del diseño aprobado, así que la cop
 congelada sigue abriéndose sola en cualquier navegador. En el panel se sirven al
 vuelo desde `/facturas/{id}/codigo-qr.svg` y `/codigo-barras.svg`.
 
+**Fotografías, logotipo y códigos, congelados con el resto.** Las cuatro
+fotografías del vehículo y el logotipo se escriben dentro del snapshot con los
+nombres de archivo del diseño aprobado, igual que el QR y el código de barras.
+El documento congelado no necesita que se le cambie ninguna ruta, y cambiar
+después una foto o el logotipo no altera ningún PDF ya emitido.
+
+El texto alternativo de cada fotografía solo se reescribe cuando esa fotografía
+se ha sustituido: mientras siga siendo la del diseño, el texto aprobado la
+describe bien y no se toca.
+
 **Generar el PDF no mueve la operación.** Queda en `pdf_generated_at` y en
 Actividad. Un borrador no se imprime.
 
-### Vista previa### Vista previa
+### Subidas
+
+`app/uploads.py`. La regla es no creerse lo que dice el archivo: ni la extensión
+ni el tipo que manda el navegador prueban nada, porque los pone quien sube el
+archivo. Se abre la imagen y se mira lo que hay dentro; si no se puede abrir, no
+entra. Un SVG es código, así que además se rechaza el que traiga `script` o
+manejadores de eventos: acabaría incrustado en la factura y en su PDF.
+
+El nombre del archivo lo genera el servidor. Un nombre de usuario puede llevar
+barras o puntos dobles y colarse fuera de la carpeta.
+
+### Configuración editable
+
+Se edita tras la Master Password, y **se valida**: una CLABE o un CBU con el
+dígito de control mal no se guardan, porque después se copiarían a cada factura
+nueva y el cliente transferiría a una cuenta que no existe. La URL base del QR
+tiene que ser una URL; el contador de folios, un número.
+
+Cambiar cualquier cosa aquí **no toca ninguna factura ya emitida**: los datos se
+copian a la factura al crearla, y el PDF lleva dentro su propia copia de todo.
+
+### Vista previa### Subidas
+
+`app/uploads.py`. La regla es no creerse lo que dice el archivo: ni la extensión
+ni el tipo que manda el navegador prueban nada, porque los pone quien sube el
+archivo. Se abre la imagen y se mira lo que hay dentro; si no se puede abrir, no
+entra. Un SVG es código, así que además se rechaza el que traiga `script` o
+manejadores de eventos: acabaría incrustado en la factura y en su PDF.
+
+El nombre del archivo lo genera el servidor. Un nombre de usuario puede llevar
+barras o puntos dobles y colarse fuera de la carpeta.
+
+### Configuración editable
+
+Se edita tras la Master Password, y **se valida**: una CLABE o un CBU con el
+dígito de control mal no se guardan, porque después se copiarían a cada factura
+nueva y el cliente transferiría a una cuenta que no existe. La URL base del QR
+tiene que ser una URL; el contador de folios, un número.
+
+Cambiar cualquier cosa aquí **no toca ninguna factura ya emitida**: los datos se
+copian a la factura al crearla, y el PDF lleva dentro su propia copia de todo.
+
+### Vista previa
 
 `/facturas/{id}/vista-previa` enseña el documento dentro de un iframe que apunta
 a `/facturas/{id}/documento`, que es la misma URL que se imprime y la que usará
@@ -495,12 +550,13 @@ python3 verificar_fase_c.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_d.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_plantillas.py
 python3 verificar_pdf.py
+python3 verificar_subidas.py
 python3 verificar_codigos.py
 python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**386 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**435 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -527,13 +583,17 @@ anterior, para que los recuentos por VIN sigan significando algo.
   reintento ante un choque simultáneo. Se ejecuta sin servidor, sobre una base
   de datos temporal, porque el choque entre dos operadores no se puede provocar
   desde el navegador.
-- **Fase D · 30.** Con navegador: que un borrador no se imprima, que el PDF se
+- **Fase D · 36.** Con navegador: que un borrador no se imprima, que el PDF se
   descargue y sea un PDF de una página, que volver a generarlo cree una versión
   nueva sin borrar la anterior, que la copia congelada conserve los datos de
   entonces y que generar no mueva el estado de la operación.
 - **PDF · 48.** Sin navegador, generando PDF de verdad: A4, una página, la copia
   congelada completa (incluidas las tipografías) y la escala recalculada por
   factura.
+- **Subidas · 43.** Sin navegador: qué archivos se aceptan y cuáles no (un
+  «.jpg» que es texto, un SVG con script dentro, una ruta con `..`), que
+  Configuración rechace una CLABE o un CBU con el dígito de control mal, y que
+  cambiar el logotipo o una fotografía **no toque** los PDF ya emitidos.
 - **Códigos · 18.** El QR y el código de barras, **leídos con un lector de
   verdad**: del SVG del snapshot y de la página del PDF ya impreso, a 200 y a
   300 ppp. Un código mal generado se ve perfecto y no lo lee nadie. Necesita

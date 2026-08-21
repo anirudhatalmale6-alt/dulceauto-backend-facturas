@@ -272,6 +272,49 @@
 
 </form>
 
+{% if invoice %}
+<div class="editor-panel" style="margin-top:16px">
+    <details class="section" open>
+      <summary>Fotografías del vehículo <span>⌄</span></summary>
+      <div class="section-body">
+        <p class="small muted">
+          Cuatro huecos, como el diseño aprobado: la grande y las tres pequeñas.
+          El que se deje vacío usa la fotografía de la plantilla. Se reducen solas
+          a la resolución que necesita el papel al generar el PDF, y cada PDF
+          guarda su propia copia.
+        </p>
+        <form method="post" action="/facturas/{{ invoice.id }}/fotos" enctype="multipart/form-data">
+          <div class="photos" style="margin-top:12px">
+            {% for pos in [1, 2, 3, 4] %}
+              {% set puesta = fotos.get(pos) %}
+              <label class="photo-slot">
+                <span class="small muted">{{ 'Principal' if pos == 1 else 'Pequeña ' ~ (pos - 1) }}</span>
+                {% if puesta %}
+                  <img src="/facturas/{{ invoice.id }}/foto/{{ pos }}" alt="Fotografía {{ pos }}">
+                {% else %}
+                  <span class="photo-empty">Sin foto propia</span>
+                {% endif %}
+                <input type="file" name="foto_{{ pos }}" accept="image/png,image/jpeg,image/webp">
+              </label>
+            {% endfor %}
+          </div>
+          <button class="btn blue" type="submit" style="margin-top:12px">Subir fotografías</button>
+        </form>
+        {% if fotos %}
+          <div class="actions" style="margin-top:10px">
+            {% for pos, _f in fotos.items() %}
+              <form method="post" action="/facturas/{{ invoice.id }}/fotos/{{ pos }}/quitar" style="display:inline">
+                <button class="btn ghost" type="submit">Quitar la {{ pos }}</button>
+              </form>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </details>
+</div>
+{% endif %}
+
+
 <div class="devnote" style="margin-top:16px">
   <b>Estado del documento.</b> Un borrador se guarda a medias; para salir de
   borrador se exigen cliente, vehículo, VIN válido, importes y fecha de emisión.

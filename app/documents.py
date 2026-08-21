@@ -75,6 +75,11 @@ VACIAS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "m
 ASSETS_ORIGEN = "../assets/"
 ASSETS_PANEL = "/plantillas/assets/"
 
+# Nombre interno del hueco de marca. Es el unico sitio donde el motor sustituye
+# marcado y no texto, y por eso va declarado aparte y con su propia regla: si no
+# hay logotipo propio, no se toca nada y se queda la marca aprobada.
+LOGO = "__logo__"
+
 
 # --- lectura de la plantilla -------------------------------------------------
 
@@ -128,6 +133,9 @@ class _Anotador(HTMLParser):
         diccionario = dict(attrs)
         campo = diccionario.get("data-field")
         oculta = diccionario.get("data-hide-if-empty")
+        if "data-logo" in diccionario:
+            campo = campo or LOGO
+
         crudo = self.get_starttag_text() or ""
         ini = self._offset()
 
@@ -263,6 +271,18 @@ CALCULADOS = (
 # Huecos de los que solo se tocan atributos.
 SOLO_ATRIBUTOS = ("url_verificacion", "codigo_barras", "codigo_qr")
 
+# Las cuatro fotografias del vehiculo, en el orden en que salen en el diseno: la
+# grande y las tres pequenas. El nombre de archivo de cada una lo fija la
+# plantilla aprobada y se conserva, de modo que en el snapshot basta con
+# sobrescribir la copia y no hay que reescribir ninguna ruta.
+FOTOS = ("foto_1", "foto_2", "foto_3", "foto_4")
+ARCHIVO_FOTO = {
+    "foto_1": "vehicle-front.jpg",
+    "foto_2": "vehicle-rear.jpg",
+    "foto_3": "vehicle-interior.jpg",
+    "foto_4": "vehicle-main.jpg",
+}
+
 
 def _texto(valor) -> str:
     return "" if valor is None else str(valor)
@@ -366,7 +386,25 @@ def construir_atributos(invoice, codigos: str | None = None) -> dict[str, dict[s
             "codigo_qr": {"src": f"/facturas/{invoice.id}/codigo-qr.svg"},
             "codigo_barras": {"src": f"/facturas/{invoice.id}/codigo-barras.svg"},
         }
-    return {
+
+    # Fotografias.
+    #
+    # El texto alternativo solo se cambia cuando la fotografia se ha cambiado.
+    # El del diseno aprobado describe el coche de la maqueta ("Vista principal
+    # del Audi A3 plateado"); mientras la imagen siga siendo esa, el texto es
+    # correcto y se deja intacto. En cuanto el operador sube la suya, ese texto
+    # pasa a ser falso y se sustituye por el vehiculo de la factura.
+    subidas = {f.position for f in getattr(invoice, "photos", [])}
+    atributos = {}
+    for posicion, campo in enumerate(FOTOS, start=1):
+        atributos[campo] = {}
+        if posicion in subidas:
+            if invoice.vehicle_title:
+                atributos[campo]["alt"] = invoice.vehicle_title
+            if codigos == "panel":
+                atributos[campo]["src"] = f"/facturas/{invoice.id}/foto/{posicion}"
+
+    atributos.update({
         "url_verificacion": {
             "href": _url_verificacion(invoice),
             "aria-label": doc_text(locale, "aria_verificar").format(folio=folio),
@@ -379,7 +417,8 @@ def construir_atributos(invoice, codigos: str | None = None) -> dict[str, dict[s
             "alt": doc_text(locale, "alt_qr").format(folio=folio),
             **fuentes.get("codigo_qr", {}),
         },
-    }
+    })
+    return atributos
 
 
 # Barra de progreso. La mueve el estado de la operacion y nada mas: generar el
@@ -436,8 +475,20 @@ class Documento:
     vacios: list[str]
 
 
-def render(invoice, *, assets: str = ASSETS_PANEL, codigos: str | None = None) -> Documento:
-    """Documento de una factura, listo para enseñar o para imprimir."""
+def render(
+    invoice,
+    *,
+    assets: str = ASSETS_PANEL,
+    codigos: str | None = None,
+    logo: str | None = None,
+    marca: str = "DulceAuto",
+) -> Documento:
+    """Documento de una factura, listo para enseñar o para imprimir.
+
+    logo es la ruta o URL del logotipo propio. Sin logotipo se conserva la marca
+    del diseno aprobado, que es lo unico que el motor sustituye en forma de
+    marcado y no de texto.
+    """
     locale = invoice.locale or "es-MX"
     plantilla = cargar(locale)
     valores = construir_valores(invoice)
@@ -467,6 +518,16 @@ def render(invoice, *, assets: str = ASSETS_PANEL, codigos: str | None = None) -
             for nombre, valor in atributos[campo].items():
                 tag = _poner_atributo(tag, nombre, valor)
             cambios.append((hueco.tag_ini, hueco.tag_fin, tag))
+            continue
+
+        if campo == LOGO:
+            if logo:
+                cambios.append(
+                    (hueco.cont_ini, hueco.cont_fin,
+                     f'<img class="brand-logo" src="{html_mod.escape(logo, quote=True)}" '
+                     f'alt="{html_mod.escape(marca, quote=True)}" '
+                     'style="max-height:34px;max-width:220px">')
+                )
             continue
 
         if campo not in valores:
@@ -563,6 +624,11 @@ ETIQUETAS_HUECO = {
     "url_verificacion": "URL de verificación",
     "codigo_barras": "Código de barras",
     "codigo_qr": "Código QR",
+    "foto_1": "Fotografía principal",
+    "foto_2": "Fotografía pequeña 1",
+    "foto_3": "Fotografía pequeña 2",
+    "foto_4": "Fotografía pequeña 3",
+    LOGO: "Logotipo de la cabecera",
 }
 
 

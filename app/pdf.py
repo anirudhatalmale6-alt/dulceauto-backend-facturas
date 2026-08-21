@@ -137,6 +137,61 @@ def _escribir_codigos(invoice: Invoice, destino: Path) -> None:
         barras.write_text(codes.barcode_svg(invoice.folio or ""), encoding="utf-8")
 
 
+def _copiar_logo(db: Session, destino: Path) -> str | None:
+    """Trae el logotipo de Configuracion a la carpeta del snapshot.
+
+    Devuelve la ruta relativa que tiene que llevar el documento, o None si no
+    hay logotipo propio: en ese caso se conserva la marca del diseno aprobado.
+    """
+    import shutil as _shutil
+
+    from . import uploads
+    from .models import Setting
+
+    fila = db.execute(
+        select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
+    ).scalar_one_or_none()
+    origen = uploads.ruta_absoluta(fila.value if fila else None)
+    if origen is None:
+        return None
+    (destino / "img").mkdir(parents=True, exist_ok=True)
+    final = destino / "img" / f"logo{origen.suffix.lower()}"
+    _shutil.copy2(origen, final)
+    return f"assets/img/{final.name}"
+
+
+def _congelar_fotos(invoice: Invoice, destino: Path) -> list[int]:
+    """Mete las fotografias subidas dentro del snapshot.
+
+    Se escriben ENCIMA de las copias que acaban de traerse de la plantilla, con
+    su mismo nombre de archivo. De ese modo el documento congelado no necesita
+    que se le cambie ninguna ruta y la carpeta se abre sola en cualquier
+    navegador, que es la razon de ser del snapshot.
+
+    Las que el operador no haya subido se quedan con la del diseno aprobado.
+    """
+    from PIL import Image
+
+    from . import documents, uploads
+
+    puestas = []
+    for foto in getattr(invoice, "photos", []):
+        campo = f"foto_{foto.position}"
+        nombre = documents.ARCHIVO_FOTO.get(campo)
+        origen = uploads.ruta_absoluta(foto.file_path)
+        if not nombre or origen is None:
+            continue
+        final = destino / "img" / nombre
+        if not final.parent.exists():
+            continue
+        # Se guarda siempre como JPEG con el nombre que espera la plantilla:
+        # el operador puede subir un PNG y el archivo se llama .jpg.
+        with Image.open(origen) as imagen:
+            imagen.convert("RGB").save(final, "JPEG", quality=92, optimize=True)
+        puestas.append(foto.position)
+    return puestas
+
+
 def _url_verificacion(invoice: Invoice) -> str:
     base = (invoice.verify_url_base or "").strip()
     if not base:
@@ -239,11 +294,15 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
     # El documento del snapshot apunta a sus propios archivos, con rutas
     # relativas: la carpeta se puede mover, copiar o descargar entera y sigue
     # abriendose bien.
-    documento = documents.render(invoice, assets="assets/")
+    # El logotipo se copia dentro del snapshot con un nombre propio: cambiarlo
+    # despues en Configuracion no toca ningun PDF ya emitido.
+    logo = _copiar_logo(db, carpeta / "assets")
+    documento = documents.render(invoice, assets="assets/", logo=logo)
     html_path = carpeta / "documento.html"
     html_path.write_text(documento.html, encoding="utf-8")
     copiados = _copiar_assets(documento.html, carpeta / "assets")
     _escribir_codigos(invoice, carpeta / "assets")
+    _congelar_fotos(invoice, carpeta / "assets")
 
     pdf_path = carpeta / f"{invoice.folio}.pdf"
 

@@ -425,3 +425,40 @@ def commit_creation(db: Session, construir, intentos: int = 6) -> Invoice:
             if not _es_choque_de_folio(exc):
                 raise
     raise FolioOcupado("No se ha podido asignar un folio libre.")
+
+
+# --- validacion de Configuracion ---------------------------------------------
+
+
+def validar_ajuste(clave: str, valor: str, market: str | None) -> str | None:
+    """Comprueba un ajuste antes de guardarlo. Devuelve el motivo o None.
+
+    Se valida lo que puede romper algo de verdad, no todo por costumbre. Una
+    CLABE mal tecleada en Configuracion se copia despues a cada factura nueva y
+    el cliente transfiere a una cuenta que no existe: el error se descubre con
+    el dinero por medio.
+    """
+    if clave == "banking.account_number" and valor:
+        correcto, mensaje = validate_account(valor, market or DEFAULT_LOCALE)
+        if not correcto:
+            return f"{MARKETS[market].label if market in MARKETS else market}: {mensaje}"
+
+    if clave == "folio.next":
+        if not valor.isdigit():
+            return "El contador de folios tiene que ser un número."
+        if int(valor) <= 0:
+            return "El contador de folios tiene que ser mayor que cero."
+
+    if clave == "folio.prefix" and not valor:
+        return "El prefijo del folio no puede quedar vacío."
+
+    if clave in ("qr.base_url", "verification.url_base") and valor:
+        if not valor.startswith(("http://", "https://")):
+            return "La URL del QR tiene que empezar por http:// o https://"
+        if " " in valor:
+            return "La URL del QR no puede llevar espacios."
+
+    if clave.endswith(".email") and valor and "@" not in valor:
+        return f"{clave}: no parece un email."
+
+    return None

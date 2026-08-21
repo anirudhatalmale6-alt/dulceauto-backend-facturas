@@ -205,3 +205,49 @@ body.theme-soft .login-card { background: var(--cream2); }
 }
 body.theme-night .preview-stage { background: #0b1420; border-color: #2a3a50; }
 body.theme-soft .preview-stage { background: #cfc9bd; }
+
+/* --- huecos de fotografia del editor (Fase D) --- */
+.photo-slot {
+  border: 1px dashed #b8c3d4;
+  border-radius: 12px;
+  background: #f7f9fc;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  font-size: 11px;
+}
+.photo-slot img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.photo-slot .photo-empty {
+  width: 100%;
+  aspect-ratio: 4/3;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+}
+.photo-slot input[type=file] { width: 100%; font-size: 10px; padding: 4px; }
+body.theme-night .photo-slot { background: #0f1927; border-color: #2a3a50; }
+body.theme-soft .photo-slot { background: var(--cream2); }
+
+/* --- logotipo en Configuracion --- */
+.logo-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(200px, .6fr); gap: 16px; align-items: start; }
+.logo-preview {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: #fff;
+  text-align: center;
+}
+.logo-preview img { max-width: 100%; max-height: 110px; }
+body.theme-night .logo-preview { background: #0f1927; border-color: #2a3a50; }
+body.theme-soft .logo-preview { background: var(--cream2); }
+@media (max-width: 900px) { .logo-row { grid-template-columns: 1fr; } }
