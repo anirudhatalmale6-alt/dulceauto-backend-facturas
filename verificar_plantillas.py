@@ -242,13 +242,38 @@ check("en sede: la modalidad enlazada es la de sede",
       'data-field="entrega_modalidad">Entrega en una sede o concesionario cercano</a>' in sede)
 check("y entonces la alternativa es la de domicilio",
       'data-field="entrega_alternativa">Entrega a domicilio (transporte terrestre asegurado)</strong>' in sede)
-check("los textos son los aprobados, no reescritos",
-      "Traslado asegurado hasta el domicilio registrado." in casa
-      and "Traslado asegurado hasta el domicilio registrado." in sede)
+check("con domicilio arriba, el texto es el aprobado, sin reescribir",
+      "Traslado asegurado hasta el domicilio registrado." in casa)
+
+# Cada modalidad tiene dos redacciones. La que empieza por "También puedes
+# solicitar" esta escrita como alternativa: arriba no puede aparecer nunca.
+principal_sede = sede.split('data-field="entrega_texto">')[1].split("</p>")[0]
+alternativa_casa = sede.split('data-field="entrega_alternativa_texto">')[1].split("</p>")[0]
+check("con la sede arriba, su texto no empieza por 'También'",
+      not principal_sede.strip().startswith("También"), principal_sede[:60])
+check("y usa la redaccion de modalidad principal",
+      principal_sede.startswith("La entrega se realizará en una sede"), principal_sede[:60])
+check("el domicilio, ya como alternativa, cambia de redaccion",
+      alternativa_casa.startswith("También puedes solicitar la entrega a domicilio"),
+      alternativa_casa[:60])
+check("ninguna de las dos frases se repite en el mismo documento",
+      principal_sede != alternativa_casa)
+
+sede_en = documents.render(factura("en", delivery_mode="branch")).html
+check("en ingles, la sede arriba usa 'Delivery will be arranged'",
+      "Delivery will be arranged at a nearby branch" in sede_en)
+check("y el domicilio como alternativa, 'You may also request insured home delivery'",
+      "You may also request insured home delivery to the registered address." in sede_en)
+
+sede_ar = documents.render(factura("es-AR", delivery_mode="branch")).html
 check("el voseo argentino se respeta",
       "También podés solicitar" in documents.render(factura("es-AR")).html)
+check("y tambien en la alternativa nueva",
+      "También podés solicitar la entrega a domicilio" in sede_ar)
+check("Argentina no usa el 'puedes' mexicano",
+      "También puedes solicitar" not in sede_ar)
 check("el ingles no se cuela en la version argentina",
-      "You may also request" not in documents.render(factura("es-AR")).html)
+      "You may also request" not in sede_ar)
 propio = documents.render(
     factura("es-MX", delivery_text="Entrega en 48 horas en su domicilio.")
 ).html
@@ -335,6 +360,17 @@ sin_hueco = dict(documents.campos_sin_hueco("es-MX"))
 check("las claves que no llegan al documento estan declaradas con su motivo",
       "vehicle.carfax" in sin_hueco and sin_hueco["vehicle.carfax"],
       ", ".join(sin_hueco))
+# La etiqueta de la cuenta que ensena el panel tiene que decir lo mismo que la
+# plantilla aprobada. La inglesa decia "Interbank account number" mientras el
+# documento ponia "CLABE (18 digits)".
+from app.locales import MARKETS  # noqa: E402
+
+for locale, marca in (("es-MX", "CLABE"), ("en", "CLABE (18 digits)"), ("es-AR", "CBU")):
+    check(f"{locale}: la etiqueta de la cuenta del panel concuerda con la plantilla",
+          marca.lower() in MARKETS[locale].account_label.lower()
+          and MARKETS[locale].account_label.split(" (")[0].lower() in aprobado(locale).lower(),
+          MARKETS[locale].account_label)
+
 check("las rutas de los archivos se reescriben para el panel",
       ASSETS_PANEL + "css/factura.css" in documents.render(factura("es-MX")).html)
 check("y no queda ninguna ruta relativa suelta",

@@ -59,7 +59,8 @@ MARKET_SETTINGS: dict[str, dict[str, str]] = {
     "en": {
         "banking.bank": "BBVA México",
         "banking.beneficiary": "DulceAuto México S.A. de C.V.",
-        "banking.account_label": "Interbank account number",
+        # La version inglesa usa una CLABE mexicana, igual que el HTML aprobado.
+        "banking.account_label": "CLABE (18 digits)",
         "banking.account_number": "012180001234567899",
         "banking.bank_account": "0123456789",
         "representative.name": "Yoselina de la Cruz",

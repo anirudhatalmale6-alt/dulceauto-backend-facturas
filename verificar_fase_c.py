@@ -196,6 +196,16 @@ with sync_playwright() as p:
     alterna = page.locator('[data-field="entrega_alternativa"]').inner_text()
     check("elegida la sede, arriba va la sede", "sede o concesionario" in enlace, enlace[:60])
     check("y la alternativa pasa a ser el domicilio", "domicilio" in alterna, alterna[:60])
+    # La frase que empieza por "También puedes solicitar" esta escrita para ir
+    # debajo. Arriba tiene que salir la redaccion de modalidad principal.
+    arriba = page.locator('[data-field="entrega_texto"]').inner_text()
+    abajo = page.locator('[data-field="entrega_alternativa_texto"]').inner_text()
+    check("el texto de arriba no empieza por 'También'",
+          not arriba.strip().startswith("También"), arriba[:60])
+    check("y es la redaccion de sede como principal",
+          arriba.startswith("La entrega se realizará en una sede"), arriba[:60])
+    check("el domicilio, abajo, usa su redaccion de alternativa",
+          abajo.startswith("También puedes solicitar la entrega a domicilio"), abajo[:60])
 
     page.goto(f"{BASE}/facturas/{factura_id}/editar")
     elegir(page, "delivery_mode", "home")
@@ -256,6 +266,10 @@ with sync_playwright() as p:
     check("y dice cuantos huecos tiene cada una", "campos marcados" in page.locator(".template").first.inner_text())
     check("estan escritas las claves que no llegan al documento",
           "vehicle.carfax" in page.content())
+    ingles_tarjeta = page.locator(".template", has_text="English").inner_text()
+    check("la ficha inglesa dice CLABE, como su plantilla",
+          "CLABE (18 digits)" in ingles_tarjeta and "Interbank account number" not in ingles_tarjeta,
+          [l for l in ingles_tarjeta.splitlines() if "CLABE" in l or "Interbank" in l])
     page.screenshot(path=f"{SHOTS}/c4-plantillas.png")
     page.locator(".template").first.locator("text=Ver vista previa").click()
     page.wait_for_load_state()

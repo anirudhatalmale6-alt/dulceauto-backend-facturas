@@ -218,6 +218,22 @@ pendiente» y la barra de progreso no avanza.
 | Enviada | Pago pendiente / Payment pending | igual que el anterior |
 | Cancelada | Cancelada / Cancelled | paso 1 hecho, ninguno activo |
 
+### Las dos redacciones de cada modalidad de entrega
+
+El documento enseña siempre las dos modalidades: la elegida arriba, con enlace, y
+la otra debajo como alternativa. La misma frase no sirve en los dos sitios: la
+que empieza por «También puedes solicitar…» está escrita para ir debajo y leída
+en primera posición suena mal.
+
+Por eso cada modalidad tiene dos redacciones, `principal` y `alternativa`, en
+`app/locales.py`. Cuando el domicilio va arriba, los textos son exactamente los
+del documento aprobado. Las redacciones para el caso contrario las decidió el
+cliente, y respetan el voseo argentino.
+
+Los campos «Texto de la modalidad» y «Texto de la alternativa» del editor
+sustituyen a las dos en una factura concreta; vacíos, se usa el texto que
+corresponda.
+
 ### Vista previa
 
 `/facturas/{id}/vista-previa` enseña el documento dentro de un iframe que apunta
@@ -396,7 +412,7 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**243 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**258 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -411,12 +427,12 @@ anterior, para que los recuentos por VIN sigan significando algo.
   heredar los datos del cliente original, que use la cuenta bancaria vigente y no la del original, que la
   factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
   cuente lo que tiene que contar.
-- **Fase C · 57.** Con navegador: que la vista previa enseñe el documento real
+- **Fase C · 61.** Con navegador: que la vista previa enseñe el documento real
   y no una imitación, que el CSS aprobado se cargue de verdad, que el del panel
   no se cuele dentro, que lo que se escribe en el editor salga en la factura,
   que el zoom no re-maquete el documento, que cambiar de mercado cambie de
   plantilla y de formatos, y que el documento no cambie con el tema del panel.
-- **Plantillas · 59.** Sin navegador: el motor. Incluye la comprobación de que
+- **Plantillas · 70.** Sin navegador: el motor. Incluye la comprobación de que
   el documento generado con los datos de la versión aprobada es idéntico byte a
   byte al archivo aprobado, en los tres mercados.
 - **Folios · 11.** El contador, el salto cuando un folio ya está ocupado y el

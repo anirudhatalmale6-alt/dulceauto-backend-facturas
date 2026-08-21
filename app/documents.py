@@ -312,13 +312,16 @@ def construir_valores(invoice) -> dict[str, str]:
     valores["transporte"] = _texto(invoice.pricing_transport) or doc_text(locale, "incluido")
 
     # Entrega. El primer bloque describe la modalidad elegida y el segundo la
-    # otra. Los textos son literalmente los aprobados: lo unico que cambia es
-    # cual de los dos va primero. El operador puede sustituirlos escribiendo en
-    # los campos de entrega.
+    # otra. Cada modalidad tiene dos redacciones, una para cuando va arriba y
+    # otra para cuando queda como alternativa: la frase que empieza por "También
+    # puedes solicitar" solo tiene sentido debajo. El operador puede sustituir
+    # las dos escribiendo en los campos de entrega.
     valores["entrega_modalidad"] = entrega[modo]["titulo"]
-    valores["entrega_texto"] = _texto(invoice.delivery_text) or entrega[modo]["texto"]
+    valores["entrega_texto"] = _texto(invoice.delivery_text) or entrega[modo]["principal"]
     valores["entrega_alternativa"] = entrega[otro]["titulo"]
-    valores["entrega_alternativa_texto"] = _texto(invoice.delivery_alt) or entrega[otro]["texto"]
+    valores["entrega_alternativa_texto"] = (
+        _texto(invoice.delivery_alt) or entrega[otro]["alternativa"]
+    )
 
     valores["agente_iniciales"] = iniciales(invoice.representative_name)
     return valores

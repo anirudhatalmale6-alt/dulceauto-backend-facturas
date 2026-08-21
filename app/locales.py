@@ -49,7 +49,10 @@ MARKETS: dict[str, Market] = {
         currency="MXN",
         thousands=",",
         decimal=".",
-        account_label="Interbank account number",
+        # La version inglesa usa una CLABE mexicana, y el propio HTML aprobado
+        # dice "CLABE (18 digits)". El panel decia otra cosa: se corrige aqui,
+        # que es donde estaba el error, sin tocar la plantilla.
+        account_label="CLABE (18 digits)",
         account_digits=18,
         document_label="ID",
         template="en/invoice.html",
@@ -233,15 +236,29 @@ def status_text(status: str, locale: str) -> str:
 # arriba, con enlace, y la otra debajo. Los textos son los de las plantillas
 # aprobadas, palabra por palabra, incluido el voseo argentino. Lo unico que
 # decide el backend es cual de las dos va primero.
+# Cada modalidad tiene dos redacciones, y no una: la misma frase no sirve
+# arriba y abajo. "También puedes solicitar..." esta escrita como alternativa y
+# leida en primera posicion suena mal. Las de "alternativa" para domicilio y las
+# de "principal" para sede las decidio el cliente el 21-ago-2026; el resto son
+# las del documento aprobado, palabra por palabra.
 DELIVERY_TEXTS = {
     "es-MX": {
         "home": {
             "titulo": "Entrega a domicilio (transporte terrestre asegurado)",
-            "texto": "Traslado asegurado hasta el domicilio registrado.",
+            "principal": "Traslado asegurado hasta el domicilio registrado.",
+            "alternativa": (
+                "También puedes solicitar la entrega a domicilio mediante transporte "
+                "terrestre asegurado hasta la dirección registrada."
+            ),
         },
         "branch": {
             "titulo": "Entrega en una sede o concesionario cercano",
-            "texto": (
+            "principal": (
+                "La entrega se realizará en una sede o concesionario cercano, sin cargos "
+                "adicionales. La disponibilidad, ubicación y los detalles de entrega se "
+                "confirmarán durante la coordinación."
+            ),
+            "alternativa": (
                 "También puedes solicitar la entrega en una sede o concesionario cercano, "
                 "sin cargos adicionales. La disponibilidad, ubicación y los detalles de "
                 "entrega se confirmarán durante la coordinación."
@@ -251,11 +268,17 @@ DELIVERY_TEXTS = {
     "en": {
         "home": {
             "titulo": "Home delivery (insured ground transport)",
-            "texto": "Insured transport to the registered address.",
+            "principal": "Insured transport to the registered address.",
+            "alternativa": "You may also request insured home delivery to the registered address.",
         },
         "branch": {
             "titulo": "Delivery to a nearby branch or dealership",
-            "texto": (
+            "principal": (
+                "Delivery will be arranged at a nearby branch or dealership at no "
+                "additional charge. Availability, location, and delivery details will be "
+                "confirmed during coordination."
+            ),
+            "alternativa": (
                 "You may also request delivery to a nearby available branch or dealership "
                 "at no additional charge. Availability, location, and delivery details will "
                 "be confirmed during coordination."
@@ -265,11 +288,20 @@ DELIVERY_TEXTS = {
     "es-AR": {
         "home": {
             "titulo": "Entrega a domicilio (transporte terrestre asegurado)",
-            "texto": "Traslado asegurado hasta el domicilio registrado.",
+            "principal": "Traslado asegurado hasta el domicilio registrado.",
+            "alternativa": (
+                "También podés solicitar la entrega a domicilio mediante transporte "
+                "terrestre asegurado hasta la dirección registrada."
+            ),
         },
         "branch": {
             "titulo": "Entrega en una sede o concesionario cercano",
-            "texto": (
+            "principal": (
+                "La entrega se realizará en una sede o concesionario cercano, sin cargos "
+                "adicionales. La disponibilidad, ubicación y los detalles de entrega se "
+                "confirmarán durante la coordinación."
+            ),
+            "alternativa": (
                 "También podés solicitar la entrega en una sede o concesionario cercano, "
                 "sin cargos adicionales. La disponibilidad, ubicación y los detalles de "
                 "entrega se confirmarán durante la coordinación."
