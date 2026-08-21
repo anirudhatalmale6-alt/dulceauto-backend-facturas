@@ -251,8 +251,16 @@ momento: se imprime desde una copia congelada.
 Cada generación crea `data/snapshots/{factura}/v{n}/` con el documento y **los
 archivos que usa**: hoja de estilo, tipografías e imágenes. Así, dentro de dos
 años la factura RES-87241 se sigue imprimiendo igual aunque se haya cambiado el
-logotipo, la cuenta bancaria o la propia plantilla. Ocupa unos 2,8 MB por
+logotipo, la cuenta bancaria o la propia plantilla. Ocupa unos 2 MB por
 generación.
+
+**Las fotografías se dejan a la resolución del papel.** Chromium no recomprime
+las imágenes al imprimir: las incrusta tal cual. Una foto de 1280 px que en la
+hoja ocupa 45 mm entra en el PDF como casi 2 MB de mapa de bits, y con las
+cuatro del vehículo la factura pesaba 6,8 MB. Antes de imprimir se mide cuánto
+ocupa cada imagen en la hoja y se reduce **la copia del snapshot** a los píxeles
+que hacen falta para 300 ppp. El PDF baja a 1,2 MB sin perder nitidez, y el
+original de la plantilla no se toca.
 
 Volver a generar no pisa la anterior: sube la versión y las dos quedan
 descargables.
@@ -454,7 +462,7 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**334 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**344 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -485,7 +493,7 @@ anterior, para que los recuentos por VIN sigan significando algo.
   descargue y sea un PDF de una página, que volver a generarlo cree una versión
   nueva sin borrar la anterior, que la copia congelada conserve los datos de
   entonces y que generar no mueva el estado de la operación.
-- **PDF · 30.** Sin navegador, generando PDF de verdad: A4, una página, la copia
+- **PDF · 40.** Sin navegador, generando PDF de verdad: A4, una página, la copia
   congelada completa (incluidas las tipografías) y la escala recalculada por
   factura.
 - **Datos · 20.** Formatos de importe y dígitos de control de CLABE, CBU y VIN.

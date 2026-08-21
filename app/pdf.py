@@ -127,6 +127,56 @@ def _siguiente_version(db: Session, invoice_id: int) -> int:
     return (actual or 0) + 1
 
 
+# Resolucion a la que se dejan las fotografias dentro del PDF. 300 puntos por
+# pulgada es lo que se considera calidad de imprenta; por encima solo se gana
+# peso.
+DPI_IMPRESION = 300
+CSS_PPI = 96
+LADO_MINIMO = 400           # nunca se baja de aqui, por si algo se mide mal
+
+
+def _ajustar_imagenes(page, carpeta: Path, escala: float) -> list[str]:
+    """Deja cada fotografia a la resolucion que de verdad necesita el papel.
+
+    Chromium no recomprime las imagenes al imprimir: las incrusta tal cual. Una
+    foto de 1280 px que en la hoja ocupa 45 mm entra en el PDF con casi 2 MB de
+    mapa de bits. Con las cuatro del vehiculo, la factura pasaba de 6 MB, que es
+    demasiado para un documento que se le manda por correo a un cliente.
+
+    Se mide cuanto ocupa cada imagen en pantalla, se traduce a milimetros de la
+    hoja (aplicando la escala de impresion) y se reduce la copia del snapshot a
+    los pixeles que hacen falta para 300 ppp. La copia del snapshot es la que se
+    imprime, asi que el original de la plantilla no se toca.
+    """
+    from PIL import Image
+
+    medidas = page.evaluate(
+        "Array.from(document.querySelectorAll('img[src^=\"assets/\"]')).map("
+        " i => ({ src: i.getAttribute('src'), w: i.getBoundingClientRect().width }))"
+    )
+    # Una misma imagen puede salir dos veces con tamanos distintos: manda la
+    # mas grande, o la mas pequena saldria pixelada.
+    ancho_por_archivo: dict[str, float] = {}
+    for m in medidas:
+        rel = m["src"][len("assets/"):]
+        ancho_por_archivo[rel] = max(ancho_por_archivo.get(rel, 0), m["w"])
+
+    tocadas = []
+    for rel, ancho_css in ancho_por_archivo.items():
+        ruta = carpeta / rel
+        if not ruta.exists() or ruta.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+            continue
+        objetivo = max(LADO_MINIMO, int(ancho_css * escala * DPI_IMPRESION / CSS_PPI))
+        with Image.open(ruta) as img:
+            if img.width <= objetivo:
+                continue
+            alto = round(img.height * objetivo / img.width)
+            reducida = img.convert("RGB").resize((objetivo, alto), Image.LANCZOS)
+            reducida.save(ruta, "JPEG", quality=88, optimize=True, progressive=True)
+        tocadas.append(rel)
+    return tocadas
+
+
 def _calibrar(page) -> tuple[float, int, float]:
     """Escala y altura de impresion para el documento que hay cargado.
 
@@ -172,6 +222,16 @@ def generar(db: Session, invoice: Invoice) -> Resultado:
                 pagina.wait_for_load_state("networkidle")
                 pagina.evaluate("document.fonts ? document.fonts.ready : null")
                 escala, altura_impresion, altura = _calibrar(pagina)
+
+                # Las fotografias se reducen a la resolucion que pide el papel
+                # y se recarga la pagina para que Chromium imprima las copias
+                # ya reducidas. Sin recargar seguiria usando las que tiene en
+                # memoria y el PDF pesaria igual.
+                if _ajustar_imagenes(pagina, carpeta / "assets", escala):
+                    pagina.reload()
+                    pagina.wait_for_load_state("networkidle")
+                    escala, altura_impresion, altura = _calibrar(pagina)
+
                 pagina.evaluate(
                     "([e, h]) => {"
                     " document.documentElement.style.setProperty('--print-scale', e);"

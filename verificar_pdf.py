@@ -94,7 +94,12 @@ with Session() as db:
     r1 = pdf_engine.generar(db, factura)
     db.commit()
     check("el archivo existe", r1.pdf.exists())
-    check("y pesa algo", r1.pdf.stat().st_size > 50_000, f"{r1.pdf.stat().st_size} bytes")
+    peso = r1.pdf.stat().st_size
+    check("y pesa algo", peso > 50_000, f"{peso} bytes")
+    # Chromium incrusta las imagenes sin recomprimir. Sin reducirlas antes, esta
+    # misma factura pesaba 6,8 MB, que es demasiado para mandarsela por correo a
+    # un cliente.
+    check("pero no una barbaridad", peso < 2_500_000, f"{peso / 1024 / 1024:.2f} MB")
     check("una sola pagina", r1.paginas == 1, f"{r1.paginas}")
 
     ancho, alto = medidas(r1.pdf)
@@ -132,6 +137,20 @@ with Session() as db:
     imagenes = [m.group(1) for m in re.finditer(r'src="assets/([^"]+)"', html)]
     check("y las imagenes del documento tambien",
           all((carpeta / "assets" / i).exists() for i in imagenes), f"{len(imagenes)} imagenes")
+
+    print("\n2bis · Las fotografias se dejan a la resolucion del papel")
+    from PIL import Image
+
+    fotos = sorted((carpeta / "assets/img").glob("*.jpg"))
+    check("las fotos estan copiadas", len(fotos) >= 4, f"{len(fotos)}")
+    for foto in fotos:
+        original = documents.TEMPLATES_DIR / "assets/img" / foto.name
+        with Image.open(foto) as copia, Image.open(original) as orig:
+            check(f"{foto.name}: reducida respecto al original",
+                  copia.width <= orig.width, f"{orig.width}px -> {copia.width}px")
+            # 300 ppp sobre el hueco que ocupa en la hoja. Nada baja de 400 px,
+            # que es el suelo que fija el propio codigo.
+            check(f"{foto.name}: no se queda corta", copia.width >= 400, f"{copia.width}px")
 
     print("\n3 · Lo congelado no cambia despues")
     factura.customer_name = "Nombre cambiado despues de imprimir"

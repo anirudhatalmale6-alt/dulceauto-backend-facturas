@@ -10,3 +10,4 @@ pydantic-settings==2.7.1
 # Motor de PDF. Se usa a partir de la Fase D, pero se fija aqui para que el
 # contenedor sea el mismo en todas las fases y no cambie el render a mitad.
 playwright==1.49.1
+Pillow==11.0.0
