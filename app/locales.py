@@ -198,30 +198,36 @@ def doc_text(locale: str, clave: str) -> str:
     return DOC_TEXTS.get(locale, DOC_TEXTS[DEFAULT_LOCALE]).get(clave, "")
 
 
-# Estado que ve el cliente en el documento. No es el mismo que el del panel:
-# "PDF generado" y "Enviada" son estados internos de gestion y en el documento
-# se traducen a lo unico que le importa al cliente, que es si el pago sigue
-# pendiente. Un documento no debe dar por avanzado un paso que no lo esta.
+# Estado que ve el cliente en el documento. No siempre coincide con el nombre
+# interno: el estado "delivered" se llama "Entregada" en el panel y "Entrega
+# completada" en el documento, porque el cliente lee la pastilla y le resulta
+# mas claro. Lo decidio el cliente el 21-ago-2026.
+#
+# Generar el PDF y enviarlo ya no son estados, asi que aqui no aparecen: son
+# marcas de tiempo y no mueven la operacion.
 DOC_STATUS = {
     "es-MX": {
         "draft": "Borrador",
         "pending": "Pago pendiente",
-        "generated": "Pago pendiente",
-        "sent": "Pago pendiente",
+        "payment_validated": "Pago validado",
+        "delivery_scheduled": "Entrega coordinada",
+        "delivered": "Entrega completada",
         "cancelled": "Cancelada",
     },
     "en": {
         "draft": "Draft",
         "pending": "Payment pending",
-        "generated": "Payment pending",
-        "sent": "Payment pending",
+        "payment_validated": "Payment verified",
+        "delivery_scheduled": "Delivery scheduled",
+        "delivered": "Delivery completed",
         "cancelled": "Cancelled",
     },
     "es-AR": {
         "draft": "Borrador",
         "pending": "Pago pendiente",
-        "generated": "Pago pendiente",
-        "sent": "Pago pendiente",
+        "payment_validated": "Pago validado",
+        "delivery_scheduled": "Entrega coordinada",
+        "delivered": "Entrega completada",
         "cancelled": "Cancelada",
     },
 }

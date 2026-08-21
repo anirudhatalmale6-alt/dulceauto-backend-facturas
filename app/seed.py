@@ -7,7 +7,7 @@ tantas veces como haga falta: no pisa nada que ya exista ni toca datos reales.
 Los datos bancarios que deja puestos son de muestra, como se acordo. Se
 sustituyen desde Configuracion / Super-admin una vez montado el sistema.
 """
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,7 +18,7 @@ from .models import (
     CRED_ADMIN,
     CRED_MASTER,
     STATUS_DRAFT,
-    STATUS_GENERATED,
+    STATUS_VALIDATED,
     STATUS_PENDING,
     Credential,
     Invoice,
@@ -160,7 +160,11 @@ SAMPLE_INVOICES = [
     dict(
         folio="RES-87240",
         locale="es-AR",
-        status=STATUS_GENERATED,
+        # Muestra de una operacion ya cobrada: es la que ensena la barra de
+        # progreso avanzada y la que hace saltar el aviso de vehiculo
+        # comprometido.
+        status=STATUS_VALIDATED,
+        pdf_generated_at=datetime(2026, 8, 12, 17, 30),
         issue_date=date(2026, 8, 12),
         valid_until=date(2026, 8, 19),
         authorization="AUT-2026-87240",

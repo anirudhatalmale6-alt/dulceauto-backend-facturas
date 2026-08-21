@@ -16,7 +16,7 @@ tocado sus estilos.
 | **A** | Base del proyecto, acceso, Master Password, modelo de datos, panel con las 6 vistas y los 3 modos visuales | **Entregada** |
 | **B** | Crear, editar, borrador, buscar, duplicar, agrupación por VIN | **Entregada** |
 | **C** | Motor de plantillas, claves fijas en las 3 plantillas, reglas por mercado, vista previa real | **Entregada** |
-| D | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | Pendiente |
+| D | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | En curso |
 
 Donde una acción todavía no está cableada, la pantalla lo indica con una
 etiqueta de fase en lugar de ofrecer un botón que no hace nada.
@@ -203,38 +203,44 @@ Los nombres de los meses están escritos en `app/locales.py` y no se piden al
 sistema: `strftime` depende del idioma instalado en la máquina, y un servidor sin
 español configurado devolvería «July» en la factura mexicana sin avisar de nada.
 
-### El estado que ve el cliente
+### Estados de la operación
 
-El estado del panel y el del documento no son el mismo. «PDF generado» y
-«Enviada» son estados internos de gestión: que hayamos generado el PDF no
-significa que el cliente haya pagado, así que el documento sigue diciendo «Pago
-pendiente» y la barra de progreso no avanza.
+Los estados describen en qué punto está la reserva **para el cliente**, y nada
+más:
 
-| Estado en el panel | En el documento | Barra de progreso |
-|---|---|---|
-| Borrador | Borrador / Draft | paso 1 activo |
-| Pago pendiente | Pago pendiente / Payment pending | paso 1 hecho, paso 2 activo |
-| PDF generado | Pago pendiente / Payment pending | igual que el anterior |
-| Enviada | Pago pendiente / Payment pending | igual que el anterior |
-| Cancelada | Cancelada / Cancelled | paso 1 hecho, ninguno activo |
+```
+Borrador → Pago pendiente → Pago validado → Entrega coordinada → Entregada
+                                                         (+ Cancelada)
+```
 
-### Las dos redacciones de cada modalidad de entrega
+Generar el PDF y enviarlo **no son estados**: son acciones nuestras y viven en
+`pdf_generated_at` y `sent_at`, más su anotación en Actividad. Antes sí ocupaban
+un estado, y eso hacía imposible saber si una factura con el PDF hecho estaba
+cobrada o no: la acción se había llevado por delante el estado de la operación.
 
-El documento enseña siempre las dos modalidades: la elegida arriba, con enlace, y
-la otra debajo como alternativa. La misma frase no sirve en los dos sitios: la
-que empieza por «También puedes solicitar…» está escrita para ir debajo y leída
-en primera posición suena mal.
+| Estado en el panel | En el documento (es) | En el documento (en) | Barra |
+|---|---|---|---|
+| Borrador | Borrador | Draft | 1 activo |
+| Pago pendiente | Pago pendiente | Payment pending | 1 hecho, 2 activo |
+| Pago validado | Pago validado | Payment verified | 1 y 2 hechos, 3 activo |
+| Entrega coordinada | Entrega coordinada | Delivery scheduled | 1, 2 y 3 hechos, 4 activo |
+| Entregada | Entrega completada | Delivery completed | los cuatro hechos |
+| Cancelada | Cancelada | Cancelled | 1 hecho, ninguno activo |
 
-Por eso cada modalidad tiene dos redacciones, `principal` y `alternativa`, en
-`app/locales.py`. Cuando el domicilio va arriba, los textos son exactamente los
-del documento aprobado. Las redacciones para el caso contrario las decidió el
-cliente, y respetan el voseo argentino.
+El nombre interno y el que lee el cliente no siempre coinciden: `delivered` es
+«Entregada» en el panel y «Entrega completada» en la pastilla del documento.
 
-Los campos «Texto de la modalidad» y «Texto de la alternativa» del editor
-sustituyen a las dos en una factura concreta; vacíos, se usa el texto que
-corresponda.
+Los cuatro pasos de la barra conservan los nombres del documento aprobado. El
+tercero se llama «Documentación y trámites», que es justo lo que empieza cuando
+el pago queda validado.
 
-### Vista previa
+### El vehículo se compromete al validar el pago
+
+`COMMITTED_STATUSES` empieza en «Pago validado». Generar o enviar una
+pre-factura no compromete el coche: pueden convivir varias pre-facturas del
+mismo VIN para varios interesados, que es exactamente el caso que se pidió.
+
+### Vista previa### Vista previa
 
 `/facturas/{id}/vista-previa` enseña el documento dentro de un iframe que apunta
 a `/facturas/{id}/documento`, que es la misma URL que se imprime y la que usará
@@ -412,7 +418,7 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**258 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**274 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -427,12 +433,12 @@ anterior, para que los recuentos por VIN sigan significando algo.
   heredar los datos del cliente original, que use la cuenta bancaria vigente y no la del original, que la
   factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
   cuente lo que tiene que contar.
-- **Fase C · 61.** Con navegador: que la vista previa enseñe el documento real
+- **Fase C · 66.** Con navegador: que la vista previa enseñe el documento real
   y no una imitación, que el CSS aprobado se cargue de verdad, que el del panel
   no se cuele dentro, que lo que se escribe en el editor salga en la factura,
   que el zoom no re-maquete el documento, que cambiar de mercado cambie de
   plantilla y de formatos, y que el documento no cambie con el tema del panel.
-- **Plantillas · 70.** Sin navegador: el motor. Incluye la comprobación de que
+- **Plantillas · 81.** Sin navegador: el motor. Incluye la comprobación de que
   el documento generado con los datos de la versión aprobada es idéntico byte a
   byte al archivo aprobado, en los tres mercados.
 - **Folios · 11.** El contador, el salto cuando un folio ya está ocupado y el

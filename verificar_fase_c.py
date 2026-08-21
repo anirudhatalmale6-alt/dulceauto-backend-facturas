@@ -249,17 +249,30 @@ with sync_playwright() as p:
     page.screenshot(path=f"{SHOTS}/c3-completa.png")
 
     # -------------------------------------------------------------------------
-    print("\n9 · Generar el PDF no adelanta lo que ve el cliente")
-    page.goto(f"{BASE}/facturas/{factura_id}/editar")
-    elegir(page, "status", "generated")
-    page.click('button[type="submit"]:not([name])')
-    page.goto(f"{BASE}/facturas/{factura_id}/documento")
-    check("el documento sigue diciendo pago pendiente",
-          "PAGO PENDIENTE" in page.locator(".status-pill").inner_text())
-    check("y la barra no se adelanta",
-          (page.locator('[data-step="3"]').get_attribute("class") or "").strip() == "step")
+    print("\n9 · El recorrido de estados llega hasta el final")
+    for estado, esperado, pastilla in [
+        ("payment_validated", ["done", "done", "active", "-"], "PAGO VALIDADO"),
+        ("delivery_scheduled", ["done", "done", "done", "active"], "ENTREGA COORDINADA"),
+        ("delivered", ["done", "done", "done", "done"], "ENTREGA COMPLETADA"),
+    ]:
+        page.goto(f"{BASE}/facturas/{factura_id}/editar")
+        elegir(page, "status", estado)
+        page.click('button[type="submit"]:not([name])')
+        page.goto(f"{BASE}/facturas/{factura_id}/documento")
+        barra = [
+            (page.locator(f'[data-step="{n}"]').get_attribute("class") or "")
+            .replace("step", "").strip() or "-"
+            for n in (1, 2, 3, 4)
+        ]
+        check(f"{estado}: la barra avanza donde toca", barra == esperado, barra)
+        check(f"{estado}: la pastilla lo dice",
+              pastilla in page.locator(".status-pill").inner_text().upper(),
+              page.locator(".status-pill").inner_text())
+    # El nombre del tercer paso es el del documento aprobado y no se toca.
+    check("el paso 3 conserva su nombre aprobado",
+          "Documentación y trámites" in page.locator('[data-step="3"]').inner_text(),
+          page.locator('[data-step="3"]').inner_text())
 
-    # -------------------------------------------------------------------------
     print("\n10 · La pantalla de Plantillas enseña lo que hay de verdad")
     page.goto(f"{BASE}/plantillas")
     check("las tres plantillas siguen ahi", page.locator(".template").count() == 3)

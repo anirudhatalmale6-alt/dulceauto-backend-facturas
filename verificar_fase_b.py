@@ -241,7 +241,7 @@ with sync_playwright() as p:
     # Igual que con el folio: que la pantalla no lo ofrezca no basta.
     page.request.post(
         f"{BASE}/facturas/{id_a}/duplicar",
-        form={"customer_name": "Estado forzado", "status": "generated"},
+        form={"customer_name": "Estado forzado", "status": "payment_validated"},
     )
     page.goto(f"{BASE}/facturas?q=Estado forzado")
     estado = page.locator("tbody tr:not(.empty-row) .status").first.inner_text()
@@ -313,9 +313,11 @@ with sync_playwright() as p:
     # -------------------------------------------------------------------------
     print("\n9 · Aviso cuando el vehiculo ya tiene una factura avanzada")
     page.goto(url_a)
-    page.select_option('[name="status"]', "generated")
+    # El aviso salta desde que el pago esta validado, no por generar el PDF:
+    # varias pre-facturas del mismo coche pueden convivir sin bloquearlo.
+    page.select_option('[name="status"]', "payment_validated")
     page.click('button.btn.blue[type="submit"]')
-    check("la de origen pasa a PDF generado", valor(page, "status") == "generated")
+    check("la de origen pasa a pago validado", valor(page, "status") == "payment_validated")
 
     page.goto(url_copia)
     check(

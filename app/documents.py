@@ -51,7 +51,14 @@ from .locales import (
     get_market,
     status_text,
 )
-from .models import STATUS_CANCELLED, STATUS_DRAFT, STATUS_PENDING
+from .models import (
+    STATUS_CANCELLED,
+    STATUS_DELIVERED,
+    STATUS_DRAFT,
+    STATUS_PENDING,
+    STATUS_SCHEDULED,
+    STATUS_VALIDATED,
+)
 
 TEMPLATES_DIR = PROJECT_DIR / "templates_html"
 
@@ -348,14 +355,18 @@ def construir_atributos(invoice) -> dict[str, dict[str, str]]:
     }
 
 
-# Barra de progreso. Un documento nunca debe dar por avanzado un paso que no lo
-# esta: "PDF generado" y "Enviada" son estados internos nuestros y no significan
-# que el cliente haya pagado, asi que la barra se queda donde estaba.
+# Barra de progreso. La mueve el estado de la operacion y nada mas: generar el
+# PDF o enviarlo no la tocan, porque no significan que el cliente haya pagado.
+#
+# Los cuatro pasos son los del documento aprobado y sus nombres no se cambian.
+# El tercero se llama "Documentacion y tramites", que es justo lo que empieza
+# cuando el pago queda validado.
 PROGRESO = {
     STATUS_DRAFT: {1: "active"},
     STATUS_PENDING: {1: "done", 2: "active"},
-    "generated": {1: "done", 2: "active"},
-    "sent": {1: "done", 2: "active"},
+    STATUS_VALIDATED: {1: "done", 2: "done", 3: "active"},
+    STATUS_SCHEDULED: {1: "done", 2: "done", 3: "done", 4: "active"},
+    STATUS_DELIVERED: {1: "done", 2: "done", 3: "done", 4: "done"},
     STATUS_CANCELLED: {1: "done"},
 }
 

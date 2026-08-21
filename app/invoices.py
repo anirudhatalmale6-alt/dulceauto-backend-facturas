@@ -26,9 +26,8 @@ from sqlalchemy.orm import Session
 from .fields import DUPLICATE_CARRY_FIELDS, EDITABLE_FIELDS
 from .locales import DEFAULT_LOCALE, MARKETS, validate_account, validate_vin
 from .models import (
+    COMMITTED_STATUSES,
     STATUS_DRAFT,
-    STATUS_GENERATED,
-    STATUS_SENT,
     STATUSES,
     Invoice,
     Setting,
@@ -65,10 +64,13 @@ REQUIRED_TO_LEAVE_DRAFT = (
     ("issue_date", "la fecha de emisión"),
 )
 
-# Estados que significan que ese vehiculo ya tiene un compromiso en marcha. Se
-# usan para avisar, no para bloquear: el cliente pidio permitir varias
+# Que estados comprometen el vehiculo se declara en models.py, junto a los
+# propios estados, para que no se puedan quedar descolgados el dia que se anada
+# uno nuevo. Se importan aqui y se re-exportan porque el resto del codigo los
+# venia pidiendo a este modulo.
+#
+# Se usan para avisar, no para bloquear: el cliente pidio permitir varias
 # pre-facturas por VIN.
-COMMITTED_STATUSES = (STATUS_GENERATED, STATUS_SENT)
 
 
 # --- conversiones ------------------------------------------------------------

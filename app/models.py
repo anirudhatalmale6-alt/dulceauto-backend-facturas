@@ -40,12 +40,35 @@ from .db import Base
 
 LOCALES = ("es-MX", "en", "es-AR")
 
+# Estados de la operacion.
+#
+# Describen en que punto esta la reserva para el cliente, y nada mas. Generar el
+# PDF o enviarlo son acciones nuestras, no pasos de la operacion: viven en
+# pdf_generated_at y sent_at, y no ocupan un estado. Antes si lo hacian, y eso
+# hacia imposible saber si una factura con el PDF hecho estaba cobrada o no.
 STATUS_DRAFT = "draft"
 STATUS_PENDING = "pending"
-STATUS_GENERATED = "generated"
-STATUS_SENT = "sent"
+STATUS_VALIDATED = "payment_validated"
+STATUS_SCHEDULED = "delivery_scheduled"
+STATUS_DELIVERED = "delivered"
 STATUS_CANCELLED = "cancelled"
-STATUSES = (STATUS_DRAFT, STATUS_PENDING, STATUS_GENERATED, STATUS_SENT, STATUS_CANCELLED)
+
+# En orden, que es como se recorren. Cancelada va aparte porque no es un punto
+# del recorrido sino una salida.
+STATUS_FLOW = (
+    STATUS_DRAFT,
+    STATUS_PENDING,
+    STATUS_VALIDATED,
+    STATUS_SCHEDULED,
+    STATUS_DELIVERED,
+)
+STATUSES = STATUS_FLOW + (STATUS_CANCELLED,)
+
+# A partir de aqui el vehiculo esta comprometido de verdad. Se cuenta desde que
+# el pago esta validado, no desde que se genera o se manda el PDF: pueden
+# convivir varias pre-facturas del mismo coche para varios interesados sin que
+# ninguna lo bloquee.
+COMMITTED_STATUSES = (STATUS_VALIDATED, STATUS_SCHEDULED, STATUS_DELIVERED)
 
 CRED_ADMIN = "admin"
 CRED_MASTER = "master"
@@ -180,6 +203,12 @@ class Invoice(Base):
 
     # verification.*
     verify_url_base: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # Acciones sobre el PDF. No son estados de la operacion: una factura puede
+    # tener el PDF hecho y seguir esperando el pago. Se guardan como marcas de
+    # tiempo para poder decir *cuando* paso, que es lo que interesa.
+    pdf_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Trazabilidad de la duplicacion. Duplicar NO confirma reserva: la copia
     # nace siempre como borrador y con folio propio.

@@ -15,7 +15,7 @@ tocado sin depender de mirar capturas.
 """
 import re
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from app import documents
@@ -209,9 +209,21 @@ check("es-MX pendiente", status_text("pending", "es-MX") == "Pago pendiente")
 check("en borrador", status_text("draft", "en") == "Draft")
 check("es-AR cancelada", status_text("cancelled", "es-AR") == "Cancelada")
 
+check("es-MX pago validado", status_text("payment_validated", "es-MX") == "Pago validado")
+check("en pago validado", status_text("payment_validated", "en") == "Payment verified")
+check("en entrega coordinada", status_text("delivery_scheduled", "en") == "Delivery scheduled")
+# El estado se llama "Entregada" por dentro y "Entrega completada" en la
+# pastilla: lo decidio el cliente, porque es lo que lee el comprador.
+check("es-MX entregada se lee como entrega completada",
+      status_text("delivered", "es-MX") == "Entrega completada")
+check("en entregada", status_text("delivered", "en") == "Delivery completed")
+
 html_pendiente = documents.render(factura("es-MX", status="pending")).html
-html_generada = documents.render(factura("es-MX", status="generated")).html
 html_borrador = documents.render(factura("es-MX", status="draft")).html
+html_validado = documents.render(factura("es-MX", status="payment_validated")).html
+html_coordinada = documents.render(factura("es-MX", status="delivery_scheduled")).html
+html_entregada = documents.render(factura("es-MX", status="delivered")).html
+html_cancelada = documents.render(factura("es-MX", status="cancelled")).html
 
 
 def clase_paso(html, paso):
@@ -219,15 +231,39 @@ def clase_paso(html, paso):
     return m.group(1) if m else "?"
 
 
-check("pendiente: paso 1 hecho y paso 2 activo",
-      clase_paso(html_pendiente, 1) == "step done" and clase_paso(html_pendiente, 2) == "step active")
-check("borrador: solo el paso 1 activo",
-      clase_paso(html_borrador, 1) == "step active" and clase_paso(html_borrador, 2) == "step")
-# Un documento no puede dar por avanzado un paso que no lo esta: generar el PDF
-# es cosa nuestra, no significa que el cliente haya pagado.
-check("generar el PDF no adelanta la barra de progreso",
-      clase_paso(html_generada, 2) == "step active" and clase_paso(html_generada, 3) == "step")
-check("y tampoco cambia lo que el cliente lee", ">Pago pendiente<" in html_generada)
+def barra(html):
+    return [clase_paso(html, n).replace("step", "").strip() or "-" for n in (1, 2, 3, 4)]
+
+
+check("borrador: solo el paso 1 activo", barra(html_borrador) == ["active", "-", "-", "-"],
+      barra(html_borrador))
+check("pago pendiente: 1 hecho, 2 activo", barra(html_pendiente) == ["done", "active", "-", "-"],
+      barra(html_pendiente))
+check("pago validado: 1 y 2 hechos, 3 activo",
+      barra(html_validado) == ["done", "done", "active", "-"], barra(html_validado))
+check("entrega coordinada: 1, 2 y 3 hechos, 4 activo",
+      barra(html_coordinada) == ["done", "done", "done", "active"], barra(html_coordinada))
+check("entregada: los cuatro hechos",
+      barra(html_entregada) == ["done", "done", "done", "done"], barra(html_entregada))
+check("cancelada: 1 hecho y ninguno activo",
+      barra(html_cancelada) == ["done", "-", "-", "-"], barra(html_cancelada))
+
+# El paso 3 conserva el nombre del documento aprobado. El cliente pidio
+# expresamente no cambiarlo por "Pago validado".
+check("el paso 3 sigue llamandose como en el documento aprobado",
+      "Documentación y trámites" in html_validado)
+
+# Generar el PDF o enviarlo son acciones nuestras: no son estados y no pueden
+# mover la barra ni cambiar lo que lee el cliente.
+con_pdf = documents.render(
+    factura("es-MX", status="pending",
+            pdf_generated_at=datetime(2026, 8, 21, 10, 0),
+            sent_at=datetime(2026, 8, 21, 10, 5))
+).html
+check("generar y enviar el PDF no mueven la barra", barra(con_pdf) == barra(html_pendiente),
+      barra(con_pdf))
+check("ni cambian lo que lee el cliente", ">Pago pendiente<" in con_pdf)
+check("el documento sale igual con PDF hecho que sin el", con_pdf == html_pendiente)
 check("el borrador se dice, no se disimula", ">Borrador<" in html_borrador)
 
 

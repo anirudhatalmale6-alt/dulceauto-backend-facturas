@@ -28,10 +28,11 @@ from .locales import DELIVERY_MODES, MARKETS, delivery_label, format_amount, get
 from .models import (
     CRED_ADMIN,
     CRED_MASTER,
+    STATUS_DELIVERED,
     STATUS_DRAFT,
-    STATUS_GENERATED,
     STATUS_PENDING,
-    STATUS_SENT,
+    STATUS_SCHEDULED,
+    STATUS_VALIDATED,
     ActivityLog,
     Credential,
     Invoice,
@@ -86,11 +87,14 @@ NAV_ITEMS = [
     {"key": "settings", "label": "Configuración", "icon": "⚙", "url": "/configuracion"},
 ]
 
+# Nombre del estado en el panel. El del documento es otro y vive en locales.py:
+# "delivered" aqui es "Entregada" y en la factura "Entrega completada".
 STATUS_LABELS = {
     STATUS_DRAFT: ("Borrador", "muted"),
     STATUS_PENDING: ("Pago pendiente", "pending"),
-    STATUS_GENERATED: ("PDF generado", "generated"),
-    STATUS_SENT: ("Enviada", "generated"),
+    STATUS_VALIDATED: ("Pago validado", "generated"),
+    STATUS_SCHEDULED: ("Entrega coordinada", "generated"),
+    STATUS_DELIVERED: ("Entregada", "generated"),
     "cancelled": ("Cancelada", "muted"),
 }
 
