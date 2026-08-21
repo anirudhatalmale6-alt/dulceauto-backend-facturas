@@ -221,6 +221,13 @@ def _market_value(db: Session, market: str, key: str) -> str | None:
 
 
 def seed_invoices(db: Session) -> None:
+    # La condicion de abajo -"si no hay ninguna factura, siembra"- no distingue
+    # entre una base recien creada y una base vaciada a proposito. En un
+    # sistema en produccion la segunda es justo la situacion normal: se limpia
+    # para empezar de cero y, al arrancar, volverian tres facturas de muestra.
+    # Por eso hace falta ademas el permiso explicito del entorno.
+    if not settings.seed_demo_invoices:
+        return
     if db.execute(select(Invoice.id).limit(1)).scalar_one_or_none() is not None:
         return
     for data in SAMPLE_INVOICES:

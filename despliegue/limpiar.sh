@@ -163,3 +163,27 @@ cat <<FIN
       ${ANTES}
 
 FIN
+
+# Comprobacion final, despues de arrancar. No basta con contar las filas justo
+# despues de borrarlas: lo que importa es como queda la base con la aplicacion
+# ya en marcha, porque el arranque puede volver a escribir en ella.
+#
+# Aqui paso de verdad: la siembra inicial recreaba tres facturas de muestra
+# cada vez que la tabla quedaba vacia, y el guion daba la limpieza por buena
+# mientras las contaba en pantalla. Si vuelve a pasar, esto tiene que fallar.
+QUEDAN=$(docker compose exec -T backend python -c \
+  "import sqlite3; print(sqlite3.connect('data/dulceauto.db').execute('select count(*) from invoice').fetchone()[0])" \
+  | tr -d '\r')
+
+if [ "$QUEDAN" != "0" ]; then
+  echo
+  echo "FALLA: tras arrancar quedan ${QUEDAN} facturas en la base."
+  echo "       La limpieza no ha servido: algo las esta recreando al arrancar."
+  echo "       Revisar SEED_DEMO_INVOICES en el archivo .env (tiene que estar"
+  echo "       en false o no estar) y volver a ejecutar."
+  echo "       La copia de antes de limpiar sigue en: ${ANTES}"
+  exit 1
+fi
+
+echo "  Comprobado tras arrancar: 0 facturas. La limpieza ha quedado firme."
+echo

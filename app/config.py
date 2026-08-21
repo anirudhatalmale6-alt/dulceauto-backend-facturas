@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     # arrancaria sesion. Es la unica diferencia entre los dos entornos.
     https_only: bool = False
 
+    # Las tres facturas de muestra. Solo sirven en desarrollo, para que el
+    # panel no arranque vacio y las comprobaciones automaticas tengan con que
+    # trabajar.
+    #
+    # Por defecto van APAGADAS, y eso es deliberado: la siembra se dispara
+    # cada vez que la tabla de facturas queda vacia, no solo la primera vez.
+    # Con esto encendido, limpiar la base de un sistema real -o reinstalarlo
+    # desde cero- devolveria tres facturas inventadas, con datos bancarios de
+    # muestra y con folios de la numeracion antigua, al panel de produccion.
+    seed_demo_invoices: bool = False
+
     # Credenciales iniciales. Solo se usan para sembrar la base la primera
     # vez; despues viven hasheadas en la tabla credential y se cambian desde
     # el panel. Nunca se comparan contra estos valores en caliente.
