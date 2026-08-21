@@ -42,7 +42,7 @@ log() { printf "\n\033[1;34m==> %s\033[0m\n" "$*"; }
 cd "$PROYECTO"
 
 contar() {
-  docker compose exec -T backend python - "$1" <<'PY'
+  docker compose exec -T backend python - <<'PY'
 import sqlite3, sys
 c = sqlite3.connect("data/dulceauto.db")
 q = lambda s: c.execute(s).fetchone()[0]
