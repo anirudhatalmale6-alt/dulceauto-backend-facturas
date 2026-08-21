@@ -88,6 +88,7 @@ backend/
 │   ├── invoices.py      crear, editar, duplicar, agrupar por VIN
 │   ├── documents.py     motor de plantillas ← rellena las 3 aprobadas
 │   ├── pdf.py           PDF A4 y copia congelada
+│   ├── codes.py         QR y codigo de barras en SVG
 │   ├── models.py        modelo de datos definitivo
 │   ├── fields.py        claves fijas ← contrato con las plantillas
 │   │                    y qué se copia al duplicar
@@ -107,6 +108,7 @@ backend/
 ├── verificar_fase_c.py     vista previa real y plantillas en el navegador
 ├── verificar_fase_d.py     PDF desde el panel
 ├── verificar_pdf.py        motor de PDF y snapshot (sin servidor)
+├── verificar_codigos.py    QR y codigo de barras, leidos con un lector real
 ├── verificar_plantillas.py el motor de plantillas (sin servidor)
 ├── verificar_folios.py     contador y choque de folios (sin servidor)
 └── verificar_datos.py      importes, CLABE, CBU y VIN (sin servidor)
@@ -307,6 +309,13 @@ cientos de megas mientras imprime; diez peticiones a la vez levantarían diez
 Chromium. Con el cerrojo son diez PDF seguidos: más lento, pero el servidor no
 se cae.
 
+**QR y código de barras de verdad.** El QR lleva el enlace de verificación de
+esa factura y el código de barras es un Code 128-B de su folio, los dos dibujados
+como SVG para que se impriman nítidos a cualquier tamaño. Se escriben dentro del
+snapshot con los mismos nombres de archivo del diseño aprobado, así que la copia
+congelada sigue abriéndose sola en cualquier navegador. En el panel se sirven al
+vuelo desde `/facturas/{id}/codigo-qr.svg` y `/codigo-barras.svg`.
+
 **Generar el PDF no mueve la operación.** Queda en `pdf_generated_at` y en
 Actividad. Un borrador no se imprime.
 
@@ -486,11 +495,12 @@ python3 verificar_fase_c.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_d.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_plantillas.py
 python3 verificar_pdf.py
+python3 verificar_codigos.py
 python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**368 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**386 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -524,6 +534,10 @@ anterior, para que los recuentos por VIN sigan significando algo.
 - **PDF · 48.** Sin navegador, generando PDF de verdad: A4, una página, la copia
   congelada completa (incluidas las tipografías) y la escala recalculada por
   factura.
+- **Códigos · 18.** El QR y el código de barras, **leídos con un lector de
+  verdad**: del SVG del snapshot y de la página del PDF ya impreso, a 200 y a
+  300 ppp. Un código mal generado se ve perfecto y no lo lee nadie. Necesita
+  `pyzbar` y `pdftoppm`, que solo hacen falta para comprobar.
 - **Datos · 20.** Formatos de importe y dígitos de control de CLABE, CBU y VIN.
   También sin servidor.
 

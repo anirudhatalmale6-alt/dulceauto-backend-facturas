@@ -349,17 +349,36 @@ def _url_verificacion(invoice) -> str:
     return base if base.endswith(invoice.folio or "") else base.rstrip("/") + "/" + (invoice.folio or "")
 
 
-def construir_atributos(invoice) -> dict[str, dict[str, str]]:
-    """Atributos que dependen de la factura. Son pocos y estan todos aqui."""
+def construir_atributos(invoice, codigos: str | None = None) -> dict[str, dict[str, str]]:
+    """Atributos que dependen de la factura. Son pocos y estan todos aqui.
+
+    codigos="panel" hace que el QR y el codigo de barras apunten a las rutas que
+    los generan al vuelo. Sin ese argumento se dejan las rutas que trae la
+    plantilla, que es lo que quiere el snapshot: alli los dos archivos se
+    escriben en su sitio con el mismo nombre, de modo que la copia congelada
+    sigue siendo una carpeta que se abre sola.
+    """
     locale = invoice.locale or "es-MX"
     folio = invoice.folio or ""
+    fuentes = {}
+    if codigos == "panel":
+        fuentes = {
+            "codigo_qr": {"src": f"/facturas/{invoice.id}/codigo-qr.svg"},
+            "codigo_barras": {"src": f"/facturas/{invoice.id}/codigo-barras.svg"},
+        }
     return {
         "url_verificacion": {
             "href": _url_verificacion(invoice),
             "aria-label": doc_text(locale, "aria_verificar").format(folio=folio),
         },
-        "codigo_barras": {"alt": doc_text(locale, "alt_barras").format(folio=folio)},
-        "codigo_qr": {"alt": doc_text(locale, "alt_qr").format(folio=folio)},
+        "codigo_barras": {
+            "alt": doc_text(locale, "alt_barras").format(folio=folio),
+            **fuentes.get("codigo_barras", {}),
+        },
+        "codigo_qr": {
+            "alt": doc_text(locale, "alt_qr").format(folio=folio),
+            **fuentes.get("codigo_qr", {}),
+        },
     }
 
 
@@ -417,12 +436,12 @@ class Documento:
     vacios: list[str]
 
 
-def render(invoice, *, assets: str = ASSETS_PANEL) -> Documento:
+def render(invoice, *, assets: str = ASSETS_PANEL, codigos: str | None = None) -> Documento:
     """Documento de una factura, listo para enseñar o para imprimir."""
     locale = invoice.locale or "es-MX"
     plantilla = cargar(locale)
     valores = construir_valores(invoice)
-    atributos = construir_atributos(invoice)
+    atributos = construir_atributos(invoice, codigos)
     vacios: list[str] = []
     # Un hueco que desaparece cuando esta vacio no es un dato que falte: el
     # descuento no existe en la mayoria de las operaciones.

@@ -120,6 +120,30 @@ def _copiar_assets(html: str, destino: Path) -> int:
     return copiados
 
 
+def _escribir_codigos(invoice: Invoice, destino: Path) -> None:
+    """Escribe el QR y el codigo de barras de ESTA factura sobre las copias que
+    se acaban de traer de la plantilla.
+
+    Se conservan los nombres de archivo del diseno aprobado a proposito: asi el
+    documento del snapshot no necesita que se le cambie ninguna ruta y la
+    carpeta se sigue abriendo sola en cualquier navegador.
+    """
+    from . import codes
+
+    qr = destino / "img/reservation-qr.svg"
+    barras = destino / "img/reservation-barcode.svg"
+    if qr.parent.exists():
+        qr.write_text(codes.qr_svg(_url_verificacion(invoice)), encoding="utf-8")
+        barras.write_text(codes.barcode_svg(invoice.folio or ""), encoding="utf-8")
+
+
+def _url_verificacion(invoice: Invoice) -> str:
+    base = (invoice.verify_url_base or "").strip()
+    if not base:
+        return ""
+    return base.rstrip("/") + "/" + (invoice.folio or "")
+
+
 def _siguiente_version(db: Session, invoice_id: int) -> int:
     actual = db.execute(
         select(func.max(InvoiceSnapshot.version)).where(InvoiceSnapshot.invoice_id == invoice_id)
@@ -219,6 +243,7 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
     html_path = carpeta / "documento.html"
     html_path.write_text(documento.html, encoding="utf-8")
     copiados = _copiar_assets(documento.html, carpeta / "assets")
+    _escribir_codigos(invoice, carpeta / "assets")
 
     pdf_path = carpeta / f"{invoice.folio}.pdf"
 

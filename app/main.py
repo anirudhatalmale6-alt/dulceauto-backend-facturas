@@ -11,7 +11,7 @@ cableadas, la pantalla lo dice con una etiqueta en lugar de ofrecer un boton que
 no hace nada.
 """
 from fastapi import Depends, FastAPI, Form, Request, status
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import activity as act
+from . import codes
 from . import documents as doc_engine
 from . import invoices as inv_service
 from . import pdf as pdf_engine
@@ -533,7 +534,37 @@ def invoice_document(request: Request, invoice_id: int, db: Session = Depends(ge
     if invoice is None:
         flash(request, "Esa factura ya no existe.", "error")
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
-    return HTMLResponse(doc_engine.render(invoice).html)
+    return HTMLResponse(doc_engine.render(invoice, codigos="panel").html)
+
+
+@app.get("/facturas/{invoice_id}/codigo-qr.svg")
+def invoice_qr(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    """QR de verificacion de esa factura, dibujado al vuelo.
+
+    Se sirve como SVG y no como imagen: en el PDF se imprime nitido a cualquier
+    tamano, y un lector de codigos no se atraganta con los bordes.
+    """
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        return Response(status_code=404)
+    base = (invoice.verify_url_base or "").strip()
+    url = base.rstrip("/") + "/" + (invoice.folio or "") if base else ""
+    return Response(codes.qr_svg(url), media_type="image/svg+xml")
+
+
+@app.get("/facturas/{invoice_id}/codigo-barras.svg")
+def invoice_barcode(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    """Code 128-B del folio."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        return Response(status_code=404)
+    return Response(codes.barcode_svg(invoice.folio or ""), media_type="image/svg+xml")
 
 
 @app.get("/facturas/{invoice_id}/vista-previa", response_class=HTMLResponse)
