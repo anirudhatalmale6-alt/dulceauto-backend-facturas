@@ -77,8 +77,13 @@ def get_market(locale: str | None) -> Market:
     return MARKETS.get(locale or "", MARKETS[DEFAULT_LOCALE])
 
 
-def format_amount(value, locale: str, with_currency: bool = True) -> str:
-    """329000 -> '$329,000.00 MXN' en Mexico y '$329.000,00 ARS' en Argentina."""
+def format_amount(value, locale: str, with_currency: bool = True, currency: str | None = None) -> str:
+    """329000 -> '$329,000.00 MXN' en Mexico y '$329.000,00 ARS' en Argentina.
+
+    La moneda se puede forzar: la factura guarda la suya y manda sobre la del
+    mercado, porque una operacion firmada en pesos mexicanos sigue siendo en
+    pesos mexicanos aunque manana se cambie el mercado por defecto.
+    """
     if value is None:
         return ""
     market = get_market(locale)
@@ -101,7 +106,188 @@ def format_amount(value, locale: str, with_currency: bool = True) -> str:
     if negativo:
         texto = "-" + texto
     texto = "$" + texto
-    return f"{texto} {market.currency}" if with_currency else texto
+    return f"{texto} {currency or market.currency}" if with_currency else texto
+
+
+# --- fechas ------------------------------------------------------------------
+#
+# Los nombres de los meses van escritos aqui y no se piden al sistema. El
+# formato de strftime depende del "locale" instalado en la maquina, y una
+# maquina sin el idioma configurado devuelve los meses en ingles sin avisar: la
+# factura mexicana saldria con "July" el dia que el servidor cambie de sitio.
+
+MESES = {
+    "es": (
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    ),
+    "en": (
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ),
+}
+
+MESES_CORTOS = {
+    "es": ("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"),
+    "en": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+}
+
+
+def _idioma(locale: str) -> str:
+    return "en" if get_market(locale).code == "en" else "es"
+
+
+def format_date_short(value, locale: str) -> str:
+    """'22 Jul 2026'. Es el formato de la cabecera en las tres plantillas."""
+    if not value:
+        return ""
+    return f"{value.day} {MESES_CORTOS[_idioma(locale)][value.month - 1]} {value.year}"
+
+
+def format_date_long(value, locale: str) -> str:
+    """'27 de julio de 2026' en espanol y '27 July 2026' en ingles. Es el
+    formato de la fecha de entrega."""
+    if not value:
+        return ""
+    idioma = _idioma(locale)
+    mes = MESES[idioma][value.month - 1]
+    if idioma == "en":
+        return f"{value.day} {mes} {value.year}"
+    return f"{value.day} de {mes} de {value.year}"
+
+
+def format_date_numeric(value) -> str:
+    """'29/07/2026'. Es el formato de la vigencia, igual en los tres mercados."""
+    if not value:
+        return ""
+    return f"{value.day:02d}/{value.month:02d}/{value.year}"
+
+
+# --- textos del documento ----------------------------------------------------
+#
+# Lo que el documento dice y depende del idioma. Las frases largas estan copiadas
+# literalmente de las tres plantillas aprobadas: si el motor pone un texto por
+# defecto, tiene que ser exactamente el que se aprobo, ni una coma distinta.
+
+DOC_TEXTS = {
+    "es-MX": {
+        "incluido": "Incluido",
+        "aria_verificar": "Verificar la reserva {folio}",
+        "alt_barras": "Código de barras del folio {folio}",
+        "alt_qr": "Código QR para verificar la reserva {folio}",
+    },
+    "en": {
+        "incluido": "Included",
+        "aria_verificar": "Verify reservation {folio}",
+        "alt_barras": "Barcode for reference {folio}",
+        "alt_qr": "QR code to verify reservation {folio}",
+    },
+    "es-AR": {
+        "incluido": "Incluido",
+        "aria_verificar": "Verificar la reserva {folio}",
+        "alt_barras": "Código de barras del folio {folio}",
+        "alt_qr": "Código QR para verificar la reserva {folio}",
+    },
+}
+
+
+def doc_text(locale: str, clave: str) -> str:
+    return DOC_TEXTS.get(locale, DOC_TEXTS[DEFAULT_LOCALE]).get(clave, "")
+
+
+# Estado que ve el cliente en el documento. No es el mismo que el del panel:
+# "PDF generado" y "Enviada" son estados internos de gestion y en el documento
+# se traducen a lo unico que le importa al cliente, que es si el pago sigue
+# pendiente. Un documento no debe dar por avanzado un paso que no lo esta.
+DOC_STATUS = {
+    "es-MX": {
+        "draft": "Borrador",
+        "pending": "Pago pendiente",
+        "generated": "Pago pendiente",
+        "sent": "Pago pendiente",
+        "cancelled": "Cancelada",
+    },
+    "en": {
+        "draft": "Draft",
+        "pending": "Payment pending",
+        "generated": "Payment pending",
+        "sent": "Payment pending",
+        "cancelled": "Cancelled",
+    },
+    "es-AR": {
+        "draft": "Borrador",
+        "pending": "Pago pendiente",
+        "generated": "Pago pendiente",
+        "sent": "Pago pendiente",
+        "cancelled": "Cancelada",
+    },
+}
+
+
+def status_text(status: str, locale: str) -> str:
+    tabla = DOC_STATUS.get(locale, DOC_STATUS[DEFAULT_LOCALE])
+    return tabla.get(status, tabla["pending"])
+
+
+# Modalidades de entrega. El documento aprobado enseña las dos: la elegida
+# arriba, con enlace, y la otra debajo. Los textos son los de las plantillas
+# aprobadas, palabra por palabra, incluido el voseo argentino. Lo unico que
+# decide el backend es cual de las dos va primero.
+DELIVERY_TEXTS = {
+    "es-MX": {
+        "home": {
+            "titulo": "Entrega a domicilio (transporte terrestre asegurado)",
+            "texto": "Traslado asegurado hasta el domicilio registrado.",
+        },
+        "branch": {
+            "titulo": "Entrega en una sede o concesionario cercano",
+            "texto": (
+                "También puedes solicitar la entrega en una sede o concesionario cercano, "
+                "sin cargos adicionales. La disponibilidad, ubicación y los detalles de "
+                "entrega se confirmarán durante la coordinación."
+            ),
+        },
+    },
+    "en": {
+        "home": {
+            "titulo": "Home delivery (insured ground transport)",
+            "texto": "Insured transport to the registered address.",
+        },
+        "branch": {
+            "titulo": "Delivery to a nearby branch or dealership",
+            "texto": (
+                "You may also request delivery to a nearby available branch or dealership "
+                "at no additional charge. Availability, location, and delivery details will "
+                "be confirmed during coordination."
+            ),
+        },
+    },
+    "es-AR": {
+        "home": {
+            "titulo": "Entrega a domicilio (transporte terrestre asegurado)",
+            "texto": "Traslado asegurado hasta el domicilio registrado.",
+        },
+        "branch": {
+            "titulo": "Entrega en una sede o concesionario cercano",
+            "texto": (
+                "También podés solicitar la entrega en una sede o concesionario cercano, "
+                "sin cargos adicionales. La disponibilidad, ubicación y los detalles de "
+                "entrega se confirmarán durante la coordinación."
+            ),
+        },
+    },
+}
+
+DELIVERY_MODES = ("home", "branch")
+
+
+def delivery_texts(locale: str) -> dict:
+    return DELIVERY_TEXTS.get(locale, DELIVERY_TEXTS[DEFAULT_LOCALE])
+
+
+def delivery_label(mode: str, locale: str) -> str:
+    """Nombre de la modalidad para el desplegable del editor."""
+    return delivery_texts(locale).get(mode, {}).get("titulo", mode)
 
 
 # --- validaciones bancarias --------------------------------------------------

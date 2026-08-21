@@ -26,7 +26,13 @@
           <dt>Documento</dt><dd>{{ t.market.document_label }}</dd>
           <dt>Formato</dt><dd>{{ money(329000, t.market.code, false) }}</dd>
           <dt>Facturas</dt><dd>{{ t.count }}</dd>
+          <dt>Huecos</dt><dd>{{ t.huecos }} campos marcados</dd>
         </dl>
+        {% if t.count %}
+          <a class="btn ghost" href="/plantillas/{{ t.market.code }}/documento">Ver vista previa</a>
+        {% else %}
+          <span class="small muted">Sin facturas de este mercado todavía.</span>
+        {% endif %}
       </div>
     {% endfor %}
   </div>
@@ -50,10 +56,40 @@
   </div>
 </div>
 
+<div class="card" style="margin-top:16px">
+  <h3>Huecos marcados en la plantilla</h3>
+  <p class="muted small">
+    Estos son los campos que el motor sustituye, leídos del propio archivo. Todo
+    lo demás del documento (textos legales, FAQ, protección, maquetación) es fijo
+    y el backend no lo toca.
+  </p>
+  <div class="key-grid" style="margin-top:12px">
+    {% for h in huecos %}
+      <div class="key"><code>{{ h }}</code><br>{{ etiquetas.get(h, '—') }}</div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if sin_hueco %}
+<div class="card" style="margin-top:16px">
+  <h3>Claves que no llegan al documento</h3>
+  <p class="muted small">
+    Se escriben aquí a propósito. Un campo que se puede rellenar en el editor y
+    que después no aparece en el papel es exactamente el tipo de cosa que hay
+    que tener por escrito y no descubrir al imprimir.
+  </p>
+  <div class="arch-list" style="margin-top:12px">
+    {% for clave, motivo in sin_hueco %}
+      <div class="arch-row"><div class="dot">·</div><div><b><code>{{ clave }}</code></b><div class="small muted">{{ motivo }}</div></div></div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="devnote" style="margin-top:16px">
-  <b>Fase A.</b> Esta pantalla comprueba de verdad que los tres archivos
-  aprobados estén en su sitio y muestra su tamaño real: no dice “Activa” por
-  costumbre. La vista previa y la generación llegan en las fases C y D.
+  <b>Fase C.</b> Las tres plantillas están cableadas a las claves fijas y la
+  vista previa enseña el documento real, no una imitación dentro del panel. La
+  generación del PDF A4 es la Fase D.
 </div>
 
 {% endblock %}

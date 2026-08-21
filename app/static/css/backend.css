@@ -161,3 +161,47 @@ body.theme-night .locked-panel input { background: #0b1420; border-color: rgba(2
 body.theme-soft .alert,
 body.theme-soft .locked-panel,
 body.theme-soft .login-card { background: var(--cream2); }
+
+/* --- vista previa con la plantilla real (Fase C) ---
+
+   El iframe se pinta siempre a 900 px, que es el ancho para el que esta hecha
+   la pagina A4, y se reduce con transform: scale(). Estrechar el iframe seria
+   mas facil, pero el CSS aprobado tiene puntos de ruptura para movil y el
+   documento cambiaria de maquetacion: la vista previa dejaria de enseñar lo
+   que se va a imprimir. */
+.preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.preview-bar .btn.is-on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+.preview-stage {
+  margin-top: 14px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #b9bcc4;
+  padding: 14px;
+  display: flex;
+  justify-content: center;
+}
+.preview-page {
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(12, 22, 40, .22);
+  background: #fff;
+  flex: none;
+}
+.preview-frame {
+  border: 0;
+  display: block;
+  transform-origin: top left;
+  background: #fff;
+}
+body.theme-night .preview-stage { background: #0b1420; border-color: #2a3a50; }
+body.theme-soft .preview-stage { background: #cfc9bd; }

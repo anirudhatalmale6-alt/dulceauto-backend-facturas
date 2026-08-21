@@ -65,7 +65,7 @@
         </div>
         <div class="invoice-meta">
           <h1>Vehicle Reservation Proforma Invoice</h1>
-          <img class="barcode" data-field="codigo_barras" src="../assets/img/reservation-barcode.svg" alt="Barcode for reference RES-87241">
+          <img class="barcode" src="../assets/img/reservation-barcode.svg" alt="Barcode for reference RES-87241">
           <div class="meta-row">
             <span>Reference: <strong data-field="folio">RES-87241</strong></span>
             <span>Date: <strong data-field="fecha_emision">22 Jul 2026</strong></span>
@@ -85,10 +85,10 @@
             <span class="delivery-date"><strong><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Delivery</strong> - <span data-field="fecha_entrega">27 July 2026</span></span>
           </div>
           <div class="progress" aria-label="Pre-reservation progress">
-            <div class="step done" data-step="1"><div class="step-track"><span class="step-line"></span><span class="step-dot"></span></div><div class="step-label">Pre-reservation confirmed</div></div>
-            <div class="step active" data-step="2"><div class="step-track"><span class="step-line"></span><span class="step-dot">2</span></div><div class="step-label">Payment pending</div></div>
-            <div class="step" data-step="3"><div class="step-track"><span class="step-line"></span><span class="step-dot">3</span></div><div class="step-label">Documentation &amp; processing</div></div>
-            <div class="step" data-step="4"><div class="step-track"><span class="step-line"></span><span class="step-dot">4</span></div><div class="step-label">Delivery coordinated</div></div>
+            <div class="step done"><div class="step-track"><span class="step-line"></span><span class="step-dot"></span></div><div class="step-label">Pre-reservation confirmed</div></div>
+            <div class="step active"><div class="step-track"><span class="step-line"></span><span class="step-dot">2</span></div><div class="step-label">Payment pending</div></div>
+            <div class="step"><div class="step-track"><span class="step-line"></span><span class="step-dot">3</span></div><div class="step-label">Documentation &amp; processing</div></div>
+            <div class="step"><div class="step-track"><span class="step-line"></span><span class="step-dot">4</span></div><div class="step-label">Delivery coordinated</div></div>
           </div>
         </section>
 
@@ -153,12 +153,12 @@
             <div class="vehicle-body">
               <div>
                 <p><strong><svg class="icon" aria-hidden="true"><use href="#i-truck"></use></svg> Delivery method</strong></p>
-                <p><a href="#" data-field="entrega_modalidad">Home delivery (insured ground transport)</a></p>
-                <p data-field="entrega_texto">Insured transport to the registered address.</p>
+                <p><a href="#">Home delivery (insured ground transport)</a></p>
+                <p>Insured transport to the registered address.</p>
               </div>
               <div>
-                <p><strong data-field="entrega_alternativa">Delivery to a nearby branch or dealership</strong></p>
-                <p data-field="entrega_alternativa_texto">You may also request delivery to a nearby available branch or dealership at no additional charge. Availability, location, and delivery details will be confirmed during coordination.</p>
+                <p><strong>Delivery to a nearby branch or dealership</strong></p>
+                <p>You may also request delivery to a nearby available branch or dealership at no additional charge. Availability, location, and delivery details will be confirmed during coordination.</p>
               </div>
               <p class="terms">If the vehicle does not match the information shown on this proforma invoice, the applicable cancellation terms will apply.</p>
             </div>
@@ -177,15 +177,15 @@
           <div class="operation">
             <div class="payment-heading">
               <div class="title-row"><span class="line-icon"><svg class="icon" aria-hidden="true"><use href="#i-receipt"></use></svg></span><h3 class="section-title">Transaction summary</h3></div>
-              <span class="discount-pill" data-hide-if-empty="descuento"><svg class="icon" aria-hidden="true"><use href="#i-tag"></use></svg> <span data-field="descuento">9% DISCOUNT APPLIED</span></span>
+              <span class="discount-pill"><svg class="icon" aria-hidden="true"><use href="#i-tag"></use></svg> <span data-field="descuento">9% DISCOUNT APPLIED</span></span>
             </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Description</th><th>Quantity</th><th>Amount</th></tr></thead>
                 <tbody>
                   <tr><td data-field="vehiculo">2015 Audi A3 1.8T S Line Convertible AT</td><td>1</td><td data-field="precio_vehiculo">$329,000.00 MXN</td></tr>
-                  <tr><td><svg class="icon included" aria-hidden="true"><use href="#i-shield"></use></svg>Comprehensive coverage</td><td>-</td><td class="included" data-field="cobertura">Included</td></tr>
-                  <tr><td><svg class="icon" style="color:var(--blue)" aria-hidden="true"><use href="#i-truck"></use></svg>Ground transport</td><td>1</td><td data-field="transporte">Included</td></tr>
+                  <tr><td><svg class="icon included" aria-hidden="true"><use href="#i-shield"></use></svg>Comprehensive coverage</td><td>-</td><td class="included">Included</td></tr>
+                  <tr><td><svg class="icon" style="color:var(--blue)" aria-hidden="true"><use href="#i-truck"></use></svg>Ground transport</td><td>1</td><td>Included</td></tr>
                 </tbody>
               </table>
             </div>
@@ -268,14 +268,14 @@
             <span class="qr-caption">Scan to verify</span>
             <!-- Al cambiar el destino, regenerar también assets/img/reservation-qr.svg -->
             <a class="qr-link" href="https://dulceauto.mx/verificar/RES-87241" data-field="url_verificacion" aria-label="Verify reservation RES-87241">
-              <img class="qr-code" data-field="codigo_qr" src="../assets/img/reservation-qr.svg" alt="QR code to verify reservation RES-87241">
+              <img class="qr-code" src="../assets/img/reservation-qr.svg" alt="QR code to verify reservation RES-87241">
             </a>
           </div>
 
           <div class="card agent-card">
             <div class="agent-head">
               <span class="avatar" data-field="agente_iniciales">YC</span>
-              <div><small>Your assigned representative</small><h4 data-field="agente_nombre">Yoselina de la Cruz</h4><small data-field="agente_cargo">Operations representative</small></div>
+              <div><small>Your assigned representative</small><h4 data-field="agente_nombre">Yoselina de la Cruz</h4><small>Operations representative</small></div>
             </div>
             <div class="contact-list">
               <span><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span data-field="agente_horario">Monday to Friday, 8:00 a.m.–4:00 p.m.</span></span>

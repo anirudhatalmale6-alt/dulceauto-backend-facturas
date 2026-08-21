@@ -15,7 +15,7 @@ tocado sus estilos.
 |------|-----------|--------|
 | **A** | Base del proyecto, acceso, Master Password, modelo de datos, panel con las 6 vistas y los 3 modos visuales | **Entregada** |
 | **B** | Crear, editar, borrador, buscar, duplicar, agrupación por VIN | **Entregada** |
-| C | Motor de plantillas, claves fijas en las 3 plantillas, vista previa real, validaciones | Pendiente |
+| **C** | Motor de plantillas, claves fijas en las 3 plantillas, reglas por mercado, vista previa real | **Entregada** |
 | D | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | Pendiente |
 
 Donde una acción todavía no está cableada, la pantalla lo indica con una
@@ -86,6 +86,7 @@ backend/
 ├── app/
 │   ├── main.py          rutas y vistas
 │   ├── invoices.py      crear, editar, duplicar, agrupar por VIN
+│   ├── documents.py     motor de plantillas ← rellena las 3 aprobadas
 │   ├── models.py        modelo de datos definitivo
 │   ├── fields.py        claves fijas ← contrato con las plantillas
 │   │                    y qué se copia al duplicar
@@ -96,12 +97,16 @@ backend/
 │   ├── templates/       panel (Jinja2)
 │   └── static/          CSS y JS del panel
 ├── templates_html/      LAS TRES PLANTILLAS APROBADAS (no tocar la maquetación)
+│   ├── aprobado-original/  copia intacta, para poder comparar contra ella
+│   └── marcar_campos.py    qué atributos se les añadieron, y solo atributos
 ├── alembic/             migraciones de base de datos
 ├── data/                base de datos, fotos y snapshots (volumen)
-├── verificar_fase_a.py  acceso, Master Password, vistas y temas
-├── verificar_fase_b.py  crear, editar, borrador, duplicar, VIN
-├── verificar_folios.py  contador y choque de folios (sin servidor)
-└── verificar_datos.py   importes, CLABE, CBU y VIN (sin servidor)
+├── verificar_fase_a.py     acceso, Master Password, vistas y temas
+├── verificar_fase_b.py     crear, editar, borrador, duplicar, VIN
+├── verificar_fase_c.py     vista previa real y plantillas en el navegador
+├── verificar_plantillas.py el motor de plantillas (sin servidor)
+├── verificar_folios.py     contador y choque de folios (sin servidor)
+└── verificar_datos.py      importes, CLABE, CBU y VIN (sin servidor)
 ```
 
 ---
@@ -131,6 +136,106 @@ El mapa completo está en `app/fields.py`.
 
 A partir de aquí se puede cambiar cualquier texto de la factura sin romper
 ningún idioma.
+
+---
+
+## Motor de plantillas (Fase C)
+
+`app/documents.py` coge una factura y una de las tres plantillas aprobadas y
+devuelve el documento con los datos puestos. La regla que manda sobre todas las
+demás: **el diseño no se toca**.
+
+### Cómo está hecho, y por qué así
+
+No se construye un árbol DOM ni se vuelve a serializar el HTML. Un árbol hay que
+volver a escribirlo, y al escribirlo se normalizan comillas, espacios, saltos de
+línea y etiquetas vacías: el archivo saldría distinto del aprobado aunque el
+navegador lo pintara parecido.
+
+Aquí se hace al revés. Se recorre el HTML con `html.parser` **solo para anotar
+posiciones**, y después se cortan y pegan trozos del archivo original. Todo lo
+que no sea un hueco marcado sale byte a byte como estaba.
+
+Eso permite una comprobación que no depende de mirar capturas: se monta una
+factura con los mismos datos que lleva la versión aprobada y se exige que el
+documento generado sea **idéntico byte a byte** al archivo aprobado. Si el motor
+cambiara un espacio, esa comprobación falla. Está en `verificar_plantillas.py` y
+se hace para los tres mercados.
+
+### Qué se le añadió a las plantillas aprobadas
+
+Atributos, y nada más:
+
+| Atributo | Para qué |
+|---|---|
+| `data-field="..."` | ese hueco lleva un dato de la factura |
+| `data-step="1..4"` | paso de la barra de progreso, para marcarlo según el estado |
+| `data-hide-if-empty="..."` | el elemento desaparece si ese dato está vacío (la pastilla de descuento) |
+
+`templates_html/marcar_campos.py` deja por escrito exactamente qué se añadió, y
+`templates_html/aprobado-original/` guarda las tres plantillas tal y como se
+aprobaron. La comprobación quita esos atributos del archivo marcado y exige que
+el resultado sea idéntico al original.
+
+Son 41 huecos por plantilla, y los mismos 41 en las tres.
+
+### Lo que decide el backend, y lo que no
+
+| Decide el backend | Es fijo de la plantilla |
+|---|---|
+| El contenido de los 41 huecos | Textos legales, FAQ, protección, documentación |
+| El formato de fechas e importes del mercado | Toda la maquetación y el CSS |
+| Qué paso de la barra de progreso está activo | Los nombres de los cuatro pasos |
+| Cuál de las dos modalidades de entrega va primero | Los textos de las dos modalidades |
+| Si la pastilla de descuento se ve | El diseño de la pastilla |
+
+### Reglas por mercado
+
+| | es-MX | English | es-AR |
+|---|---|---|---|
+| Fecha de emisión | `22 Jul 2026` | `22 Jul 2026` | `22 Jul 2026` |
+| Fecha de entrega | `27 de julio de 2026` | `27 July 2026` | `27 de julio de 2026` |
+| Vigencia | `29/07/2026` | `29/07/2026` | `29/07/2026` |
+| Importe | `$329,000.00 MXN` | `$329,000.00 MXN` | `$329.000,00 ARS` |
+| Cuenta | CLABE, 18 dígitos | CLABE, 18 dígitos | CBU, 22 dígitos |
+
+Los nombres de los meses están escritos en `app/locales.py` y no se piden al
+sistema: `strftime` depende del idioma instalado en la máquina, y un servidor sin
+español configurado devolvería «July» en la factura mexicana sin avisar de nada.
+
+### El estado que ve el cliente
+
+El estado del panel y el del documento no son el mismo. «PDF generado» y
+«Enviada» son estados internos de gestión: que hayamos generado el PDF no
+significa que el cliente haya pagado, así que el documento sigue diciendo «Pago
+pendiente» y la barra de progreso no avanza.
+
+| Estado en el panel | En el documento | Barra de progreso |
+|---|---|---|
+| Borrador | Borrador / Draft | paso 1 activo |
+| Pago pendiente | Pago pendiente / Payment pending | paso 1 hecho, paso 2 activo |
+| PDF generado | Pago pendiente / Payment pending | igual que el anterior |
+| Enviada | Pago pendiente / Payment pending | igual que el anterior |
+| Cancelada | Cancelada / Cancelled | paso 1 hecho, ninguno activo |
+
+### Vista previa
+
+`/facturas/{id}/vista-previa` enseña el documento dentro de un iframe que apunta
+a `/facturas/{id}/documento`, que es la misma URL que se imprime y la que usará
+el generador de PDF de la Fase D. No se copia el HTML dentro del panel: si se
+copiara, el CSS del panel podría cambiar el aspecto de la factura y la vista
+previa dejaría de ser prueba de nada. Una de las comprobaciones verifica
+justamente que dentro del documento no haya ni rastro del CSS del panel.
+
+El iframe se pinta siempre a 900 px, que es el ancho de diseño de la página A4, y
+se reduce con `transform: scale()`. Estrechar el iframe sería más fácil, pero el
+CSS aprobado tiene puntos de ruptura para móvil y el documento cambiaría de
+maquetación.
+
+### Lo que falta se queda en blanco
+
+Un hueco sin dato sale vacío; nunca se queda el texto de ejemplo de la maqueta.
+La pantalla de vista previa lista los datos que faltan por su nombre.
 
 ---
 
@@ -285,11 +390,13 @@ distintas.
 ```bash
 python3 verificar_fase_a.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_b.py http://127.0.0.1:8000 /tmp/capturas
+python3 verificar_fase_c.py http://127.0.0.1:8000 /tmp/capturas
+python3 verificar_plantillas.py
 python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**127 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**243 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -304,6 +411,14 @@ anterior, para que los recuentos por VIN sigan significando algo.
   heredar los datos del cliente original, que use la cuenta bancaria vigente y no la del original, que la
   factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
   cuente lo que tiene que contar.
+- **Fase C · 57.** Con navegador: que la vista previa enseñe el documento real
+  y no una imitación, que el CSS aprobado se cargue de verdad, que el del panel
+  no se cuele dentro, que lo que se escribe en el editor salga en la factura,
+  que el zoom no re-maquete el documento, que cambiar de mercado cambie de
+  plantilla y de formatos, y que el documento no cambie con el tema del panel.
+- **Plantillas · 59.** Sin navegador: el motor. Incluye la comprobación de que
+  el documento generado con los datos de la versión aprobada es idéntico byte a
+  byte al archivo aprobado, en los tres mercados.
 - **Folios · 11.** El contador, el salto cuando un folio ya está ocupado y el
   reintento ante un choque simultáneo. Se ejecuta sin servidor, sobre una base
   de datos temporal, porque el choque entre dos operadores no se puede provocar
@@ -315,7 +430,7 @@ Varias comprobaciones no se conforman con que la pantalla no ofrezca algo:
 mandan la petición a mano para verificar que el servidor tampoco lo acepta. Es
 el caso del folio y del estado al duplicar.
 
-Las dos primeras dejan capturas en la carpeta indicada.
+Las tres primeras dejan capturas en la carpeta indicada.
 
 ---
 

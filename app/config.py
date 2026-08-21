@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "DulceAuto · Facturas Premium"
-    app_version: str = "V1 · Fase B"
+    app_version: str = "V1 · Fase C"
     debug: bool = False
 
     # Clave de firma de la cookie de sesion. En produccion es obligatorio

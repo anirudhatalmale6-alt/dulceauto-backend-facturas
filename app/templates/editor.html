@@ -45,7 +45,9 @@
   ]),
   ('6 · Entrega', [
     ('delivery_date', 'Fecha entrega', 'date'),
-    ('delivery_mode', 'Modalidad', 'text'),
+    ('delivery_mode', 'Modalidad', 'delivery'),
+    ('delivery_text', 'Texto de la modalidad (opcional)', 'longtext'),
+    ('delivery_alt', 'Texto de la alternativa (opcional)', 'longtext'),
   ]),
   ('7 · Representante', [
     ('representative_name', 'Nombre', 'text'),
@@ -84,6 +86,7 @@
     <div class="actions">
       {% if invoice %}
         <a class="btn ghost" href="/facturas/{{ invoice.id }}/duplicar">Duplicar</a>
+        <a class="btn ghost" href="/facturas/{{ invoice.id }}/vista-previa">Vista previa</a>
       {% endif %}
       <button class="btn" type="submit" name="save_as" value="draft">Guardar borrador</button>
       <button class="btn blue" type="submit">Guardar</button>
@@ -129,7 +132,7 @@
       <div class="section-body">
         <div class="form-grid">
           {% for name, label, kind in fields %}
-            <label class="{{ 'full' if kind == 'full' else '' }}">{{ label }}
+            <label class="{{ 'full' if kind in ('full', 'longtext') else '' }}">{{ label }}
               {% if kind == 'locale' %}
                 <select name="{{ name }}">
                   {% for code, m in markets.items() %}
@@ -150,6 +153,23 @@
                   <input data-folio type="text"
                          value="{{ invoice.folio if invoice else 'Automático' }}" readonly>
                 </div>
+              {% elif kind == 'longtext' %}
+                {# Vacío significa "usa el texto aprobado de la plantilla". Se
+                   escribe aquí solo para esta factura en concreto. #}
+                <textarea name="{{ name }}" rows="2"
+                          placeholder="Vacío = el texto aprobado de la plantilla">{{ val(name)|trim }}</textarea>
+              {% elif kind == 'delivery' %}
+                {# Es un desplegable y no texto libre porque la modalidad decide
+                   cuál de los dos bloques de entrega va primero en la factura.
+                   Escrita a mano, cualquier variante que no fuese exactamente
+                   "home" o "branch" caería en la de por defecto sin avisar. #}
+                <select name="{{ name }}">
+                  {% for modo in delivery_modes %}
+                    <option value="{{ modo }}" {% if (val(name)|trim or 'home') == modo %}selected{% endif %}>
+                      {{ delivery_label(modo, current_locale) }}
+                    </option>
+                  {% endfor %}
+                </select>
               {% elif kind == 'vin' %}
                 <input name="{{ name }}" type="text" value="{{ val(name)|trim }}"
                        maxlength="17" placeholder="17 caracteres, sin I, O ni Q"

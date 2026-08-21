@@ -58,7 +58,7 @@
         </div>
         <div class="invoice-meta">
           <h1>Pre-factura de reserva</h1>
-          <img class="barcode" data-field="codigo_barras" src="../assets/img/reservation-barcode.svg" alt="Código de barras del folio RES-87241">
+          <img class="barcode" src="../assets/img/reservation-barcode.svg" alt="Código de barras del folio RES-87241">
           <div class="meta-row">
             <span>Folio: <strong data-field="folio">RES-87241</strong></span>
             <span>Fecha: <strong data-field="fecha_emision">22 Jul 2026</strong></span>
@@ -78,10 +78,10 @@
             <span class="delivery-date"><strong><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Entrega</strong> - <span data-field="fecha_entrega">27 de julio de 2026</span></span>
           </div>
           <div class="progress" aria-label="Progreso de la pre-reserva">
-            <div class="step done" data-step="1"><div class="step-track"><span class="step-line"></span><span class="step-dot"></span></div><div class="step-label">Pre-reserva confirmada</div></div>
-            <div class="step active" data-step="2"><div class="step-track"><span class="step-line"></span><span class="step-dot">2</span></div><div class="step-label">Pago pendiente</div></div>
-            <div class="step" data-step="3"><div class="step-track"><span class="step-line"></span><span class="step-dot">3</span></div><div class="step-label">Documentación y trámites</div></div>
-            <div class="step" data-step="4"><div class="step-track"><span class="step-line"></span><span class="step-dot">4</span></div><div class="step-label">Entrega coordinada</div></div>
+            <div class="step done"><div class="step-track"><span class="step-line"></span><span class="step-dot"></span></div><div class="step-label">Pre-reserva confirmada</div></div>
+            <div class="step active"><div class="step-track"><span class="step-line"></span><span class="step-dot">2</span></div><div class="step-label">Pago pendiente</div></div>
+            <div class="step"><div class="step-track"><span class="step-line"></span><span class="step-dot">3</span></div><div class="step-label">Documentación y trámites</div></div>
+            <div class="step"><div class="step-track"><span class="step-line"></span><span class="step-dot">4</span></div><div class="step-label">Entrega coordinada</div></div>
           </div>
         </section>
 
@@ -146,12 +146,12 @@
             <div class="vehicle-body">
               <div>
                 <p><strong><svg class="icon" aria-hidden="true"><use href="#i-truck"></use></svg> Modalidad de entrega</strong></p>
-                <p><a href="#" data-field="entrega_modalidad">Entrega a domicilio (transporte terrestre asegurado)</a></p>
-                <p data-field="entrega_texto">Traslado asegurado hasta el domicilio registrado.</p>
+                <p><a href="#">Entrega a domicilio (transporte terrestre asegurado)</a></p>
+                <p>Traslado asegurado hasta el domicilio registrado.</p>
               </div>
               <div>
-                <p><strong data-field="entrega_alternativa">Entrega en una sede o concesionario cercano</strong></p>
-                <p data-field="entrega_alternativa_texto">También podés solicitar la entrega en una sede o concesionario cercano, sin cargos adicionales. La disponibilidad, ubicación y los detalles de entrega se confirmarán durante la coordinación.</p>
+                <p><strong>Entrega en una sede o concesionario cercano</strong></p>
+                <p>También podés solicitar la entrega en una sede o concesionario cercano, sin cargos adicionales. La disponibilidad, ubicación y los detalles de entrega se confirmarán durante la coordinación.</p>
               </div>
               <p class="terms">Si el vehículo no coincide con la información indicada en esta pre-factura, se aplicarán los términos de cancelación correspondientes.</p>
             </div>
@@ -170,15 +170,15 @@
           <div class="operation">
             <div class="payment-heading">
               <div class="title-row"><span class="line-icon"><svg class="icon" aria-hidden="true"><use href="#i-receipt"></use></svg></span><h3 class="section-title">Resumen de la operación</h3></div>
-              <span class="discount-pill" data-hide-if-empty="descuento"><svg class="icon" aria-hidden="true"><use href="#i-tag"></use></svg> <span data-field="descuento">9% DE DESCUENTO APLICADO</span></span>
+              <span class="discount-pill"><svg class="icon" aria-hidden="true"><use href="#i-tag"></use></svg> <span data-field="descuento">9% DE DESCUENTO APLICADO</span></span>
             </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Concepto</th><th>Cantidad</th><th>Importe</th></tr></thead>
                 <tbody>
                   <tr><td data-field="vehiculo">2015 Audi A3 1.8T S Line Convertible AT</td><td>1</td><td data-field="precio_vehiculo">$329.000,00 ARS</td></tr>
-                  <tr><td><svg class="icon included" aria-hidden="true"><use href="#i-shield"></use></svg>Seguro de cobertura amplia</td><td>-</td><td class="included" data-field="cobertura">Incluido</td></tr>
-                  <tr><td><svg class="icon" style="color:var(--blue)" aria-hidden="true"><use href="#i-truck"></use></svg>Transporte terrestre</td><td>1</td><td data-field="transporte">Incluido</td></tr>
+                  <tr><td><svg class="icon included" aria-hidden="true"><use href="#i-shield"></use></svg>Seguro de cobertura amplia</td><td>-</td><td class="included">Incluido</td></tr>
+                  <tr><td><svg class="icon" style="color:var(--blue)" aria-hidden="true"><use href="#i-truck"></use></svg>Transporte terrestre</td><td>1</td><td>Incluido</td></tr>
                 </tbody>
               </table>
             </div>
@@ -261,14 +261,14 @@
             <span class="qr-caption">Escaneá para verificar</span>
             <!-- Al cambiar el destino, regenerar también assets/img/reservation-qr.svg -->
             <a class="qr-link" href="https://dulceauto.mx/verificar/RES-87241" data-field="url_verificacion" aria-label="Verificar la reserva RES-87241">
-              <img class="qr-code" data-field="codigo_qr" src="../assets/img/reservation-qr.svg" alt="Código QR para verificar la reserva RES-87241">
+              <img class="qr-code" src="../assets/img/reservation-qr.svg" alt="Código QR para verificar la reserva RES-87241">
             </a>
           </div>
 
           <div class="card agent-card">
             <div class="agent-head">
               <span class="avatar" data-field="agente_iniciales">YC</span>
-              <div><small>Tu representante asignado</small><h4 data-field="agente_nombre">Yoselina de la Cruz</h4><small data-field="agente_cargo">Representante de operaciones</small></div>
+              <div><small>Tu representante asignado</small><h4 data-field="agente_nombre">Yoselina de la Cruz</h4><small>Representante de operaciones</small></div>
             </div>
             <div class="contact-list">
               <span><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span data-field="agente_horario">Lunes a viernes, 8:00 a. m.–4:00 p. m.</span></span>

@@ -19,11 +19,12 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import activity as act
+from . import documents as doc_engine
 from . import invoices as inv_service
 from .config import BASE_DIR, settings
 from .db import Base, engine, get_db
 from .fields import EDITABLE_FIELDS
-from .locales import MARKETS, format_amount, get_market
+from .locales import DELIVERY_MODES, MARKETS, delivery_label, format_amount, get_market
 from .models import (
     CRED_ADMIN,
     CRED_MASTER,
@@ -65,6 +66,15 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+# Archivos de las plantillas aprobadas (CSS, tipografias e imagenes). Se montan
+# aparte de los del panel: son de las facturas y no deben mezclarse con los del
+# backend, porque la Fase D tiene que poder copiarlos tal cual dentro de cada
+# PDF sin arrastrar nada del panel.
+app.mount(
+    "/plantillas/assets",
+    StaticFiles(directory=doc_engine.TEMPLATES_DIR / "assets"),
+    name="plantillas_assets",
+)
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 NAV_ITEMS = [
@@ -137,6 +147,8 @@ def render(
         "status_labels": STATUS_LABELS,
         "markets": MARKETS,
         "money": format_amount,
+        "delivery_modes": DELIVERY_MODES,
+        "delivery_label": delivery_label,
     }
     base.update(context)
     # Starlette pide la peticion como primer argumento; la firma antigua
@@ -496,6 +508,80 @@ async def invoice_duplicate(request: Request, invoice_id: int, db: Session = Dep
     return RedirectResponse(f"/facturas/{copia.id}/editar", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# --- vista previa con la plantilla real --------------------------------------
+#
+# Son dos rutas y no una a proposito. /documento devuelve el documento tal cual,
+# sin nada del panel alrededor: es lo que se ve, lo que se imprime y lo que la
+# Fase D le va a dar a Chromium para hacer el PDF. Si la vista previa fuese un
+# trozo de HTML incrustado dentro del panel, se estaria comprobando algo que no
+# es lo que se entrega.
+
+ZOOMS = (0.5, 0.75, 1.0)
+
+
+@app.get("/facturas/{invoice_id}/documento", response_class=HTMLResponse)
+def invoice_document(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+    return HTMLResponse(doc_engine.render(invoice).html)
+
+
+@app.get("/facturas/{invoice_id}/vista-previa", response_class=HTMLResponse)
+def invoice_preview(
+    request: Request, invoice_id: int, zoom: float = 0.75, db: Session = Depends(get_db)
+):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    documento = doc_engine.render(invoice)
+    market = get_market(invoice.locale)
+    return render(
+        request,
+        "preview.html",
+        db,
+        active_view="invoices",
+        page_title="Vista previa",
+        page_sub=f"{invoice.folio} · plantilla {market.label} · {market.template}",
+        invoice=invoice,
+        market=market,
+        documento=documento,
+        zoom=zoom if zoom in ZOOMS else 0.75,
+        zooms=ZOOMS,
+        etiquetas=doc_engine.ETIQUETAS_HUECO,
+    )
+
+
+@app.get("/plantillas/{locale}/documento", response_class=HTMLResponse)
+def template_document(request: Request, locale: str, db: Session = Depends(get_db)):
+    """Plantilla de un mercado con la ultima factura real de ese mercado. Sirve
+    para mirar una plantilla sin tener que buscar antes una factura suya."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if locale not in MARKETS:
+        flash(request, "Ese mercado no existe.", "error")
+        return RedirectResponse("/plantillas", status_code=status.HTTP_303_SEE_OTHER)
+    invoice = db.execute(
+        select(Invoice).where(Invoice.locale == locale).order_by(Invoice.id.desc()).limit(1)
+    ).scalar_one_or_none()
+    if invoice is None:
+        flash(request, f"Todavía no hay ninguna factura de {MARKETS[locale].label}.", "error")
+        return RedirectResponse("/plantillas", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        f"/facturas/{invoice.id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
 # --- historial por vehiculo --------------------------------------------------
 
 
@@ -562,6 +648,8 @@ def templates_view(request: Request, db: Session = Depends(get_db)):
                 "count": db.execute(
                     select(func.count(Invoice.id)).where(Invoice.locale == code)
                 ).scalar_one(),
+                # Huecos que tiene de verdad el archivo, contados leyendolo.
+                "huecos": len(doc_engine.huecos_de(code)) if existe else 0,
             }
         )
 
@@ -573,6 +661,9 @@ def templates_view(request: Request, db: Session = Depends(get_db)):
         page_title="Plantillas",
         page_sub="Tres HTML aprobados, un CSS compartido y reglas por mercado.",
         plantillas=plantillas,
+        huecos=doc_engine.huecos_de("es-MX"),
+        etiquetas=doc_engine.ETIQUETAS_HUECO,
+        sin_hueco=doc_engine.campos_sin_hueco("es-MX"),
     )
 
 
