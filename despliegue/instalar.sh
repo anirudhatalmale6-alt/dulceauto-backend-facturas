@@ -48,10 +48,38 @@ log "3/9 · Acceso SSH mas seguro"
 # para no quedarse fuera del propio servidor.
 CLAVES_OPERADOR="$(getent passwd "$OPERADOR" | cut -d: -f6)/.ssh/authorized_keys"
 if [ -s /root/.ssh/authorized_keys ] || [ -s "$CLAVES_OPERADOR" ]; then
-  sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-  sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+  # NO se edita /etc/ssh/sshd_config. Ubuntu trae en la linea 12
+  #     Include /etc/ssh/sshd_config.d/*.conf
+  # y en sshd gana SIEMPRE el primer valor que se lee, no el ultimo. Las
+  # imagenes de los proveedores dejan ahi un 50-cloud-init.conf con
+  # "PasswordAuthentication yes", que se lee antes que el archivo principal.
+  # Editar el principal no cambia nada y el script imprime que lo ha
+  # desactivado: es peor que no hacerlo, porque deja creer que esta cerrado.
+  #
+  # Por eso el nuestro se llama 00-: se lee el primero y gana. Y por eso no se
+  # borra el de cloud-init, que puede volver a escribirse en cada arranque.
+  cat > /etc/ssh/sshd_config.d/00-dulceauto.conf <<'SSHD'
+# Acceso solo con clave. Este archivo se lee antes que cualquier otro de este
+# directorio y antes que /etc/ssh/sshd_config: en sshd gana el primer valor.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password
+SSHD
+  chmod 644 /etc/ssh/sshd_config.d/00-dulceauto.conf
+  sshd -t
   systemctl reload ssh || systemctl reload sshd
-  echo "Acceso por contrasena desactivado."
+
+  # Comprobar el valor efectivo, no el archivo escrito: es justo la diferencia
+  # que hacia inutil la version anterior de este paso.
+  EFECTIVO=$(sshd -T | awk '$1=="passwordauthentication"{print $2}')
+  if [ "$EFECTIVO" = "no" ]; then
+    echo "Acceso por contrasena desactivado (comprobado con sshd -T)."
+  else
+    echo "FALLA: sshd sigue aceptando contrasenas (passwordauthentication=${EFECTIVO})."
+    echo "Revisar los archivos de /etc/ssh/sshd_config.d/ por orden alfabetico."
+    exit 1
+  fi
 else
   echo "AVISO: no hay ninguna clave autorizada, ni en /root/.ssh/authorized_keys"
   echo "ni en ${CLAVES_OPERADOR}."
