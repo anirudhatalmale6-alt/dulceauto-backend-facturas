@@ -90,7 +90,9 @@
       {% endif %}
       <button class="btn" type="submit" name="save_as" value="draft">Guardar borrador</button>
       <button class="btn blue" type="submit">Guardar</button>
-      <button class="btn gold" type="button" disabled>Generar PDF <span class="phase-tag">Fase D</span></button>
+      {% if invoice %}
+        <a class="btn gold" href="/facturas/{{ invoice.id }}/vista-previa">Generar PDF</a>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -271,10 +273,10 @@
 </form>
 
 <div class="devnote" style="margin-top:16px">
-  <b>Fase B.</b> Crear, editar, guardar borrador, duplicar y el historial por VIN
-  ya funcionan sobre la base de datos real. Un borrador se guarda a medias; para
-  salir de borrador se exigen cliente, vehículo, VIN válido, importes y fecha de
-  emisión. La vista previa con la plantilla real es la Fase C y el PDF la Fase D.
+  <b>Estado del documento.</b> Un borrador se guarda a medias; para salir de
+  borrador se exigen cliente, vehículo, VIN válido, importes y fecha de emisión.
+  El PDF se genera desde la vista previa, y generarlo no cambia el estado de la
+  operación: eso queda anotado aparte, con su fecha.
 </div>
 
 {% endblock %}

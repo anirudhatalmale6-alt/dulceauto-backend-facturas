@@ -11,7 +11,7 @@ cableadas, la pantalla lo dice con una etiqueta en lugar de ofrecer un boton que
 no hace nada.
 """
 from fastapi import Depends, FastAPI, Form, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -21,6 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import activity as act
 from . import documents as doc_engine
 from . import invoices as inv_service
+from . import pdf as pdf_engine
 from .config import BASE_DIR, settings
 from .db import Base, engine, get_db
 from .fields import EDITABLE_FIELDS
@@ -559,9 +560,109 @@ def invoice_preview(
         invoice=invoice,
         market=market,
         documento=documento,
+        snapshots=pdf_engine.snapshots_de(db, invoice.id),
         zoom=zoom if zoom in ZOOMS else 0.75,
         zooms=ZOOMS,
         etiquetas=doc_engine.ETIQUETAS_HUECO,
+    )
+
+
+# --- PDF y snapshots ---------------------------------------------------------
+
+
+@app.post("/facturas/{invoice_id}/pdf")
+def invoice_pdf_create(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    """Genera el PDF y deja congelada la factura en una carpeta propia.
+
+    La ruta es sincrona a proposito: FastAPI la ejecuta en un hilo aparte, que
+    es donde Chromium puede trabajar. En una ruta async bloquearia el bucle de
+    eventos y el panel se quedaria parado para todos mientras imprime.
+    """
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    if invoice.status == STATUS_DRAFT:
+        flash(
+            request,
+            "Un borrador no se imprime. Pásela a «Pago pendiente» cuando esté completa.",
+            "error",
+        )
+        return RedirectResponse(
+            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    try:
+        resultado = pdf_engine.generar(db, invoice)
+    except pdf_engine.PdfError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+        return RedirectResponse(
+            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    db.commit()
+    act.log(
+        db,
+        act.PDF_GENERATED,
+        request=request,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        folio=invoice.folio,
+        detail=f"versión {resultado.snapshot.version}",
+    )
+    flash(
+        request,
+        f"PDF generado (versión {resultado.snapshot.version}). "
+        "Queda guardada una copia congelada con sus imágenes: no cambiará aunque "
+        "mañana se cambie el logotipo o la cuenta bancaria.",
+        "ok",
+    )
+    return RedirectResponse(
+        f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@app.get("/facturas/{invoice_id}/pdf")
+def invoice_pdf_download(
+    request: Request, invoice_id: int, version: int = 0, db: Session = Depends(get_db)
+):
+    """Descarga un PDF ya generado. Sin version, el ultimo."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    snapshots = pdf_engine.snapshots_de(db, invoice_id)
+    if version:
+        snapshots = [s for s in snapshots if s.version == version]
+    if not snapshots:
+        flash(request, "Esa factura todavía no tiene ningún PDF generado.", "error")
+        return RedirectResponse(
+            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    snapshot = snapshots[0]
+    ruta = pdf_engine.ruta_absoluta(snapshot.pdf_path)
+    if ruta is None:
+        # El registro existe pero el archivo no. Se dice, en lugar de devolver
+        # un 500 que no explica nada.
+        flash(
+            request,
+            f"El archivo del PDF versión {snapshot.version} no está en el disco. "
+            "Vuelva a generarlo.",
+            "error",
+        )
+        return RedirectResponse(
+            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    return FileResponse(
+        ruta,
+        media_type="application/pdf",
+        filename=f"{snapshot.folio}-v{snapshot.version}.pdf",
     )
 
 

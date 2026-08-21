@@ -27,7 +27,14 @@
     <div class="actions">
       <a class="btn ghost" href="/facturas/{{ invoice.id }}/editar">Volver al editor</a>
       <a class="btn ghost" href="/facturas/{{ invoice.id }}/documento" target="_blank">Abrir a tamaño real</a>
-      <button class="btn gold" type="button" disabled>Generar PDF <span class="phase-tag">Fase D</span></button>
+      {% if snapshots %}
+        <a class="btn ghost" href="/facturas/{{ invoice.id }}/pdf">Descargar PDF</a>
+      {% endif %}
+      <form method="post" action="/facturas/{{ invoice.id }}/pdf" style="display:inline">
+        <button class="btn gold" type="submit">
+          {{ 'Volver a generar el PDF' if snapshots else 'Generar PDF' }}
+        </button>
+      </form>
     </div>
   </div>
 
@@ -63,11 +70,41 @@
   </div>
 </div>
 
+{% if snapshots %}
+<div class="card" style="margin-top:16px">
+  <div class="toolbar">
+    <div>
+      <h2>Historial de PDF</h2>
+      <div class="small muted">
+        Cada generación guarda una copia congelada del documento con sus propias
+        imágenes. Cambiar el logotipo o la cuenta bancaria no altera un PDF ya emitido.
+      </div>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>Versión</th><th>Folio</th><th>Plantilla</th><th>Generado</th><th></th></tr></thead>
+    <tbody>
+      {% for s in snapshots %}
+        <tr>
+          <td><b>v{{ s.version }}</b></td>
+          <td>{{ s.folio }}</td>
+          <td>{{ markets[s.locale].label if s.locale in markets else s.locale }}</td>
+          <td class="small muted">{{ s.created_at.strftime('%d %b %Y · %H:%M') }} UTC</td>
+          <td class="actions">
+            <a class="btn ghost" href="/facturas/{{ invoice.id }}/pdf?version={{ s.version }}">Descargar</a>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 <div class="devnote" style="margin-top:16px">
-  <b>Fase C.</b> El documento de arriba sale de la plantilla aprobada, sin
-  copiarla ni volver a maquetarla: el motor solo sustituye el contenido de los
-  huecos marcados. La generación del PDF A4, el logotipo, el QR y el código de
-  barras reales son la Fase D.
+  <b>Fase D.</b> El PDF se imprime desde la copia congelada, no desde la
+  plantilla que haya en ese momento en disco. La escala de impresión se
+  recalcula para cada factura midiendo su altura real, de modo que siga siendo
+  una sola página aunque los textos cambien de largo.
 </div>
 
 {% endblock %}

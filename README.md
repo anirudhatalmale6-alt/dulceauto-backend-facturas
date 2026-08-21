@@ -16,7 +16,7 @@ tocado sus estilos.
 | **A** | Base del proyecto, acceso, Master Password, modelo de datos, panel con las 6 vistas y los 3 modos visuales | **Entregada** |
 | **B** | Crear, editar, borrador, buscar, duplicar, agrupación por VIN | **Entregada** |
 | **C** | Motor de plantillas, claves fijas en las 3 plantillas, reglas por mercado, vista previa real | **Entregada** |
-| D | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | En curso |
+| D | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | **En curso** — PDF y snapshot hechos |
 
 Donde una acción todavía no está cableada, la pantalla lo indica con una
 etiqueta de fase en lugar de ofrecer un botón que no hace nada.
@@ -87,6 +87,7 @@ backend/
 │   ├── main.py          rutas y vistas
 │   ├── invoices.py      crear, editar, duplicar, agrupar por VIN
 │   ├── documents.py     motor de plantillas ← rellena las 3 aprobadas
+│   ├── pdf.py           PDF A4 y copia congelada
 │   ├── models.py        modelo de datos definitivo
 │   ├── fields.py        claves fijas ← contrato con las plantillas
 │   │                    y qué se copia al duplicar
@@ -104,6 +105,8 @@ backend/
 ├── verificar_fase_a.py     acceso, Master Password, vistas y temas
 ├── verificar_fase_b.py     crear, editar, borrador, duplicar, VIN
 ├── verificar_fase_c.py     vista previa real y plantillas en el navegador
+├── verificar_fase_d.py     PDF desde el panel
+├── verificar_pdf.py        motor de PDF y snapshot (sin servidor)
 ├── verificar_plantillas.py el motor de plantillas (sin servidor)
 ├── verificar_folios.py     contador y choque de folios (sin servidor)
 └── verificar_datos.py      importes, CLABE, CBU y VIN (sin servidor)
@@ -239,6 +242,37 @@ el pago queda validado.
 `COMMITTED_STATUSES` empieza en «Pago validado». Generar o enviar una
 pre-factura no compromete el coche: pueden convivir varias pre-facturas del
 mismo VIN para varios interesados, que es exactamente el caso que se pidió.
+
+### Generación del PDF (Fase D)
+
+`app/pdf.py`. Un PDF **no** se imprime desde el HTML que haya en disco en ese
+momento: se imprime desde una copia congelada.
+
+Cada generación crea `data/snapshots/{factura}/v{n}/` con el documento y **los
+archivos que usa**: hoja de estilo, tipografías e imágenes. Así, dentro de dos
+años la factura RES-87241 se sigue imprimiendo igual aunque se haya cambiado el
+logotipo, la cuenta bancaria o la propia plantilla. Ocupa unos 2,8 MB por
+generación.
+
+Volver a generar no pisa la anterior: sube la versión y las dos quedan
+descargables.
+
+**Una sola página, siempre.** El CSS aprobado imprime la factura escalada con
+`--print-scale` y `--print-height`. En el Milestone 1 esos dos números se
+calibraron a mano para el texto de la maqueta. Aquí se recalculan **para cada
+factura**, midiendo la altura real del documento ya cargado en Chromium. Es lo
+único que garantiza una página cuando los datos cambian: un título de vehículo
+más largo o un texto de entrega escrito a mano cambian la altura, y una escala
+fija dejaría media factura en una segunda hoja. Si aun así salieran dos páginas,
+la generación se aborta con un aviso en lugar de entregar el PDF.
+
+**Uno cada vez.** La generación pasa por un cerrojo. Cada Chromium ocupa varios
+cientos de megas mientras imprime; diez peticiones a la vez levantarían diez
+Chromium. Con el cerrojo son diez PDF seguidos: más lento, pero el servidor no
+se cae.
+
+**Generar el PDF no mueve la operación.** Queda en `pdf_generated_at` y en
+Actividad. Un borrador no se imprime.
 
 ### Vista previa### Vista previa
 
@@ -413,12 +447,14 @@ distintas.
 python3 verificar_fase_a.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_b.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_c.py http://127.0.0.1:8000 /tmp/capturas
+python3 verificar_fase_d.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_plantillas.py
+python3 verificar_pdf.py
 python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**274 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**334 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -445,6 +481,13 @@ anterior, para que los recuentos por VIN sigan significando algo.
   reintento ante un choque simultáneo. Se ejecuta sin servidor, sobre una base
   de datos temporal, porque el choque entre dos operadores no se puede provocar
   desde el navegador.
+- **Fase D · 30.** Con navegador: que un borrador no se imprima, que el PDF se
+  descargue y sea un PDF de una página, que volver a generarlo cree una versión
+  nueva sin borrar la anterior, que la copia congelada conserve los datos de
+  entonces y que generar no mueva el estado de la operación.
+- **PDF · 30.** Sin navegador, generando PDF de verdad: A4, una página, la copia
+  congelada completa (incluidas las tipografías) y la escala recalculada por
+  factura.
 - **Datos · 20.** Formatos de importe y dígitos de control de CLABE, CBU y VIN.
   También sin servidor.
 
