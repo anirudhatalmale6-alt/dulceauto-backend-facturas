@@ -107,7 +107,11 @@ else
   git clone --depth 1 "$REPO" "$DESTINO"
 fi
 [ "$OPERADOR" = "root" ] || chown -R "$OPERADOR":"$OPERADOR" "$DESTINO"
-cd "$DESTINO/backend"
+cd "$DESTINO"
+# El proyecto esta en la raiz del repositorio, no en un subdirectorio. Se
+# comprueba en lugar de darlo por hecho: si algun dia cambia la estructura,
+# es mejor pararse aqui que seguir y fallar tres pasos mas adelante.
+[ -f docker-compose.yml ] || { echo "FALLA: no hay docker-compose.yml en ${DESTINO}."; exit 1; }
 
 log "6/9 · Configuracion"
 if [ ! -f .env ]; then
@@ -170,7 +174,7 @@ cat > /usr/local/bin/dulceauto-backup <<'BACKUP'
 set -euo pipefail
 FECHA=$(date +%F-%H%M)
 DESTINO=/opt/dulceauto-backups
-tar -czf "${DESTINO}/datos-${FECHA}.tar.gz" -C /opt/dulceauto/backend data
+tar -czf "${DESTINO}/datos-${FECHA}.tar.gz" -C /opt/dulceauto data
 # Se guardan 14 dias. Sin esto el disco se llena y el fallo aparece un dia
 # cualquiera, al generar un PDF.
 find "${DESTINO}" -name 'datos-*.tar.gz' -mtime +14 -delete
@@ -183,14 +187,14 @@ CRON
 ls -lh /opt/dulceauto-backups | tail -3
 # Una copia recien hecha que no se puede abrir no sirve de nada, y es mejor
 # saberlo ahora que el dia que haga falta restaurarla.
-bash "${DESTINO}/backend/despliegue/restaurar.sh"
+bash "${DESTINO}/despliegue/restaurar.sh"
 
 log "Listo"
 cat <<FIN
 
   Panel:      https://${DOMINIO}
   Codigo:     ${DESTINO}
-  Datos:      ${DESTINO}/backend/data      (base, fotos y snapshots)
+  Datos:      ${DESTINO}/data             (base, fotos y snapshots)
   Copias:     /opt/dulceauto-backups       (diaria a las 3:30, se guardan 14)
 
   Comprobar la ultima copia:  bash despliegue/restaurar.sh

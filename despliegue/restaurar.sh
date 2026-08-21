@@ -19,7 +19,7 @@
 set -euo pipefail
 
 BACKUPS="${DULCEAUTO_BACKUPS:-/opt/dulceauto-backups}"
-PROYECTO="${DULCEAUTO_PROYECTO:-/opt/dulceauto/backend}"
+PROYECTO="${DULCEAUTO_PROYECTO:-/opt/dulceauto}"
 
 ARCHIVO="${1:-}"
 MODO="${2:-}"
