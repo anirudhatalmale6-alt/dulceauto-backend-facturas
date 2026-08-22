@@ -120,21 +120,34 @@ def _copiar_assets(html: str, destino: Path) -> int:
     return copiados
 
 
-def _escribir_codigos(invoice: Invoice, destino: Path) -> None:
+def _escribir_codigos(invoice: Invoice, destino: Path, qr_manual: Path | None = None) -> None:
     """Escribe el QR y el codigo de barras de ESTA factura sobre las copias que
     se acaban de traer de la plantilla.
 
     Se conservan los nombres de archivo del diseno aprobado a proposito: asi el
     documento del snapshot no necesita que se le cambie ninguna ruta y la
     carpeta se sigue abriendo sola en cualquier navegador.
+
+    Con un QR subido a mano cambia solo la extension -reservation-qr.png en vez
+    de .svg- y el documento ya viene apuntando ahi desde render(). El archivo se
+    copia dentro del snapshot: cambiar despues el QR en Configuracion no toca
+    ninguna factura ya emitida.
     """
+    import shutil as _shutil
+
     from . import codes
 
-    qr = destino / "img/reservation-qr.svg"
-    barras = destino / "img/reservation-barcode.svg"
-    if qr.parent.exists():
-        qr.write_text(codes.qr_svg(_url_verificacion(invoice)), encoding="utf-8")
-        barras.write_text(codes.barcode_svg(invoice.folio or ""), encoding="utf-8")
+    carpeta = destino / "img"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    (carpeta / "reservation-barcode.svg").write_text(
+        codes.barcode_svg(invoice.folio or ""), encoding="utf-8"
+    )
+    if qr_manual is not None:
+        _shutil.copy2(qr_manual, carpeta / f"reservation-qr{qr_manual.suffix.lower()}")
+    else:
+        (carpeta / "reservation-qr.svg").write_text(
+            codes.qr_svg(_url_verificacion(invoice)), encoding="utf-8"
+        )
 
 
 def _copiar_logo(db: Session, destino: Path) -> str | None:
@@ -158,6 +171,66 @@ def _copiar_logo(db: Session, destino: Path) -> str | None:
     final = destino / "img" / f"logo{origen.suffix.lower()}"
     _shutil.copy2(origen, final)
     return f"assets/img/{final.name}"
+
+
+# --- transparencia -----------------------------------------------------------
+#
+# Un logotipo suele llegar en PNG con el fondo transparente, y ahi hay dos
+# trampas que no dan ningun error y estropean el documento impreso:
+#
+#   1. convert("RGB") sobre una imagen con transparencia NO pone fondo blanco.
+#      Descarta el canal alfa y deja a la vista los colores que habia debajo,
+#      que en la mayoria de los PNG son negros: el logotipo aparece dentro de
+#      un rectangulo negro.
+#   2. Guardar en JPEG un archivo que se llama .png "funciona" -el navegador
+#      mira el contenido, no la extension- pero JPEG no admite transparencia,
+#      asi que un logotipo recortado se imprime igualmente sobre un recuadro.
+#
+# Paso de verdad, y solo en el PDF: el documento HTML y la vista previa sirven
+# el archivo tal cual lo subio el operador, y unicamente el PDF pasa por la
+# reduccion de resolucion de mas abajo. De ahi que se viera bien en pantalla y
+# quemado en el papel.
+
+# Formato de salida segun la extension, para que el archivo sea de verdad lo
+# que su nombre dice.
+FORMATO_POR_EXTENSION = {
+    ".jpg": "JPEG",
+    ".jpeg": "JPEG",
+    ".png": "PNG",
+    ".webp": "WEBP",
+}
+
+
+def tiene_transparencia(imagen) -> bool:
+    return imagen.mode in ("RGBA", "LA", "PA") or (
+        imagen.mode == "P" and "transparency" in imagen.info
+    )
+
+
+def sobre_blanco(imagen):
+    """La imagen aplanada sobre blanco, que es el color del papel."""
+    from PIL import Image
+
+    if not tiene_transparencia(imagen):
+        return imagen.convert("RGB")
+    con_alfa = imagen.convert("RGBA")
+    fondo = Image.new("RGB", con_alfa.size, (255, 255, 255))
+    fondo.paste(con_alfa, mask=con_alfa.getchannel("A"))
+    return fondo
+
+
+def _guardar_imagen(imagen, ruta: Path) -> None:
+    """Escribe la imagen en el formato que anuncia su extension."""
+    formato = FORMATO_POR_EXTENSION[ruta.suffix.lower()]
+    if formato == "JPEG":
+        sobre_blanco(imagen).save(ruta, "JPEG", quality=88, optimize=True, progressive=True)
+    elif formato == "PNG":
+        # Se conserva el canal alfa: es justo lo que hace que un logotipo
+        # recortado se apoye sobre el fondo del documento en vez de traer su
+        # propio recuadro.
+        imagen.save(ruta, "PNG", optimize=True)
+    else:
+        imagen.save(ruta, "WEBP", quality=90, method=6)
 
 
 def _congelar_fotos(invoice: Invoice, destino: Path) -> list[int]:
@@ -185,9 +258,11 @@ def _congelar_fotos(invoice: Invoice, destino: Path) -> list[int]:
         if not final.parent.exists():
             continue
         # Se guarda siempre como JPEG con el nombre que espera la plantilla:
-        # el operador puede subir un PNG y el archivo se llama .jpg.
+        # el operador puede subir un PNG y el archivo se llama .jpg. Como JPEG
+        # no tiene transparencia, se aplana sobre blanco -nunca con un
+        # convert("RGB") a secas, que la dejaria negra. Ver sobre_blanco().
         with Image.open(origen) as imagen:
-            imagen.convert("RGB").save(final, "JPEG", quality=92, optimize=True)
+            sobre_blanco(imagen).save(final, "JPEG", quality=92, optimize=True)
         puestas.append(foto.position)
     return puestas
 
@@ -212,6 +287,14 @@ def _siguiente_version(db: Session, invoice_id: int) -> int:
 DPI_IMPRESION = 300
 CSS_PPI = 96
 LADO_MINIMO = 400           # nunca se baja de aqui, por si algo se mide mal
+
+# Un QR subido a mano se reduce con mucha mas holgura que una fotografia. Un
+# codigo es geometria, no una imagen: al encogerlo, los bordes de sus cuadros
+# se mezclan con el blanco de al lado y el lector deja de distinguirlos. El
+# archivo sigue siendo pequeno -un QR de 1000 px en PNG no llega a 30 KB-, asi
+# que no hay nada que ganar apurando.
+LADO_MINIMO_QR = 1000
+NOMBRE_QR = "reservation-qr"
 
 
 def _ajustar_imagenes(page, carpeta: Path, escala: float) -> list[str]:
@@ -243,15 +326,20 @@ def _ajustar_imagenes(page, carpeta: Path, escala: float) -> list[str]:
     tocadas = []
     for rel, ancho_css in ancho_por_archivo.items():
         ruta = carpeta / rel
-        if not ruta.exists() or ruta.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+        if not ruta.exists() or ruta.suffix.lower() not in FORMATO_POR_EXTENSION:
             continue
-        objetivo = max(LADO_MINIMO, int(ancho_css * escala * DPI_IMPRESION / CSS_PPI))
+        suelo = LADO_MINIMO_QR if Path(rel).stem == NOMBRE_QR else LADO_MINIMO
+        objetivo = max(suelo, int(ancho_css * escala * DPI_IMPRESION / CSS_PPI))
         with Image.open(ruta) as img:
             if img.width <= objetivo:
                 continue
             alto = round(img.height * objetivo / img.width)
-            reducida = img.convert("RGB").resize((objetivo, alto), Image.LANCZOS)
-            reducida.save(ruta, "JPEG", quality=88, optimize=True, progressive=True)
+            # El modo de trabajo se elige segun la imagen, no segun el destino:
+            # una con transparencia se reduce en RGBA para no perder el alfa por
+            # el camino, y es _guardar_imagen quien decide si hay que aplanarla.
+            modo = "RGBA" if tiene_transparencia(img) else "RGB"
+            reducida = img.convert(modo).resize((objetivo, alto), Image.LANCZOS)
+            _guardar_imagen(reducida, ruta)
         tocadas.append(rel)
     return tocadas
 
@@ -297,11 +385,18 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
     # El logotipo se copia dentro del snapshot con un nombre propio: cambiarlo
     # despues en Configuracion no toca ningun PDF ya emitido.
     logo = _copiar_logo(db, carpeta / "assets")
-    documento = documents.render(invoice, assets="assets/", logo=logo)
+    # El QR se decide ANTES de componer el documento: si es una imagen subida a
+    # mano, el documento tiene que apuntar a ella con su extension de verdad.
+    from . import codes
+
+    qr_manual = codes.qr_fijo(db)
+    qr_src = f"assets/img/reservation-qr{qr_manual.suffix.lower()}" if qr_manual else None
+
+    documento = documents.render(invoice, assets="assets/", logo=logo, qr_src=qr_src)
     html_path = carpeta / "documento.html"
     html_path.write_text(documento.html, encoding="utf-8")
     copiados = _copiar_assets(documento.html, carpeta / "assets")
-    _escribir_codigos(invoice, carpeta / "assets")
+    _escribir_codigos(invoice, carpeta / "assets", qr_manual)
     _congelar_fotos(invoice, carpeta / "assets")
 
     pdf_path = carpeta / f"{invoice.folio}.pdf"

@@ -209,14 +209,121 @@ with Session() as db:
         check(f"{locale}: y su formato de importe",
               ("$412.500,00" if locale == "es-AR" else "$412,500.00") in texto)
 
-# --- 8 · dos operadores pulsando a la vez -------------------------------------
+# --- 8 · el logotipo del cliente en el papel -----------------------------------
+#
+# Caso real: se subio un PNG con fondo transparente, se veia bien en el
+# documento HTML y en la vista previa, y en el PDF salia dentro de un recuadro
+# negro. La causa estaba en la reduccion de resolucion que hace pdf.py antes de
+# imprimir: convertia a RGB -lo que descarta la transparencia y deja ver el
+# negro de debajo- y guardaba en JPEG un archivo llamado .png.
+#
+# Por eso estas comprobaciones no miran "que haya un logotipo": miran el archivo
+# que Chromium va a imprimir y, sobre todo, los pixeles pintados de verdad.
+print("\n8 · Logotipo con transparencia: HTML, vista previa y PDF")
+
+from PIL import Image, ImageChops, ImageDraw  # noqa: E402
+
+from app import uploads  # noqa: E402
+from app.models import Setting  # noqa: E402
+
+# Un logotipo como los que sube el cliente: recortado, con las esquinas
+# transparentes, y bastante mas ancho de lo que necesita el papel para que
+# entre de lleno en la reduccion de resolucion.
+origen_logo = temporal / "logo-de-prueba.png"
+lienzo = Image.new("RGBA", (900, 200), (0, 0, 0, 0))
+dibujo = ImageDraw.Draw(lienzo)
+dibujo.ellipse([20, 20, 180, 180], fill=(11, 31, 58, 255))
+dibujo.rectangle([220, 60, 860, 140], fill=(198, 160, 74, 255))
+lienzo.save(origen_logo, "PNG")
+
+with Session() as db:
+    guardado = uploads.guardar_imagen(origen_logo.read_bytes(), "logo.png", "logos")
+    db.add(Setting(key="brand.logo_path", market=None, value=guardado.relativa, is_sensitive=True))
+    db.commit()
+
+    con_logo = Invoice(folio="RES-99040", **DATOS)
+    db.add(con_logo)
+    db.commit()
+    r_logo = pdf_engine.generar(db, con_logo)
+    db.commit()
+
+carpeta_logo = r_logo.pdf.parent / "assets/img"
+copias = sorted(carpeta_logo.glob("logo.*"))
+check("el logotipo entra en la copia congelada", len(copias) == 1, str([c.name for c in copias]))
+
+if copias:
+    copia = copias[0]
+    with Image.open(copia) as img:
+        formato_real, modo, tamano = img.format, img.mode, img.size
+        # Las cuatro esquinas del original son transparentes. Si la copia se
+        # hubiera guardado en JPEG saldrian opacas y negras, que es exactamente
+        # el recuadro que aparecia en el PDF.
+        esquinas = [
+            img.convert("RGBA").getpixel(p)
+            for p in ((0, 0), (img.width - 1, 0), (0, img.height - 1),
+                      (img.width - 1, img.height - 1))
+        ]
+    check("y el archivo es de verdad del formato que dice su nombre",
+          formato_real == "PNG", f"{copia.name} contiene {formato_real}")
+    check("conserva el canal de transparencia", modo in ("RGBA", "LA"), modo)
+    check("las esquinas transparentes siguen siendo transparentes",
+          all(p[3] == 0 for p in esquinas), str(esquinas))
+    check("se ha reducido para no inflar el PDF", tamano[0] < 900, f"{tamano[0]}px de ancho")
+    check("pero conserva resolucion de sobra para el papel", tamano[0] >= 400, f"{tamano[0]}px")
+
+    # Lo anterior mira el archivo. Esto mira lo que se PINTA: se abre en
+    # Chromium la misma pagina de la que sale el PDF y se fotografia el
+    # logotipo tal y como queda impreso.
+    from playwright.sync_api import sync_playwright  # noqa: E402
+
+    pintado = temporal / "logo-pintado.png"
+    with sync_playwright() as p:
+        nav = p.chromium.launch(args=["--no-sandbox"])
+        pag = nav.new_page(viewport={"width": 940, "height": 1400})
+        pag.goto((r_logo.pdf.parent / "documento.html").resolve().as_uri())
+        pag.wait_for_load_state("networkidle")
+        elemento = pag.query_selector("img.brand-logo")
+        if elemento:
+            elemento.screenshot(path=str(pintado))
+        nav.close()
+
+    check("el documento impreso lleva el logotipo del cliente", pintado.exists())
+    if pintado.exists():
+        with Image.open(pintado) as foto:
+            impreso = foto.convert("RGB")
+        # El mismo logotipo, apoyado sobre el blanco del papel y llevado al
+        # tamano al que sale impreso: asi tiene que verse.
+        with Image.open(origen_logo) as fuente:
+            esperado = pdf_engine.sobre_blanco(fuente).resize(impreso.size, Image.LANCZOS)
+        diferencia = ImageChops.difference(impreso, esperado).convert("L")
+        media = sum(i * n for i, n in enumerate(diferencia.histogram())) / (
+            impreso.width * impreso.height
+        )
+        check("y se ve igual que el archivo que subio el operador",
+              media < 12, f"diferencia media {media:.1f}/255")
+
+        # Comprobacion aparte y deliberadamente tonta: contar cuanto negro hay.
+        # Con el fallo, casi la mitad del recuadro era negro puro.
+        oscuros = sum(n for i, n in enumerate(impreso.convert("L").histogram()) if i < 40)
+        proporcion = oscuros / (impreso.width * impreso.height)
+        check("sin el recuadro negro que aparecia antes", proporcion < 0.20,
+              f"{proporcion:.0%} de la caja del logotipo es casi negro")
+
+# Una fotografia con transparencia se guarda en JPEG, que no la admite: tiene
+# que aplanarse sobre BLANCO. Aplanarla sobre negro era el mismo fallo.
+transparente = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+aplanada = pdf_engine.sobre_blanco(transparente)
+check("lo transparente se aplana sobre blanco, no sobre negro",
+      aplanada.getpixel((5, 5)) == (255, 255, 255), str(aplanada.getpixel((5, 5))))
+
+# --- 9 · dos operadores pulsando a la vez -------------------------------------
 #
 # Este caso costo un error 500 de verdad. El cerrojo solo protegia la parte de
 # Chromium, asi que tres peticiones simultaneas calculaban las tres la misma
 # version, escribian en la misma carpeta y una borraba los archivos de otra a
 # media copia. Ahora el reparto de version va tambien dentro del cerrojo y se
 # confirma antes de soltarlo.
-print("\n8 · Varios operadores generando el mismo PDF a la vez")
+print("\n9 · Varios operadores generando el mismo PDF a la vez")
 import threading  # noqa: E402
 
 with Session() as db:

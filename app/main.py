@@ -650,12 +650,15 @@ def invoice_photo_file(
     return FileResponse(ruta)
 
 
-@app.get("/facturas/{invoice_id}/codigo-qr.svg")
+@app.get("/facturas/{invoice_id}/codigo-qr")
+@app.get("/facturas/{invoice_id}/codigo-qr.svg")   # nombre anterior, se conserva
 def invoice_qr(request: Request, invoice_id: int, db: Session = Depends(get_db)):
-    """QR de verificacion de esa factura, dibujado al vuelo.
+    """QR de verificacion de esa factura.
 
-    Se sirve como SVG y no como imagen: en el PDF se imprime nitido a cualquier
-    tamano, y un lector de codigos no se atraganta con los bordes.
+    En el modo normal se dibuja al vuelo y se sirve como SVG, no como imagen:
+    en el PDF se imprime nitido a cualquier tamano y un lector de codigos no se
+    atraganta con los bordes. Si en Configuracion hay un QR subido a mano, se
+    sirve ese archivo tal cual, con su propio tipo.
     """
     user = require_login(request)
     if isinstance(user, RedirectResponse):
@@ -663,6 +666,12 @@ def invoice_qr(request: Request, invoice_id: int, db: Session = Depends(get_db))
     invoice = db.get(Invoice, invoice_id)
     if invoice is None:
         return Response(status_code=404)
+    # Si en Configuracion hay puesto un QR a mano, es ese el que se sirve, para
+    # que el documento y la vista previa ensenen exactamente lo que se va a
+    # imprimir. Sin el, se dibuja el de siempre a partir del folio.
+    manual = codes.qr_fijo(db)
+    if manual is not None:
+        return FileResponse(manual)
     base = (invoice.verify_url_base or "").strip()
     url = base.rstrip("/") + "/" + (invoice.folio or "") if base else ""
     return Response(codes.qr_svg(url), media_type="image/svg+xml")
@@ -1006,6 +1015,13 @@ def settings_view(request: Request, db: Session = Depends(get_db)):
         por_mercado=por_mercado,
         etiquetas=ETIQUETAS_AJUSTE,
         logo_url="/configuracion/logo.img" if _logo_actual(db) else None,
+        qr_modo=codes.ajuste(db, "qr.mode") or codes.MODO_DINAMICO,
+        qr_url="/configuracion/qr.img" if codes.ajuste(db, "qr.image_path") else None,
+        # Modo manual con el archivo desaparecido: el sistema vuelve solo al QR
+        # automatico, pero hay que decirlo o parecera que el ajuste no funciona.
+        qr_perdido=(
+            codes.ajuste(db, "qr.mode") == codes.MODO_FIJO and codes.qr_fijo(db) is None
+        ),
         minutes=settings.master_session_minutes,
     )
 
@@ -1162,6 +1178,112 @@ def settings_logo_file(request: Request, db: Session = Depends(get_db)):
         return user
     fila = db.execute(
         select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
+    ).scalar_one_or_none()
+    ruta = uploads.ruta_absoluta(fila.value if fila else None)
+    if ruta is None:
+        return Response(status_code=404)
+    return FileResponse(ruta)
+
+
+# --- QR: automatico o subido a mano -------------------------------------------
+#
+# El modo normal es el automatico: el servidor dibuja el QR de cada factura con
+# su enlace de verificacion, y no hay nada que mantener. El manual esta para
+# cuando el QR viene de otro sistema y tiene que salir tal cual.
+#
+# Subir una imagen cambia el modo sola: nadie sube un QR para dejarlo apagado.
+# Volver al automatico se hace con su propio boton y conserva el archivo, por si
+# se quiere recuperar.
+
+
+def _fila_ajuste(db: Session, clave: str) -> Setting:
+    fila = db.execute(
+        select(Setting).where(Setting.key == clave, Setting.market.is_(None))
+    ).scalar_one_or_none()
+    if fila is None:
+        fila = Setting(key=clave, market=None, value="", is_sensitive=True)
+        db.add(fila)
+    return fila
+
+
+@app.post("/configuracion/qr")
+async def settings_qr_upload(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not master_unlocked(request):
+        flash(request, "La Configuración está bloqueada.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    touch_master(request)
+    form = await request.form()
+    archivo = form.get("qr")
+    if archivo is None or not getattr(archivo, "filename", ""):
+        flash(request, "No se ha elegido ningún archivo.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        guardado = uploads.guardar_imagen(await archivo.read(), archivo.filename, "qr")
+    except uploads.SubidaInvalida as exc:
+        flash(request, str(exc), "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    ruta = _fila_ajuste(db, "qr.image_path")
+    modo = _fila_ajuste(db, "qr.mode")
+    anterior = ruta.value
+    ruta.value = guardado.relativa
+    modo.value = codes.MODO_FIJO
+    db.commit()
+    if anterior and anterior != guardado.relativa:
+        uploads.borrar(anterior)
+
+    act.log(request=request, db=db, action=act.SETTINGS_UPDATED, detail="QR personalizado")
+    medida = f"{guardado.ancho}×{guardado.alto} px" if guardado.ancho else guardado.formato
+    aviso = ""
+    if guardado.ancho and abs(guardado.ancho - guardado.alto) > max(guardado.ancho, guardado.alto) * 0.1:
+        # Un QR es cuadrado. Si no lo es, o sobra fondo o la imagen no es un QR,
+        # y en el hueco del diseno saldra deformada.
+        aviso = " Atención: la imagen no es cuadrada y el hueco del QR sí lo es."
+    flash(
+        request,
+        f"QR personalizado en uso ({guardado.formato}, {medida}). "
+        "Compruebe con el móvil que se lee antes de emitir facturas. "
+        "Las ya emitidas no cambian: cada PDF lleva dentro su propia copia." + aviso,
+        "ok" if not aviso else "error",
+    )
+    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/configuracion/qr/automatico")
+def settings_qr_dynamic(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not master_unlocked(request):
+        flash(request, "La Configuración está bloqueada.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    touch_master(request)
+    _fila_ajuste(db, "qr.mode").value = codes.MODO_DINAMICO
+    db.commit()
+    act.log(request=request, db=db, action=act.SETTINGS_UPDATED, detail="QR automático")
+    flash(
+        request,
+        "El QR vuelve a generarse por folio. La imagen subida se conserva "
+        "por si quiere volver a usarla.",
+        "ok",
+    )
+    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/configuracion/qr.img")
+def settings_qr_file(request: Request, db: Session = Depends(get_db)):
+    """Sirve el QR subido, para verlo en la pantalla de Configuración."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    fila = db.execute(
+        select(Setting).where(Setting.key == "qr.image_path", Setting.market.is_(None))
     ).scalar_one_or_none()
     ruta = uploads.ruta_absoluta(fila.value if fila else None)
     if ruta is None:

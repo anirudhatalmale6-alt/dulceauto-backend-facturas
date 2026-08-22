@@ -20,10 +20,17 @@ lector: el fallo aparece en el mostrador, no aqui.
 from __future__ import annotations
 
 import html
+from pathlib import Path
 
 # Colores de los archivos aprobados.
 COLOR_QR = "#0b1f3a"
 COLOR_BARRAS = "#111"
+
+# Los dos modos de QR que se pactaron: el normal, que lo dibuja el servidor a
+# partir del folio, y el manual, para cuando hay que poner un QR que viene de
+# fuera (una pasarela de pago, una campana, otro sistema de verificacion).
+MODO_DINAMICO = "dynamic"
+MODO_FIJO = "fixed"
 
 # El codigo de barras aprobado mide 134 x 78 en su viewBox.
 ALTO_BARRAS = 78
@@ -106,3 +113,42 @@ def _svg_vacio(ancho: int, alto: int, color: str) -> str:
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {ancho} {alto}" role="img">'
         f'<rect width="{ancho}" height="{alto}" fill="#fff"/></svg>'
     )
+
+
+# --- QR fijo, subido a mano ---------------------------------------------------
+#
+# El modo normal es el dinamico: el servidor dibuja el QR con el enlace de
+# verificacion de cada factura, asi que nunca hay que acordarse de nada. El modo
+# fijo existe para los casos en que el QR viene de otro sitio -una pasarela de
+# pago, una campana, un sistema de verificacion propio- y tiene que salir tal
+# cual en el documento.
+#
+# La eleccion vive en Configuracion, detras de la Master Password, y el archivo
+# que se este usando se copia dentro de cada snapshot: cambiarlo despues no
+# altera ninguna factura ya emitida.
+
+
+def ajuste(db, clave: str) -> str:
+    from sqlalchemy import select
+
+    from .models import Setting
+
+    fila = db.execute(
+        select(Setting).where(Setting.key == clave, Setting.market.is_(None))
+    ).scalar_one_or_none()
+    return ((fila.value if fila else "") or "").strip()
+
+
+def qr_fijo(db) -> Path | None:
+    """El archivo de QR que hay puesto a mano, o None si se dibuja por folio.
+
+    Devuelve None tambien cuando el modo es fijo pero el archivo ya no esta en
+    el disco. Es deliberado: preferimos volver al QR dinamico, que siempre
+    funciona, antes que imprimir una factura con el hueco del QR roto. La
+    pantalla de Configuracion avisa de esa situacion.
+    """
+    from . import uploads
+
+    if ajuste(db, "qr.mode") != MODO_FIJO:
+        return None
+    return uploads.ruta_absoluta(ajuste(db, "qr.image_path"))

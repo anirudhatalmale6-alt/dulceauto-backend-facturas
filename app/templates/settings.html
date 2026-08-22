@@ -92,7 +92,10 @@
   <form method="post" action="/configuracion/guardar">
     <div class="form-grid" style="margin-top:12px">
       {% for s in globales %}
-        {% if s.key != 'brand.logo_path' %}
+        {# El logotipo y el QR tienen su propia tarjeta, con archivo y vista
+           previa. Aqui saldrian como una casilla de texto donde escribir una
+           ruta a mano, que no es forma de elegir una imagen. #}
+        {% if s.key not in ('brand.logo_path', 'qr.mode', 'qr.image_path') %}
           <label class="{{ 'full' if s.key.endswith('url') else '' }}">
             {{ etiquetas.get(s.key, s.key) }}
             <input name="ajuste:{{ s.key }}" value="{{ s.value or '' }}">
@@ -136,8 +139,62 @@
   </div>
 </div>
 
+<div class="settings-section-title">05 · Código QR de la factura</div>
+<div class="card">
+  <div class="logo-row">
+    <div>
+      <p class="small muted">
+        <b>Automático (recomendado).</b> El servidor dibuja el QR de cada factura
+        con su propio enlace de verificación: la URL base de arriba más el folio.
+        No hay que mantener nada y cada factura lleva el suyo.
+      </p>
+      <p class="small muted">
+        <b>Personalizado.</b> Se usa la imagen que suba aquí, igual en todas las
+        facturas. Sirve cuando el QR viene de otro sistema. Se copia dentro de
+        cada PDF que se genere después, así que cambiarlo no altera los ya
+        emitidos.
+      </p>
+
+      {% if qr_perdido %}
+        <div class="lock" style="margin-bottom:10px">
+          <b>⚠️ Atención</b>
+          <span>Está seleccionado el QR personalizado, pero su archivo ya no
+          está en el servidor. Mientras tanto las facturas salen con el QR
+          automático. Vuelva a subir la imagen o pase a automático.</span>
+        </div>
+      {% endif %}
+
+      <form method="post" action="/configuracion/qr" enctype="multipart/form-data">
+        <input type="file" name="qr" accept="image/png,image/jpeg,image/svg+xml,image/webp" required>
+        <button class="btn gold" type="submit" style="margin-top:10px">
+          Subir QR y usarlo en las facturas
+        </button>
+      </form>
+      {% if qr_modo == 'fixed' %}
+        <form method="post" action="/configuracion/qr/automatico" style="margin-top:10px">
+          <button class="btn ghost" type="submit">Volver al QR automático por folio</button>
+        </form>
+      {% endif %}
+      <p class="small muted" style="margin-top:10px">
+        Compruébelo con el móvil antes de emitir facturas: una imagen puede
+        parecer un QR perfecto y no leerla ningún lector.
+      </p>
+    </div>
+    <div class="logo-preview">
+      {% if qr_modo == 'fixed' and qr_url and not qr_perdido %}
+        <img src="{{ qr_url }}" alt="QR personalizado en uso">
+      {% else %}
+        <span class="small muted">
+          QR <b>automático</b>: se genera por folio.
+          {% if qr_url %}<br>Hay una imagen guardada sin usar.{% endif %}
+        </span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <div class="devnote" style="margin-top:16px">
-  <b>Fase D.</b> Los ajustes se editan y se validan de verdad: una CLABE o un CBU
+  Los ajustes se editan y se validan de verdad: una CLABE o un CBU
   con un dígito mal no se guardan, porque después se copiarían a cada factura
   nueva y el cliente transferiría a una cuenta que no existe.
 </div>

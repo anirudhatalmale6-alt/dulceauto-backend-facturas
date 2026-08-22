@@ -369,7 +369,9 @@ def _url_verificacion(invoice) -> str:
     return base if base.endswith(invoice.folio or "") else base.rstrip("/") + "/" + (invoice.folio or "")
 
 
-def construir_atributos(invoice, codigos: str | None = None) -> dict[str, dict[str, str]]:
+def construir_atributos(
+    invoice, codigos: str | None = None, qr_src: str | None = None
+) -> dict[str, dict[str, str]]:
     """Atributos que dependen de la factura. Son pocos y estan todos aqui.
 
     codigos="panel" hace que el QR y el codigo de barras apunten a las rutas que
@@ -377,15 +379,22 @@ def construir_atributos(invoice, codigos: str | None = None) -> dict[str, dict[s
     plantilla, que es lo que quiere el snapshot: alli los dos archivos se
     escriben en su sitio con el mismo nombre, de modo que la copia congelada
     sigue siendo una carpeta que se abre sola.
+
+    qr_src cambia solo el archivo del QR. Hace falta cuando el QR no lo dibuja
+    el servidor sino que es una imagen subida a mano: la plantilla pide un .svg
+    y la imagen puede ser un PNG, y un PNG guardado con nombre .svg es
+    exactamente la clase de mentira que rompe las cosas mas adelante.
     """
     locale = invoice.locale or "es-MX"
     folio = invoice.folio or ""
     fuentes = {}
     if codigos == "panel":
         fuentes = {
-            "codigo_qr": {"src": f"/facturas/{invoice.id}/codigo-qr.svg"},
+            "codigo_qr": {"src": f"/facturas/{invoice.id}/codigo-qr"},
             "codigo_barras": {"src": f"/facturas/{invoice.id}/codigo-barras.svg"},
         }
+    if qr_src:
+        fuentes["codigo_qr"] = {"src": qr_src}
 
     # Fotografias.
     #
@@ -481,6 +490,7 @@ def render(
     assets: str = ASSETS_PANEL,
     codigos: str | None = None,
     logo: str | None = None,
+    qr_src: str | None = None,
     marca: str = "DulceAuto",
 ) -> Documento:
     """Documento de una factura, listo para enseñar o para imprimir.
@@ -492,7 +502,7 @@ def render(
     locale = invoice.locale or "es-MX"
     plantilla = cargar(locale)
     valores = construir_valores(invoice)
-    atributos = construir_atributos(invoice, codigos)
+    atributos = construir_atributos(invoice, codigos, qr_src)
     vacios: list[str] = []
     # Un hueco que desaparece cuando esta vacio no es un dato que falte: el
     # descuento no existe en la mayoria de las operaciones.
