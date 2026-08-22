@@ -233,6 +233,88 @@ with Session() as db:
           not list((tercera.pdf.parent / "assets/img").glob("logo.*")))
 
 
+    print("\n7 · Al duplicar, las fotografias acompanan al vehiculo")
+    # Duplicar es atender a otro interesado por el mismo coche: las fotografias
+    # son datos del vehiculo, como el VIN, y tienen que ir en la copia.
+    from app.invoices import duplicate
+
+    fila.value = logo.relativa          # se deja el logotipo como estaba
+    db.commit()
+    db.refresh(factura)
+    originales = {f.position: f.file_path for f in factura.photos}
+
+    copia = duplicate(db, factura)
+    db.commit()
+    db.refresh(copia)
+    heredadas = {f.position: f.file_path for f in copia.photos}
+
+    check("la copia hereda las cuatro fotografias", sorted(heredadas) == [1, 2, 3, 4],
+          str(sorted(heredadas)))
+    check("cada una en la misma posicion y con la misma imagen",
+          all(
+              Image.open(uploads.ruta_absoluta(heredadas[p])).convert("RGB").getpixel((5, 5))
+              == Image.open(uploads.ruta_absoluta(originales[p])).convert("RGB").getpixel((5, 5))
+              for p in heredadas
+          ))
+    check("pero son archivos distintos en el disco, no la misma ruta",
+          all(heredadas[p] != originales[p] for p in heredadas),
+          "compartir la ruta borraria la foto del original al sustituirla en la copia")
+    check("y la copia sigue naciendo en borrador", copia.status == "draft", copia.status)
+    check("con folio propio", copia.folio != factura.folio, f"{factura.folio} -> {copia.folio}")
+
+    # La prueba que de verdad importa: sustituir una fotografia en la copia no
+    # puede dejar sin imagen a la factura original.
+    nueva = uploads.guardar_imagen(imagen(color="#ff00ff"), "otra.jpg", "facturas/2")
+    de_la_copia = next(f for f in copia.photos if f.position == 1)
+    uploads.borrar(de_la_copia.file_path)          # es lo que hace la ruta de subida
+    de_la_copia.file_path = nueva.relativa
+    db.commit()
+
+    ruta_original_1 = uploads.ruta_absoluta(originales[1])
+    check("sustituir una foto en la copia no toca el archivo del original",
+          ruta_original_1 is not None)
+    if ruta_original_1 is not None:
+        with Image.open(ruta_original_1) as img:
+            esperado_1 = img.convert("RGB").getpixel((5, 5))
+        db.refresh(factura)
+        con_original = pdf_engine.generar(db, factura)
+        with Image.open(con_original.pdf.parent / "assets/img/vehicle-front.jpg") as img:
+            impreso_1 = img.convert("RGB").getpixel((img.width // 2, img.height // 2))
+        check("y el original sigue imprimiendo su fotografia de siempre",
+              all(abs(a - b) <= 8 for a, b in zip(impreso_1, esperado_1)),
+              f"{impreso_1} vs {esperado_1}")
+
+    de_la_copia_pdf = pdf_engine.generar(db, copia)
+    check("la copia imprime con las fotografias heredadas", de_la_copia_pdf.paginas == 1)
+    for posicion in (2, 3, 4):
+        nombre = pdf_engine.documents.ARCHIVO_FOTO[f"foto_{posicion}"]
+        check(f"copia: hueco {posicion} relleno",
+              (de_la_copia_pdf.pdf.parent / "assets/img" / nombre).exists())
+
+    # Una factura sin fotografias se duplica igual, sin inventarse ninguna.
+    sin_fotos = Invoice(folio="RES-95900", **{**DATOS, "vehicle_vin": "1HGCM82633A004352"})
+    db.add(sin_fotos)
+    db.commit()
+    copia_vacia = duplicate(db, sin_fotos)
+    db.commit()
+    db.refresh(copia_vacia)
+    check("duplicar una factura sin fotografias no falla ni inventa ninguna",
+          len(copia_vacia.photos) == 0, str(len(copia_vacia.photos)))
+
+    # Y si el archivo ya no esta en el disco, no se crea una fotografia que
+    # apunte a la nada: se omite esa posicion.
+    perdida = uploads.guardar_imagen(imagen(color="#123456"), "perdida.jpg", "facturas/9")
+    db.add(InvoicePhoto(invoice_id=sin_fotos.id, position=1, file_path=perdida.relativa))
+    db.commit()
+    uploads.borrar(perdida.relativa)
+    db.refresh(sin_fotos)
+    copia_rota = duplicate(db, sin_fotos)
+    db.commit()
+    db.refresh(copia_rota)
+    check("una fotografia que ya no esta en el disco no se hereda rota",
+          len(copia_rota.photos) == 0, str([f.file_path for f in copia_rota.photos]))
+
+
 print(f"\n{'=' * 58}\n{len(ok)} comprobaciones correctas, {len(fallos)} fallos")
 for f in fallos:
     print(f"  FALLA: {f}")

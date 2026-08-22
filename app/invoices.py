@@ -329,6 +329,31 @@ def create(db: Session, form) -> tuple[Invoice | None, list[str]]:
     return invoice, []
 
 
+def _heredar_fotos(source: Invoice, copia: Invoice) -> None:
+    """Lleva a la copia las fotografias del vehiculo del original.
+
+    Cada archivo se duplica en disco. Si las dos facturas compartieran la misma
+    ruta, sustituir una fotografia en la copia borraria el archivo y dejaria sin
+    imagen a la factura original, que puede llevar meses emitida.
+    """
+    from . import uploads
+    from .models import InvoicePhoto
+
+    for foto in getattr(source, "photos", []):
+        copiada = uploads.copiar(foto.file_path)
+        if copiada is None:
+            # El archivo ya no esta en el disco. Se omite esa posicion en vez de
+            # crear una fotografia que apunta a la nada.
+            continue
+        copia.photos.append(
+            InvoicePhoto(
+                position=foto.position,
+                file_path=copiada,
+                original_name=foto.original_name,
+            )
+        )
+
+
 def duplicate(db: Session, source: Invoice, form=None) -> Invoice:
     """Copia una factura para otro interesado.
 
@@ -343,10 +368,16 @@ def duplicate(db: Session, source: Invoice, form=None) -> Invoice:
     2. Los datos bancarios y los del representante no se heredan del original:
        se cargan de la Configuracion vigente. Una copia es una operacion nueva y
        no puede arrastrar una cuenta que quiza ya se cambio.
+
+    Las fotografias del vehiculo SI acompanan a la copia, porque son datos del
+    vehiculo como el VIN o el kilometraje, y duplicar es normalmente atender a
+    otro interesado por el mismo coche. Se copian los archivos, no la ruta: ver
+    uploads.copiar().
     """
     copia = Invoice()
     for name in DUPLICATE_CARRY_FIELDS:
         setattr(copia, name, getattr(source, name))
+    _heredar_fotos(source, copia)
 
     copia.status = STATUS_DRAFT
     copia.duplicated_from_id = source.id

@@ -21,7 +21,10 @@
     <div class="row"><span>Vehículo</span><b>{{ source.vehicle_title or '—' }}</b></div>
     <div class="row"><span>VIN</span><b>{{ source.vehicle_vin or '—' }}</b></div>
     <div class="row"><span>Nuevo folio</span><b>{{ folio_previsto }}</b></div>
-    <div class="row"><span>Qué se copia</span><b>Vehículo · precios · plantilla · entrega</b></div>
+    <div class="row"><span>Qué se copia</span><b>Vehículo · fotografías · precios · plantilla · entrega</b></div>
+    <div class="row"><span>Fotografías</span><b>
+      {% if source.photos %}Se heredan las {{ source.photos|length }} del vehículo · puede reemplazarlas una a una
+      {% else %}El original no tiene fotografías cargadas{% endif %}</b></div>
     <div class="row"><span>Qué se reinicia</span><b>Datos del cliente original · folio · fechas · autorización</b></div>
     <div class="row"><span>Datos bancarios</span><b>Se toman de Configuración, no del original</b></div>
     <div class="row"><span>Estado inicial</span><b>Borrador, siempre</b></div>

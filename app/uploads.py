@@ -130,6 +130,22 @@ def ruta_absoluta(relativa: str | None) -> Path | None:
     return ruta if ruta.exists() else None
 
 
+def copiar(relativa: str | None) -> str | None:
+    """Duplica un archivo ya guardado y devuelve la ruta de la copia.
+
+    Se hace una copia de verdad, no se reutiliza la ruta del original. Dos
+    facturas que apunten al mismo archivo parecen lo mismo hasta que alguien
+    sustituye la fotografia de una: al sustituirla se borra el archivo, y la
+    otra factura se queda sin imagen sin que nadie haya tocado nada en ella.
+    """
+    origen = ruta_absoluta(relativa)
+    if origen is None:
+        return None
+    destino = origen.parent / f"{secrets.token_hex(8)}{origen.suffix}"
+    destino.write_bytes(origen.read_bytes())
+    return str(destino.relative_to(settings.data_dir))
+
+
 def borrar(relativa: str | None) -> None:
     ruta = ruta_absoluta(relativa)
     if ruta is not None:
