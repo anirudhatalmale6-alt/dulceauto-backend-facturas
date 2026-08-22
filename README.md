@@ -16,10 +16,11 @@ tocado sus estilos.
 | **A** | Base del proyecto, acceso, Master Password, modelo de datos, panel con las 6 vistas y los 3 modos visuales | **Entregada** |
 | **B** | Crear, editar, borrador, buscar, duplicar, agrupación por VIN | **Entregada** |
 | **C** | Motor de plantillas, claves fijas en las 3 plantillas, reglas por mercado, vista previa real | **Entregada** |
-| D | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | **En curso** — PDF y snapshot hechos |
+| **D** | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | **Entregada** — instalado en producción |
 
-Donde una acción todavía no está cableada, la pantalla lo indica con una
-etiqueta de fase en lugar de ofrecer un botón que no hace nada.
+El sistema está en producción, así que el panel ya no lleva ninguna etiqueta de
+fase ni descripción del alcance: eso era información del desarrollo y no le
+sirve de nada a quien usa el backend todos los días.
 
 ---
 
@@ -306,8 +307,59 @@ ocupa cada imagen en la hoja y se reduce **la copia del snapshot** a los píxele
 que hacen falta para 300 ppp. El PDF baja a 1,2 MB sin perder nitidez, y el
 original de la plantilla no se toca.
 
+⚠️ **Esa reducción tiene que respetar la transparencia.** Un logotipo llega
+normalmente en PNG recortado, y ahí hay dos trampas que no dan ningún error:
+
+1. `convert("RGB")` sobre una imagen con transparencia **no** pone fondo blanco.
+   Descarta el canal alfa y deja a la vista lo que había debajo, que en la
+   mayoría de los PNG es negro: el logotipo aparece dentro de un rectángulo
+   negro.
+2. Guardar en JPEG un archivo llamado `.png` «funciona» —el navegador mira el
+   contenido, no la extensión— pero JPEG no admite transparencia, así que el
+   recuadro sale igual.
+
+Pasó de verdad, y **solo en el PDF**: el documento HTML y la vista previa sirven
+el archivo tal y como lo subió el operador, y únicamente el PDF pasa por esta
+reducción. De ahí que se viera bien en pantalla y quemado en el papel.
+
+Ahora `pdf.py` reduce en RGBA cuando hay transparencia, guarda en el formato que
+anuncia la extensión (`_guardar_imagen`) y aplana sobre **blanco** —el color del
+papel— solo cuando el destino es JPEG. `verificar_pdf.py` lo comprueba mirando
+los píxeles que se pintan de verdad, no solo el archivo.
+
 Volver a generar no pisa la anterior: sube la versión y las dos quedan
 descargables.
+
+### El QR: automático o subido a mano
+
+Dos modos, en Configuración, detrás de la Master Password:
+
+| Modo | Qué hace |
+|---|---|
+| **Automático** (por defecto) | El servidor dibuja el QR de cada factura con su enlace de verificación: `qr.base_url` + folio. No hay nada que mantener y cada factura lleva el suyo. Se genera en SVG, que se imprime nítido a cualquier tamaño. |
+| **Personalizado** | Se usa la imagen que se suba, igual en todas las facturas. Para cuando el QR viene de otro sistema. |
+
+El modo se guarda en `qr.mode` y el archivo en `qr.image_path`. Subir una imagen
+activa el modo manual sola; se vuelve al automático con su propio botón, que
+conserva el archivo por si se quiere recuperar.
+
+Detalles que importan:
+
+- **El archivo se copia dentro del snapshot**, igual que el logotipo. Cambiar el
+  QR después no toca ninguna factura ya emitida.
+- Se conserva la **extensión de verdad**: si se sube un PNG, dentro del snapshot
+  queda `reservation-qr.png` y el documento apunta ahí. Guardar un PNG con
+  nombre `.svg` es la misma clase de mentira que rompía el logotipo.
+- Un QR **no se reduce como una fotografía**. Un código es geometría: al
+  encogerlo, los bordes de sus cuadros se mezclan con el blanco de al lado y el
+  lector deja de distinguirlos. Su suelo de resolución es 1000 px
+  (`LADO_MINIMO_QR`), que en PNG no llega a 30 KB.
+- Si el modo es manual pero el archivo ya no está en el disco, **se vuelve solo
+  al automático** en vez de imprimir una factura con el hueco del QR roto, y la
+  pantalla de Configuración avisa de la situación.
+
+`verificar_codigos.py` no comprueba que «parezca» un QR: lo **lee con un lector
+real** desde la página del PDF ya impreso, en los dos modos.
 
 **Una sola página, siempre.** El CSS aprobado imprime la factura escalada con
 `--print-scale` y `--print-height`. En el Milestone 1 esos dos números se
@@ -352,27 +404,6 @@ describe bien y no se toca.
 Actividad. Un borrador no se imprime.
 
 ### Subidas
-
-`app/uploads.py`. La regla es no creerse lo que dice el archivo: ni la extensión
-ni el tipo que manda el navegador prueban nada, porque los pone quien sube el
-archivo. Se abre la imagen y se mira lo que hay dentro; si no se puede abrir, no
-entra. Un SVG es código, así que además se rechaza el que traiga `script` o
-manejadores de eventos: acabaría incrustado en la factura y en su PDF.
-
-El nombre del archivo lo genera el servidor. Un nombre de usuario puede llevar
-barras o puntos dobles y colarse fuera de la carpeta.
-
-### Configuración editable
-
-Se edita tras la Master Password, y **se valida**: una CLABE o un CBU con el
-dígito de control mal no se guardan, porque después se copiarían a cada factura
-nueva y el cliente transferiría a una cuenta que no existe. La URL base del QR
-tiene que ser una URL; el contador de folios, un número.
-
-Cambiar cualquier cosa aquí **no toca ninguna factura ya emitida**: los datos se
-copian a la factura al crearla, y el PDF lleva dentro su propia copia de todo.
-
-### Vista previa### Subidas
 
 `app/uploads.py`. La regla es no creerse lo que dice el archivo: ni la extensión
 ni el tipo que manda el navegador prueban nada, porque los pone quien sube el
@@ -451,10 +482,19 @@ copia.
 | Se copia | Se reinicia |
 |---|---|
 | Vehículo completo y VIN | Datos del cliente original: nombre, email, teléfono, ciudad (la pantalla de duplicar pide los del nuevo interesado) |
-| Precios, descuento, seguro, transporte | Folio (se genera uno nuevo) |
-| Plantilla y moneda | Fecha de emisión, vigencia, entrega |
-| Modalidad y textos de entrega | Autorización |
-|  | Estado: la copia **nace siempre como borrador** |
+| Fotografías del vehículo | Folio (se genera uno nuevo) |
+| Precios, descuento, seguro, transporte | Fecha de emisión, vigencia, entrega |
+| Plantilla y moneda | Autorización |
+| Modalidad y textos de entrega | Estado: la copia **nace siempre como borrador** |
+
+Las fotografías acompañan a la copia porque son datos del vehículo, igual que el
+VIN o el kilometraje: duplicar es atender a otro interesado por el mismo coche.
+En la copia se pueden reemplazar una a una desde el editor.
+
+⚠️ De cada fotografía se hace una **copia del archivo**, no se comparte la ruta.
+Si las dos facturas apuntaran al mismo archivo, sustituir la fotografía en la
+copia lo borraría del disco y la factura original —que puede llevar meses
+emitida— se quedaría sin imagen sin que nadie la hubiese tocado.
 
 **Duplicar no confirma la reserva.** La copia nace siempre en borrador, sin
 excepciones: no hay ninguna opción en pantalla para elegir otro estado, y un
@@ -575,7 +615,7 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**435 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**482 comprobaciones en total.** No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -602,21 +642,29 @@ anterior, para que los recuentos por VIN sigan significando algo.
   reintento ante un choque simultáneo. Se ejecuta sin servidor, sobre una base
   de datos temporal, porque el choque entre dos operadores no se puede provocar
   desde el navegador.
-- **Fase D · 36.** Con navegador: que un borrador no se imprima, que el PDF se
+- **Fase D · 49.** Con navegador: que un borrador no se imprima, que el PDF se
   descargue y sea un PDF de una página, que volver a generarlo cree una versión
   nueva sin borrar la anterior, que la copia congelada conserve los datos de
-  entonces y que generar no mueva el estado de la operación.
-- **PDF · 48.** Sin navegador, generando PDF de verdad: A4, una página, la copia
+  entonces, que generar no mueva el estado de la operación, que el QR se pueda
+  cambiar a personalizado y volver al automático desde el propio panel, y que
+  ninguna pantalla enseñe ya textos del desarrollo.
+- **PDF · 58.** Sin navegador, generando PDF de verdad: A4, una página, la copia
   congelada completa (incluidas las tipografías) y la escala recalculada por
-  factura.
-- **Subidas · 43.** Sin navegador: qué archivos se aceptan y cuáles no (un
+  factura. Incluye el logotipo con transparencia, comprobado **sobre los píxeles
+  que se pintan**: se fotografía el logotipo tal y como queda impreso y se exige
+  que se parezca al archivo que subió el operador, sin el recuadro negro.
+- **Subidas · 56.** Sin navegador: qué archivos se aceptan y cuáles no (un
   «.jpg» que es texto, un SVG con script dentro, una ruta con `..`), que
-  Configuración rechace una CLABE o un CBU con el dígito de control mal, y que
-  cambiar el logotipo o una fotografía **no toque** los PDF ya emitidos.
-- **Códigos · 18.** El QR y el código de barras, **leídos con un lector de
+  Configuración rechace una CLABE o un CBU con el dígito de control mal, que
+  cambiar el logotipo o una fotografía **no toque** los PDF ya emitidos, y que
+  al duplicar las fotografías acompañen al vehículo como **copias propias**:
+  sustituir una en la copia no puede dejar sin imagen a la factura original.
+- **Códigos · 29.** El QR y el código de barras, **leídos con un lector de
   verdad**: del SVG del snapshot y de la página del PDF ya impreso, a 200 y a
-  300 ppp. Un código mal generado se ve perfecto y no lo lee nadie. Necesita
-  `pyzbar` y `pdftoppm`, que solo hacen falta para comprobar.
+  300 ppp. Un código mal generado se ve perfecto y no lo lee nadie. Cubre los
+  dos modos de QR, incluido el personalizado leído del papel, y qué pasa si el
+  archivo del QR manual desaparece. Necesita `pyzbar` y `pdftoppm`, que solo
+  hacen falta para comprobar.
 - **Datos · 20.** Formatos de importe y dígitos de control de CLABE, CBU y VIN.
   También sin servidor.
 

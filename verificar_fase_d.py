@@ -224,6 +224,75 @@ with sync_playwright() as p:
     page.wait_for_load_state()
 
     # -------------------------------------------------------------------------
+    print("\n7ter · QR automatico y QR personalizado")
+    # El modo manual estaba declarado en Configuracion desde el principio pero
+    # no hacia nada. Aqui se comprueba usando el panel, que es donde el fallo se
+    # notaria: subir la imagen, verla en el documento y poder volver atras.
+    import io
+
+    import segno
+
+    PROPIO = "https://pagos.dulceauto.mx/prueba-qr-manual"
+    memoria = io.BytesIO()
+    segno.make(PROPIO, error="m").save(memoria, kind="png", scale=14, border=2)
+    archivo_qr = Path(SHOTS) / "qr-manual.png"
+    archivo_qr.write_bytes(memoria.getvalue())
+
+    page.goto(f"{BASE}/configuracion")
+    check("el QR arranca en automatico",
+          "se genera por folio" in page.content())
+
+    page.set_input_files('input[name="qr"]', str(archivo_qr))
+    page.click('button:has-text("Subir QR")')
+    page.wait_for_load_state()
+    check("subir una imagen activa el QR personalizado",
+          page.locator('button:has-text("Volver al QR automático")').count() == 1)
+
+    page.goto(f"{BASE}/facturas/{factura_id}/documento")
+    src_qr = page.get_attribute('[data-field="codigo_qr"]', "src") or ""
+    check("el documento pide el QR al servidor", "codigo-qr" in src_qr, src_qr)
+    r = page.request.get(f"{BASE}{src_qr}" if src_qr.startswith("/") else src_qr)
+    check("y lo que sirve es la imagen subida, no un SVG generado",
+          r.headers.get("content-type", "").startswith("image/png"),
+          r.headers.get("content-type", ""))
+
+    page.goto(f"{BASE}/configuracion")
+    page.click('button:has-text("Volver al QR automático")')
+    page.wait_for_load_state()
+    check("se puede volver al QR automatico", "se genera por folio" in page.content())
+    page.goto(f"{BASE}/facturas/{factura_id}/documento")
+    src_qr = page.get_attribute('[data-field="codigo_qr"]', "src") or ""
+    r = page.request.get(f"{BASE}{src_qr}" if src_qr.startswith("/") else src_qr)
+    check("y vuelve a servirse el SVG dibujado por folio",
+          "svg" in r.headers.get("content-type", ""), r.headers.get("content-type", ""))
+
+    # -------------------------------------------------------------------------
+    print("\n7quater · El panel no ensena textos del desarrollo")
+    # El sistema esta en produccion y quien lo usa es un empleado. Nombres de
+    # fase, versiones internas y descripciones del alcance no le sirven de nada.
+    RASTROS = ("Fase A", "Fase B", "Fase C", "Fase D", "Backend V1", "Facturas Premium")
+    # Se miran solo las zonas fijas del panel -barra lateral, cabecera, pie y
+    # las notas explicativas-, no las tablas: ahi hay facturas de prueba cuyo
+    # cliente se llama justamente "Cliente de la Fase D", y ese texto es un dato,
+    # no un rotulo del programa.
+    ZONAS = ".sidebar, .topbar, .footer-note, .devnote, .sidebar-note"
+    for ruta in ("/", "/facturas", "/plantillas", "/actividad", "/configuracion",
+                 f"/facturas/{factura_id}/editar"):
+        page.goto(f"{BASE}{ruta}")
+        texto = " ".join(page.locator(ZONAS).all_inner_texts())
+        encontrados = [r for r in RASTROS if r in texto]
+        check(f"{ruta}: sin textos de desarrollo", not encontrados, ", ".join(encontrados))
+
+    page.goto(f"{BASE}/salir")
+    page.goto(f"{BASE}/acceso")
+    entrada = page.locator(".login-card").inner_text()
+    check("la pantalla de acceso tampoco", not [r for r in RASTROS if r in entrada], entrada[:60])
+    page.fill('[name="username"]', USER)
+    page.fill('[name="password"]', PASSWORD)
+    page.click('button[type="submit"]')
+    page.wait_for_load_state()
+
+    # -------------------------------------------------------------------------
     print("\n8 · Nada de esto sin sesion")
     page.context.clear_cookies()
     r = page.request.post(f"{BASE}/facturas/{factura_id}/pdf", max_redirects=0)

@@ -18,8 +18,12 @@ class Settings(BaseSettings):
         env_file=PROJECT_DIR / ".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    app_name: str = "DulceAuto · Facturas Premium"
-    app_version: str = "V1 · Fase D"
+    # Lo que se ve en el panel. Nada de nombres de fase ni de version interna:
+    # el sistema esta en produccion y quien lo usa es un empleado, no el
+    # programador. La version se deja discreta en el pie, que es donde sirve
+    # para saber que hay instalado si algun dia hay que dar soporte.
+    app_name: str = "DulceAuto"
+    app_version: str = "v1.0"
     debug: bool = False
 
     # Clave de firma de la cookie de sesion. En produccion es obligatorio

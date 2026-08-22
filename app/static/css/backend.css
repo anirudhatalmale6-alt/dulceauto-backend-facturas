@@ -251,3 +251,9 @@ body.theme-soft .photo-slot { background: var(--cream2); }
 body.theme-night .logo-preview { background: #0f1927; border-color: #2a3a50; }
 body.theme-soft .logo-preview { background: var(--cream2); }
 @media (max-width: 900px) { .logo-row { grid-template-columns: 1fr; } }
+
+/* --- marca de la barra lateral --- */
+/* La segunda linea cabe entera; sin esto "Panel administrativo" se parte en
+   dos y el bloque de la marca queda descuadrado. panel.css es el CSS del
+   cliente y no se toca: los ajustes van siempre aqui. */
+.brand small { white-space: nowrap; font-size: 11.5px; }

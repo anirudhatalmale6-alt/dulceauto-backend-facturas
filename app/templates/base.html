@@ -25,7 +25,7 @@
 <aside class="sidebar">
   <div class="brand">
     <div class="brand-mark">DA</div>
-    <div><b>DulceAuto</b><small>Facturas Premium · Backend {{ app_version }}</small></div>
+    <div><b>DulceAuto</b><small>Panel administrativo</small></div>
   </div>
   <nav class="nav">
     {% for item in nav_items %}
@@ -34,12 +34,8 @@
       </a>
     {% endfor %}
   </nav>
-  <div class="sidebar-note">
-    <b>Backend V1</b><br>
-    Un solo backend para es-MX, English y es-AR. Datos dinámicos con claves
-    fijas, Configuración protegida con Master Password y PDF A4 de una sola
-    página desde las plantillas aprobadas.
-  </div>
+  {# Aqui iba una nota con el alcance tecnico del proyecto. Era informacion del
+     desarrollo, no del trabajo diario, y se retiro al pasar a produccion. #}
 </aside>
 
 <main class="main">
@@ -72,7 +68,7 @@
       <div class="alert {{ message.level }}">{{ message.text }}</div>
     {% endfor %}
     {% block content %}{% endblock %}
-    <div class="footer-note">DulceAuto · Backend Facturas Premium {{ app_version }}</div>
+    <div class="footer-note">DulceAuto · Panel administrativo · {{ app_version }}</div>
   </div>
 </main>
 
