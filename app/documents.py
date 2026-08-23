@@ -80,6 +80,20 @@ ASSETS_PANEL = "/plantillas/assets/"
 # hay logotipo propio, no se toca nada y se queda la marca aprobada.
 LOGO = "__logo__"
 
+# Icono de "Compra segura". Va aparte del logotipo por la misma razon que el QR:
+# en el diseno aprobado NO es una imagen, es un vector dibujado dentro del propio
+# HTML (<svg><use href="#i-shield">), porque un sprite externo no carga bajo
+# file:// y romperia la vista previa local y varios generadores de PDF. Si el
+# perfil de marca trae icono propio se sustituye por un <img>; si no, se queda
+# el vector aprobado sin tocar.
+SAFE_ICON = "__safe_icon__"
+
+# Titulo del documento. Es texto, pero se marca aparte porque no sale de la
+# factura sino del perfil de marca, y porque es el unico hueco que vive en el
+# <head>: es lo que se ve en la pestana y lo que Chromium copia a los metadatos
+# Title del PDF.
+DOC_TITLE = "__doc_title__"
+
 
 # --- lectura de la plantilla -------------------------------------------------
 
@@ -135,6 +149,10 @@ class _Anotador(HTMLParser):
         oculta = diccionario.get("data-hide-if-empty")
         if "data-logo" in diccionario:
             campo = campo or LOGO
+        if "data-safe-icon" in diccionario:
+            campo = campo or SAFE_ICON
+        if "data-doc-title" in diccionario:
+            campo = campo or DOC_TITLE
 
         crudo = self.get_starttag_text() or ""
         ini = self._offset()
@@ -492,12 +510,22 @@ def render(
     logo: str | None = None,
     qr_src: str | None = None,
     marca: str = "DulceAuto",
+    safe_icon: str | None = None,
+    doc_title: str | None = None,
 ) -> Documento:
     """Documento de una factura, listo para enseñar o para imprimir.
 
     logo es la ruta o URL del logotipo propio. Sin logotipo se conserva la marca
     del diseno aprobado, que es lo unico que el motor sustituye en forma de
     marcado y no de texto.
+
+    safe_icon es el icono de "Compra segura" del perfil de marca, y sigue la
+    misma regla: sin icono propio se queda el vector aprobado.
+
+    doc_title es el titulo del documento. Cambiarlo cambia a la vez la pestana
+    del navegador y los metadatos Title del PDF, porque Chromium copia el
+    <title> del HTML al imprimir. El nombre del archivo que se descarga es otra
+    cosa distinta y se decide en main.py.
     """
     locale = invoice.locale or "es-MX"
     plantilla = cargar(locale)
@@ -537,6 +565,25 @@ def render(
                      f'<img class="brand-logo" src="{html_mod.escape(logo, quote=True)}" '
                      f'alt="{html_mod.escape(marca, quote=True)}" '
                      'style="max-height:34px;max-width:220px">')
+                )
+            continue
+
+        if campo == SAFE_ICON:
+            # Mismo criterio que el logotipo: sin icono propio no se toca nada y
+            # se queda el vector del diseno aprobado.
+            if safe_icon:
+                cambios.append(
+                    (hueco.cont_ini, hueco.cont_fin,
+                     f'<img class="safe-icon" src="{html_mod.escape(safe_icon, quote=True)}" '
+                     'alt="" aria-hidden="true" '
+                     'style="width:34px;height:34px;object-fit:contain">')
+                )
+            continue
+
+        if campo == DOC_TITLE:
+            if doc_title:
+                cambios.append(
+                    (hueco.cont_ini, hueco.cont_fin, html_mod.escape(doc_title, quote=False))
                 )
             continue
 
@@ -639,6 +686,8 @@ ETIQUETAS_HUECO = {
     "foto_3": "Fotografía pequeña 2",
     "foto_4": "Fotografía pequeña 3",
     LOGO: "Logotipo de la cabecera",
+    SAFE_ICON: "Icono de Compra segura",
+    DOC_TITLE: "Título del documento",
 }
 
 

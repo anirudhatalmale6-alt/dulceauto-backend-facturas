@@ -20,6 +20,7 @@ from .models import (
     STATUS_DRAFT,
     STATUS_VALIDATED,
     STATUS_PENDING,
+    BrandProfile,
     Credential,
     Invoice,
     Setting,
@@ -253,9 +254,60 @@ def seed_invoices(db: Session) -> None:
         db.add(invoice)
 
 
+def seed_brand_profile(db: Session) -> None:
+    """Deja creada la marca con la que ya se venia trabajando.
+
+    Se crea una sola vez y solo si no hay ninguna: si el cliente ya ha dado de
+    alta sus marcas, esto no toca nada. El logotipo se toma del que hubiera en
+    Configuracion, de modo que al estrenar los perfiles el documento sigue
+    saliendo exactamente igual que antes y no hay que volver a subir nada.
+
+    El titulo se deja vacio a proposito. Vacio significa "el que trae la
+    plantilla aprobada de cada idioma", que es el comportamiento actual; el
+    cliente lo rellena cuando quiera cambiarlo.
+    """
+    if db.execute(select(BrandProfile.id).limit(1)).first():
+        return
+    logo = db.execute(
+        select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
+    ).scalar_one_or_none()
+    db.add(
+        BrandProfile(
+            name="DulceAuto",
+            doc_title=None,
+            logo_path=(logo.value or None) if logo else None,
+            safe_icon_path=None,
+            is_active=True,
+        )
+    )
+
+
+def adoptar_marca_en_facturas(db: Session) -> None:
+    """Asigna la marca por defecto a las facturas que todavia no tienen ninguna.
+
+    Solo toca las que estan a None, o sea las creadas antes de que existieran
+    los perfiles. Una factura que ya tiene marca no se toca jamas: cambiarla
+    seria reescribir lo que decia un documento emitido.
+    """
+    perfil = db.execute(
+        select(BrandProfile).where(BrandProfile.is_active.is_(True)).order_by(BrandProfile.id)
+    ).scalars().first()
+    if perfil is None:
+        return
+    for invoice in db.execute(
+        select(Invoice).where(Invoice.brand_profile_id.is_(None))
+    ).scalars():
+        invoice.brand_profile_id = perfil.id
+        invoice.brand_name = invoice.brand_name or perfil.name
+        invoice.brand_doc_title = invoice.brand_doc_title or perfil.doc_title
+
+
 def run(db: Session) -> None:
     seed_credentials(db)
     seed_settings(db)
+    seed_brand_profile(db)
+    db.commit()
+    adoptar_marca_en_facturas(db)
     db.commit()
     seed_invoices(db)
     db.commit()

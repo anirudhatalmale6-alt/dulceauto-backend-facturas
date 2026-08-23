@@ -162,12 +162,31 @@ for locale in MUESTRAS:
 # --- 2 · las plantillas solo llevan atributos anadidos ------------------------
 
 print("\n2 · A la plantilla aprobada solo se le han anadido atributos")
-QUITAR = re.compile(r' data-(field|step|hide-if-empty)="[^"]*"| data-logo\b')
+QUITAR = re.compile(
+    r' data-(field|step|hide-if-empty)="[^"]*"| data-(logo|safe-icon|doc-title)\b'
+)
+
+# La calibracion de impresion es un valor CALCULADO, no diseno: la propia
+# plantilla dice "se recalcula si cambian los textos", y el generador la
+# sobrescribe en cada PDF. Cambia, por ejemplo, al descontar el marco exterior.
+# Se normaliza para poder seguir comparando el resto byte a byte: lo que esta
+# comprobacion tiene que cazar es que alguien toque el diseno aprobado, no que
+# un numero recalculado sea distinto.
+CALIBRACION = re.compile(
+    r"--print-scale: [\d.]+; --print-height: \d+px;"
+    r"|--print-scale\s+: ancho útil del A4 \([^)]*\)[^\n]*"
+)
+
+
+def _comparable(texto: str) -> str:
+    return CALIBRACION.sub("«calibración»", QUITAR.sub("", texto))
+
+
 for locale in MUESTRAS:
     rel = documents.get_market(locale).template
-    marcada = QUITAR.sub("", (documents.TEMPLATES_DIR / rel).read_text(encoding="utf-8"))
-    original = QUITAR.sub(
-        "", (documents.TEMPLATES_DIR / "aprobado-original" / rel).read_text(encoding="utf-8")
+    marcada = _comparable((documents.TEMPLATES_DIR / rel).read_text(encoding="utf-8"))
+    original = _comparable(
+        (documents.TEMPLATES_DIR / "aprobado-original" / rel).read_text(encoding="utf-8")
     )
     check(f"{locale}: quitando los data-* queda el original", marcada == original)
 

@@ -155,27 +155,51 @@ def _escribir_codigos(invoice: Invoice, destino: Path, qr_manual: Path | None = 
         )
 
 
-def _copiar_logo(db: Session, destino: Path) -> str | None:
-    """Trae el logotipo de Configuracion a la carpeta del snapshot.
+def _congelar_archivo(relativa: str | None, destino: Path, nombre: str) -> str | None:
+    """Copia un archivo de marca dentro de la carpeta del snapshot.
 
-    Devuelve la ruta relativa que tiene que llevar el documento, o None si no
-    hay logotipo propio: en ese caso se conserva la marca del diseno aprobado.
+    Es lo que hace que cambiar manana un logotipo o un icono no toque ningun
+    documento ya emitido: el snapshot deja de mirar al archivo de trabajo y pasa
+    a tener el suyo propio.
     """
     import shutil as _shutil
 
     from . import uploads
-    from .models import Setting
+
+    origen = uploads.ruta_absoluta(relativa)
+    if origen is None:
+        return None
+    (destino / "img").mkdir(parents=True, exist_ok=True)
+    final = destino / "img" / f"{nombre}{origen.suffix.lower()}"
+    _shutil.copy2(origen, final)
+    return f"assets/img/{final.name}"
+
+
+def _marca_de(db: Session, invoice: Invoice) -> tuple[str | None, str | None, str, str | None]:
+    """Logotipo, icono, nombre y titulo con los que se emite esta factura.
+
+    El perfil de marca manda. Si la factura no tiene perfil asignado -- porque
+    es anterior a esta version -- se cae al logotipo global de Configuracion,
+    que es exactamente lo que se venia usando. Asi ninguna factura antigua
+    cambia de aspecto al regenerar su PDF.
+    """
+    from .models import BrandProfile, Setting
+
+    perfil = db.get(BrandProfile, invoice.brand_profile_id) if invoice.brand_profile_id else None
+    if perfil is not None:
+        # El nombre y el titulo se leen de la factura, no del perfil: ahi estan
+        # congelados desde que se creo. El perfil solo aporta los archivos.
+        return (
+            perfil.logo_path,
+            perfil.safe_icon_path,
+            invoice.brand_name or perfil.name,
+            invoice.brand_doc_title or perfil.doc_title,
+        )
 
     fila = db.execute(
         select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
     ).scalar_one_or_none()
-    origen = uploads.ruta_absoluta(fila.value if fila else None)
-    if origen is None:
-        return None
-    (destino / "img").mkdir(parents=True, exist_ok=True)
-    final = destino / "img" / f"logo{origen.suffix.lower()}"
-    _shutil.copy2(origen, final)
-    return f"assets/img/{final.name}"
+    return (fila.value if fila else None), None, (invoice.brand_name or "DulceAuto"), None
 
 
 # --- transparencia -----------------------------------------------------------
@@ -392,7 +416,9 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
     # abriendose bien.
     # El logotipo se copia dentro del snapshot con un nombre propio: cambiarlo
     # despues en Configuracion no toca ningun PDF ya emitido.
-    logo = _copiar_logo(db, carpeta / "assets")
+    logo_rel, icono_rel, marca, doc_title = _marca_de(db, invoice)
+    logo = _congelar_archivo(logo_rel, carpeta / "assets", "logo")
+    safe_icon = _congelar_archivo(icono_rel, carpeta / "assets", "safe-icon")
     # El QR se decide ANTES de componer el documento: si es una imagen subida a
     # mano, el documento tiene que apuntar a ella con su extension de verdad.
     from . import codes
@@ -400,7 +426,15 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
     qr_manual = codes.qr_fijo(db)
     qr_src = f"assets/img/reservation-qr{qr_manual.suffix.lower()}" if qr_manual else None
 
-    documento = documents.render(invoice, assets="assets/", logo=logo, qr_src=qr_src)
+    documento = documents.render(
+        invoice,
+        assets="assets/",
+        logo=logo,
+        qr_src=qr_src,
+        marca=marca,
+        safe_icon=safe_icon,
+        doc_title=doc_title,
+    )
     html_path = carpeta / "documento.html"
     html_path.write_text(documento.html, encoding="utf-8")
     copiados = _copiar_assets(documento.html, carpeta / "assets")

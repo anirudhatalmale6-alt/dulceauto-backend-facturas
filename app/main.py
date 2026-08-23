@@ -31,13 +31,16 @@ from .locales import DELIVERY_MODES, MARKETS, delivery_label, format_amount, get
 from .models import (
     CRED_ADMIN,
     CRED_MASTER,
+    STATUS_CANCELLED,
     STATUS_DELIVERED,
     STATUS_DRAFT,
     STATUS_PENDING,
     STATUS_SCHEDULED,
     STATUS_VALIDATED,
     ActivityLog,
+    BrandProfile,
     Credential,
+    FolioLedger,
     Invoice,
     InvoicePhoto,
     Setting,
@@ -87,6 +90,7 @@ NAV_ITEMS = [
     {"key": "dashboard", "label": "Dashboard", "icon": "⌂", "url": "/"},
     {"key": "invoices", "label": "Facturas", "icon": "▤", "url": "/facturas"},
     {"key": "editor", "label": "Crear / Editar", "icon": "✎", "url": "/facturas/nueva"},
+    {"key": "brands", "label": "Marcas", "icon": "◈", "url": "/marcas"},
     {"key": "templates", "label": "Plantillas", "icon": "◫", "url": "/plantillas"},
     {"key": "activity", "label": "Actividad", "icon": "◷", "url": "/actividad"},
     {"key": "settings", "label": "Configuración", "icon": "⚙", "url": "/configuracion"},
@@ -280,12 +284,19 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/facturas", response_class=HTMLResponse)
-def invoices(request: Request, q: str = "", db: Session = Depends(get_db)):
+def invoices(
+    request: Request, q: str = "", archivadas: int = 0, db: Session = Depends(get_db)
+):
     user = require_login(request)
     if isinstance(user, RedirectResponse):
         return user
 
     stmt = select(Invoice).order_by(Invoice.updated_at.desc())
+    # Las archivadas no salen en el listado normal. Siguen existiendo enteras y
+    # se ven marcando la casilla; archivar no es borrar.
+    ver_archivadas = bool(archivadas)
+    if not ver_archivadas:
+        stmt = stmt.where(Invoice.archived_at.is_(None))
     termino = (q or "").strip()
     if termino:
         # Busqueda por folio, cliente o vehiculo, que son los tres campos que
@@ -318,6 +329,15 @@ def invoices(request: Request, q: str = "", db: Session = Depends(get_db)):
         invoices=filas,
         q=termino,
         interesados=interesados,
+        ver_archivadas=ver_archivadas,
+        n_archivadas=db.execute(
+            select(func.count(Invoice.id)).where(Invoice.archived_at.is_not(None))
+        ).scalar_one(),
+        # Que se puede hacer con cada una: archivar siempre, eliminar solo si
+        # esta cancelada y nunca llego a emitir documento.
+        eliminables={
+            f.id for f in filas if inv_service.motivo_para_no_eliminar(db, f) is None
+        },
     )
 
 
@@ -356,6 +376,8 @@ def editor_page(
         historial=historial,
         fotos={f.position: f for f in invoice.photos} if invoice else {},
         comprometidas=[i for i in historial if i.status in inv_service.COMMITTED_STATUSES],
+        marcas=inv_service.perfiles_activos(db),
+        folio_ejemplo=inv_service.folio_previsto(db),
     )
 
 
@@ -375,9 +397,33 @@ async def invoice_create(request: Request, db: Session = Depends(get_db)):
 
     form = await request.form()
 
+    # Modo Manual: es una funcion administrativa, no algo del dia a dia, asi que
+    # se exige la Master Password igual que en Configuracion. Sin ella se sigue
+    # en Automatico, que es el modo normal.
+    folio_manual = None
+    if (form.get("folio_mode") or "auto") == "manual":
+        if not master_unlocked(request):
+            db.rollback()
+            return editor_page(
+                request,
+                db,
+                None,
+                errors=[
+                    "El folio manual es una función administrativa: desbloquea la "
+                    "Configuración con la Master Password y vuelve a intentarlo."
+                ],
+                form=form,
+            )
+        touch_master(request)
+        try:
+            folio_manual = inv_service.normalizar_folio_manual(db, form.get("folio_manual"))
+        except inv_service.FolioManualInvalido as exc:
+            db.rollback()
+            return editor_page(request, db, None, errors=[str(exc)], form=form)
+
     # Se valida antes de entrar al bucle de guardado: un error del operador no
     # tiene por que gastar folios ni reintentos.
-    _, errores = inv_service.create(db, form)
+    _, errores = inv_service.create(db, form, folio_manual)
     if errores:
         # Rollback para que el contador de folios no se gaste con un intento
         # fallido: si no, cada error dejaria un hueco en la numeracion.
@@ -388,7 +434,33 @@ async def invoice_create(request: Request, db: Session = Depends(get_db)):
     # Y se guarda reintentando: la cuenta Admin es compartida y dos operadores
     # pueden crear una factura a la vez. Si el folio se ocupa entretanto, se
     # coge el siguiente libre en lugar de enseñar un error de base de datos.
-    invoice = inv_service.commit_creation(db, lambda s: inv_service.create(s, form)[0])
+    #
+    # Con folio manual NO se reintenta: coger otro numero en silencio significaria
+    # que el Admin cree haber emitido uno y en la base hay otro distinto.
+    try:
+        invoice = inv_service.commit_creation(
+            db,
+            lambda s: inv_service.create(s, form, folio_manual)[0],
+            reintentar=folio_manual is None,
+        )
+    except inv_service.FolioOcupado as exc:
+        db.rollback()
+        return editor_page(request, db, None, errors=[str(exc)], form=form)
+
+    if folio_manual:
+        # El contador se pone por delante del folio escrito a mano, para no
+        # llegar mas adelante a un numero ya usado.
+        if inv_service.avanzar_contador_tras_manual(db, invoice.folio):
+            db.commit()
+        act.log(
+            db,
+            act.SETTINGS_UPDATED,
+            request=request,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            folio=invoice.folio,
+            detail="folio asignado a mano (Master Password)",
+        )
     accion = act.INVOICE_DRAFT_SAVED if invoice.status == STATUS_DRAFT else act.INVOICE_CREATED
     act.log(db, accion, request=request, entity_type="invoice", entity_id=invoice.id,
             folio=invoice.folio, detail=get_market(invoice.locale).label)
@@ -429,6 +501,10 @@ async def invoice_update(request: Request, invoice_id: int, db: Session = Depend
     # para una factura argentina, asi que se vuelven a heredar los datos.
     if invoice.locale != mercado_previo:
         inv_service.inherit_settings(db, invoice)
+    # La marca se puede cambiar mientras la factura siga viva, y al cambiarla se
+    # vuelven a congelar nombre y titulo. Lo que ya se emitio no se toca: cada
+    # snapshot lleva su propia copia del logotipo y del icono.
+    inv_service.cambiar_marca(db, invoice, form)
 
     errores = inv_service.validate(invoice)
     if errores:
@@ -529,6 +605,96 @@ async def invoice_duplicate(request: Request, invoice_id: int, db: Session = Dep
 ZOOMS = (0.5, 0.75, 1.0)
 
 
+# --- archivar y eliminar -----------------------------------------------------
+#
+# Regla acordada con el cliente: archivar es lo normal; eliminar de verdad solo
+# se permite con una factura Cancelada que nunca llego a emitir documento, y
+# pasando la Master Password. En los dos casos el folio queda reservado para
+# siempre en el registro: eliminar no libera nunca un numero.
+
+
+@app.post("/facturas/{invoice_id}/archivar")
+def invoice_archive(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    archivada = invoice.archived_at is None
+    if archivada:
+        inv_service.archivar(db, invoice)
+    else:
+        inv_service.desarchivar(db, invoice)
+    db.commit()
+    act.log(
+        db,
+        act.INVOICE_UPDATED,
+        request=request,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        folio=invoice.folio,
+        detail="archivada" if archivada else "desarchivada",
+    )
+    flash(
+        request,
+        f"Factura {invoice.folio} {'archivada' if archivada else 'devuelta al listado'}. "
+        "Conserva su folio, sus documentos y su historial.",
+        "ok",
+    )
+    return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/facturas/{invoice_id}/eliminar")
+def invoice_delete(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    if not master_unlocked(request):
+        flash(
+            request,
+            "Eliminar una factura es una función administrativa: desbloquea la "
+            "Configuración con la Master Password y vuelve a intentarlo.",
+            "error",
+        )
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+    touch_master(request)
+
+    motivo = inv_service.motivo_para_no_eliminar(db, invoice)
+    if motivo:
+        flash(request, motivo, "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    # El registro de la actividad se escribe ANTES de borrar: despues la factura
+    # ya no tiene id que anotar. La fila del historial sobrevive igualmente,
+    # porque su entity_id es un entero suelto y sin clave foranea.
+    act.log(
+        db,
+        act.INVOICE_UPDATED,
+        request=request,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        folio=invoice.folio,
+        detail="eliminada (cancelada y sin documento emitido)",
+    )
+    folio = inv_service.eliminar(db, invoice)
+    db.commit()
+    flash(
+        request,
+        f"Factura {folio} eliminada. El folio queda reservado para siempre y no "
+        "se volverá a emitir.",
+        "ok",
+    )
+    return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @app.get("/facturas/{invoice_id}/documento", response_class=HTMLResponse)
 def invoice_document(request: Request, invoice_id: int, db: Session = Depends(get_db)):
     user = require_login(request)
@@ -538,8 +704,9 @@ def invoice_document(request: Request, invoice_id: int, db: Session = Depends(ge
     if invoice is None:
         flash(request, "Esa factura ya no existe.", "error")
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
-    logo = "/configuracion/logo.img" if _logo_actual(db) else None
-    return HTMLResponse(doc_engine.render(invoice, codigos="panel", logo=logo).html)
+    return HTMLResponse(
+        doc_engine.render(invoice, codigos="panel", **_marca_para_pantalla(db, invoice)).html
+    )
 
 
 @app.post("/facturas/{invoice_id}/fotos")
@@ -701,7 +868,7 @@ def invoice_preview(
         flash(request, "Esa factura ya no existe.", "error")
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
 
-    documento = doc_engine.render(invoice)
+    documento = doc_engine.render(invoice, **_marca_para_pantalla(db, invoice))
     market = get_market(invoice.locale)
     return render(
         request,
@@ -841,6 +1008,198 @@ def template_document(request: Request, locale: str, db: Session = Depends(get_d
 
 
 # --- historial por vehiculo --------------------------------------------------
+
+
+# --- perfiles de marca -------------------------------------------------------
+#
+# Un perfil es una ficha de marca: nombre, logotipo, icono de "Compra segura" y
+# titulo del documento. Nada mas. Cuentas bancarias, usuarios o datos fiscales
+# por empresa serian un sistema multiempresa, que el cliente descarto.
+#
+# Los perfiles no se borran, se desactivan. Borrar uno dejaria sin logotipo a
+# una factura todavia no emitida que lo estuviera usando.
+
+
+def _marca_para_pantalla(db: Session, invoice: Invoice) -> dict:
+    """Argumentos de marca para dibujar el documento en el panel.
+
+    En el panel las imagenes se sirven por URL; en el snapshot son archivos
+    copiados. De ahi que esto viva aqui y no en pdf.py.
+    """
+    perfil = db.get(BrandProfile, invoice.brand_profile_id) if invoice.brand_profile_id else None
+    if perfil is None:
+        # Factura anterior a los perfiles: se sigue viendo con el logotipo
+        # global de Configuracion, que es lo que llevaba.
+        return {
+            "logo": "/configuracion/logo.img" if _logo_actual(db) else None,
+            "marca": invoice.brand_name or "DulceAuto",
+        }
+    return {
+        "logo": f"/marcas/{perfil.id}/logo.img" if perfil.logo_path else None,
+        "safe_icon": f"/marcas/{perfil.id}/icono.img" if perfil.safe_icon_path else None,
+        # El nombre y el titulo salen de la factura, donde estan congelados.
+        "marca": invoice.brand_name or perfil.name,
+        "doc_title": invoice.brand_doc_title or perfil.doc_title,
+    }
+
+
+@app.get("/marcas", response_class=HTMLResponse)
+def brands_view(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    perfiles = list(db.execute(select(BrandProfile).order_by(BrandProfile.name)).scalars())
+    en_uso = {
+        pid: n
+        for pid, n in db.execute(
+            select(Invoice.brand_profile_id, func.count(Invoice.id))
+            .where(Invoice.brand_profile_id.is_not(None))
+            .group_by(Invoice.brand_profile_id)
+        )
+    }
+    return render(
+        request,
+        "brands.html",
+        db,
+        active_view="brands",
+        page_title="Marcas",
+        page_sub="Nombre, logotipo, icono de Compra segura y título del documento",
+        perfiles=perfiles,
+        en_uso=en_uso,
+    )
+
+
+async def _guardar_imagen_de_marca(form, campo: str, sub: str) -> tuple[str | None, str | None]:
+    """Lee un archivo del formulario y lo guarda. (ruta, error)."""
+    archivo = form.get(campo)
+    if archivo is None or not getattr(archivo, "filename", ""):
+        return None, None
+    try:
+        guardado = uploads.guardar_imagen(await archivo.read(), archivo.filename, sub)
+    except uploads.SubidaInvalida as exc:
+        return None, str(exc)
+    return guardado.relativa, None
+
+
+@app.post("/marcas/guardar")
+async def brand_save(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    form = await request.form()
+    crudo = (form.get("id") or "").strip()
+    perfil = db.get(BrandProfile, int(crudo)) if crudo.isdigit() else None
+
+    nombre = (form.get("name") or "").strip()
+    if not nombre:
+        flash(request, "La marca necesita un nombre.", "error")
+        return RedirectResponse("/marcas", status_code=status.HTTP_303_SEE_OTHER)
+
+    logo_rel, error = await _guardar_imagen_de_marca(form, "logo", "marcas")
+    if error:
+        flash(request, f"Logotipo: {error}", "error")
+        return RedirectResponse("/marcas", status_code=status.HTTP_303_SEE_OTHER)
+    icono_rel, error = await _guardar_imagen_de_marca(form, "safe_icon", "marcas")
+    if error:
+        flash(request, f"Icono de Compra segura: {error}", "error")
+        return RedirectResponse("/marcas", status_code=status.HTTP_303_SEE_OTHER)
+
+    nuevo = perfil is None
+    if perfil is None:
+        perfil = BrandProfile(name=nombre)
+        db.add(perfil)
+
+    anterior_logo = perfil.logo_path
+    anterior_icono = perfil.safe_icon_path
+    perfil.name = nombre
+    perfil.doc_title = (form.get("doc_title") or "").strip() or None
+    if logo_rel:
+        perfil.logo_path = logo_rel
+    if icono_rel:
+        perfil.safe_icon_path = icono_rel
+    db.commit()
+
+    # Los archivos viejos se borran despues de guardar, no antes: si el guardado
+    # fallara se quedarian sin ninguno de los dos.
+    if logo_rel and anterior_logo and anterior_logo != logo_rel:
+        uploads.borrar(anterior_logo)
+    if icono_rel and anterior_icono and anterior_icono != icono_rel:
+        uploads.borrar(anterior_icono)
+
+    act.log(
+        db,
+        act.SETTINGS_UPDATED,
+        request=request,
+        entity_type="brand_profile",
+        entity_id=perfil.id,
+        detail=f"marca {'creada' if nuevo else 'actualizada'}: {perfil.name}",
+    )
+    flash(
+        request,
+        f"Marca «{perfil.name}» {'creada' if nuevo else 'actualizada'}. "
+        "Las facturas ya emitidas no cambian: cada PDF lleva dentro su propia copia.",
+        "ok",
+    )
+    return RedirectResponse("/marcas", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/marcas/{brand_id}/activar")
+def brand_toggle(request: Request, brand_id: int, db: Session = Depends(get_db)):
+    """Activa o desactiva un perfil. No existe borrado, y es a proposito.
+
+    Un perfil desactivado deja de ofrecerse al crear facturas nuevas, pero las
+    que ya lo tienen conservan su marca y su logotipo.
+    """
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    perfil = db.get(BrandProfile, brand_id)
+    if perfil is None:
+        flash(request, "Esa marca ya no existe.", "error")
+        return RedirectResponse("/marcas", status_code=status.HTTP_303_SEE_OTHER)
+
+    perfil.is_active = not perfil.is_active
+    db.commit()
+    act.log(
+        db,
+        act.SETTINGS_UPDATED,
+        request=request,
+        entity_type="brand_profile",
+        entity_id=perfil.id,
+        detail=f"marca {'activada' if perfil.is_active else 'desactivada'}: {perfil.name}",
+    )
+    flash(
+        request,
+        f"Marca «{perfil.name}» {'activada' if perfil.is_active else 'desactivada'}."
+        + ("" if perfil.is_active else " Las facturas que ya la usan no cambian."),
+        "ok",
+    )
+    return RedirectResponse("/marcas", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _archivo_de_marca(db: Session, brand_id: int, campo: str):
+    perfil = db.get(BrandProfile, brand_id)
+    ruta = uploads.ruta_absoluta(getattr(perfil, campo, None)) if perfil else None
+    if ruta is None:
+        return Response(status_code=404)
+    return FileResponse(ruta)
+
+
+@app.get("/marcas/{brand_id}/logo.img")
+def brand_logo_file(request: Request, brand_id: int, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    return _archivo_de_marca(db, brand_id, "logo_path")
+
+
+@app.get("/marcas/{brand_id}/icono.img")
+def brand_icon_file(request: Request, brand_id: int, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    return _archivo_de_marca(db, brand_id, "safe_icon_path")
 
 
 @app.get("/vehiculos", response_class=HTMLResponse)

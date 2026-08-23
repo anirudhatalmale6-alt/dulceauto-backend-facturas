@@ -12,6 +12,7 @@
 {% set groups = [
   ('1 · Plantilla y estado', [
     ('locale', 'Plantilla', 'locale'),
+    ('brand_profile_id', 'Marca', 'brand'),
     ('status', 'Estado', 'status'),
     ('folio', 'Folio', 'folio'),
     ('issue_date', 'Fecha emisión', 'date'),
@@ -147,14 +148,73 @@
                     <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ pair[0] }}</option>
                   {% endfor %}
                 </select>
+              {% elif kind == 'brand' %}
+                {# La marca con la que se emite el documento: nombre, logotipo,
+                   icono de Compra segura y titulo. Solo se ofrecen las activas.
+                   Si la factura lleva una marca ya desactivada, se conserva y se
+                   sigue mostrando: cambiarla por su cuenta seria reescribir lo
+                   que decia un documento ya emitido. #}
+                {% set marca_actual = invoice.brand_profile_id if invoice else None %}
+                <select name="brand_profile_id">
+                  {% for p in marcas %}
+                    <option value="{{ p.id }}" {% if marca_actual == p.id %}selected{% endif %}>{{ p.name }}</option>
+                  {% endfor %}
+                  {% if invoice and marca_actual and marca_actual not in marcas|map(attribute='id')|list %}
+                    <option value="{{ marca_actual }}" selected>
+                      {{ invoice.brand_name or 'Marca desactivada' }} · desactivada
+                    </option>
+                  {% endif %}
+                </select>
+                {% if not marcas %}
+                  <div class="small muted" style="margin-top:6px">
+                    No hay ninguna marca activa. Se usará el diseño aprobado.
+                    <a href="/marcas">Gestionar marcas</a>
+                  </div>
+                {% endif %}
               {% elif kind == 'folio' %}
-                {# El folio lo asigna el contador de Configuracion y no se
-                   edita: cambiarlo a mano lo desincronizaria de la referencia
-                   bancaria, que se genera a partir de el. #}
-                <div class="readonly-wrap">
-                  <input data-folio type="text"
-                         value="{{ invoice.folio if invoice else 'Automático' }}" readonly>
-                </div>
+                {# En una factura ya creada el folio no se edita nunca:
+                   cambiarlo lo desincronizaria de la referencia bancaria, que
+                   se genera a partir de el, y ademas el numero ya esta anotado
+                   en el registro permanente de folios.
+
+                   Al crear una factura nueva hay dos modos. Automatico es el
+                   normal y lo pone el contador. Manual lo escribe el Admin y
+                   exige la Master Password, porque es una funcion
+                   administrativa y no algo del dia a dia. #}
+                {% if invoice %}
+                  <div class="readonly-wrap">
+                    <input data-folio type="text" value="{{ invoice.folio }}" readonly>
+                  </div>
+                {% else %}
+                  <div class="readonly-wrap">
+                    <input data-folio type="text" value="Automático" readonly>
+                  </div>
+                  <details style="margin-top:6px">
+                    <summary class="small muted">Asignar el folio a mano</summary>
+                    <div style="margin-top:8px">
+                      <label class="small" style="display:block">
+                        <input type="radio" name="folio_mode" value="auto"
+                               {% if (form.get('folio_mode') if form else 'auto') != 'manual' %}checked{% endif %}>
+                        Automático · lo pone el contador (recomendado)
+                      </label>
+                      <label class="small" style="display:block;margin-top:4px">
+                        <input type="radio" name="folio_mode" value="manual"
+                               {% if form and form.get('folio_mode') == 'manual' %}checked{% endif %}>
+                        Manual · lo escribo yo
+                      </label>
+                      <input type="text" name="folio_manual" style="margin-top:6px"
+                             value="{{ form.get('folio_manual') if form else '' }}"
+                             placeholder="{{ folio_ejemplo }}">
+                      <div class="small muted" style="margin-top:6px">
+                        Requiere la Master Password. Se mantiene el prefijo
+                        configurado y no se admite un folio ya usado, ni aunque su
+                        factura se cancelara o se eliminara. Si el número es
+                        superior al contador, el siguiente automático continúa
+                        a partir de él.
+                      </div>
+                    </div>
+                  </details>
+                {% endif %}
               {% elif kind == 'longtext' %}
                 {# Vacío significa "usa el texto aprobado de la plantilla". Se
                    escribe aquí solo para esta factura en concreto. #}

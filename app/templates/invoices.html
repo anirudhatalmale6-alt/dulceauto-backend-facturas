@@ -11,6 +11,14 @@
       <form method="get" action="/facturas">
         <input class="search" type="search" name="q" value="{{ q }}" placeholder="Buscar folio, cliente o vehículo">
       </form>
+      {% if n_archivadas or ver_archivadas %}
+        {% set params = [] %}
+        {% if not ver_archivadas %}{% set _ = params.append('archivadas=1') %}{% endif %}
+        {% if q %}{% set _ = params.append('q=' ~ q|urlencode) %}{% endif %}
+        <a class="btn ghost" href="/facturas{{ ('?' ~ params|join('&')) if params else '' }}">
+          {{ "Ocultar archivadas" if ver_archivadas else "Ver archivadas (" ~ n_archivadas ~ ")" }}
+        </a>
+      {% endif %}
       <a class="btn ghost" href="/vehiculos">Por vehículo</a>
       <a class="btn gold" href="/facturas/nueva">+ Nueva factura</a>
     </div>
@@ -60,6 +68,20 @@
             <a class="btn ghost" href="/facturas/{{ inv.id }}/editar">Editar</a>
             <a class="btn ghost" href="/facturas/{{ inv.id }}/vista-previa">Vista previa</a>
             <a class="btn ghost" href="/facturas/{{ inv.id }}/duplicar">Duplicar</a>
+            {# Archivar la saca del listado sin tocarle nada. Eliminar de verdad
+               solo aparece cuando esta cancelada y nunca llego a emitir
+               documento; en cualquier otro caso ni se ofrece. #}
+            <form method="post" action="/facturas/{{ inv.id }}/archivar" style="display:inline">
+              <button class="btn ghost" type="submit">
+                {{ "Desarchivar" if inv.archived_at else "Archivar" }}
+              </button>
+            </form>
+            {% if inv.id in eliminables %}
+              <form method="post" action="/facturas/{{ inv.id }}/eliminar" style="display:inline"
+                    onsubmit="return confirm('¿Eliminar {{ inv.folio }}? El folio quedará reservado para siempre y no se volverá a emitir.')">
+                <button class="btn ghost" type="submit">Eliminar</button>
+              </form>
+            {% endif %}
           </td>
         </tr>
       {% else %}

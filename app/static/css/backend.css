@@ -257,3 +257,12 @@ body.theme-soft .logo-preview { background: var(--cream2); }
    dos y el bloque de la marca queda descuadrado. panel.css es el CSS del
    cliente y no se toca: los ajustes van siempre aqui. */
 .brand small { white-space: nowrap; font-size: 11.5px; }
+
+/* --- acciones de la tabla de facturas --- */
+/* Con Archivar y Eliminar la celda pasa de tres botones a cinco. Los <form>
+   que envuelven a los dos nuevos eran cajas flex por si mismas, de modo que
+   cada boton caia en su propia linea y la fila crecia hasta hacerse ilegible.
+   display:contents saca al boton al mismo nivel que los enlaces, y asi los
+   cinco fluyen y envuelven juntos como antes. */
+td.actions form { display: contents; }
+td.actions .btn { padding: 7px 10px; font-size: 12px; }

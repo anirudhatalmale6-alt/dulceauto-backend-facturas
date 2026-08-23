@@ -27,10 +27,17 @@ from .fields import DUPLICATE_CARRY_FIELDS, EDITABLE_FIELDS
 from .locales import DEFAULT_LOCALE, MARKETS, validate_account, validate_vin
 from .models import (
     COMMITTED_STATUSES,
+    FOLIO_AUTO,
+    FOLIO_MANUAL,
+    STATUS_CANCELLED,
     STATUS_DRAFT,
     STATUSES,
+    BrandProfile,
+    FolioLedger,
     Invoice,
+    InvoiceSnapshot,
     Setting,
+    utcnow,
 )
 
 # Campos que se copian de Configuracion a la factura al crearla. La clave es la
@@ -137,6 +144,44 @@ def _setting(db: Session, key: str, market: str | None = None) -> Setting | None
     ).scalar_one_or_none()
 
 
+def folio_prefijo(db: Session) -> str:
+    fila = _setting(db, "folio.prefix")
+    return (fila.value if fila else "") or "RES-"
+
+
+def folio_ancho(db: Session) -> int:
+    """Cuantos digitos lleva el folio, deducido del propio contador."""
+    fila = _setting(db, "folio.next")
+    return len(fila.value) if fila and fila.value and fila.value.isdigit() else 5
+
+
+def folio_ocupado(db: Session, folio: str) -> bool:
+    """Si ese folio esta en uso o lo estuvo alguna vez.
+
+    Las dos preguntas importan y son distintas. La tabla de facturas dice si hay
+    una viva con ese numero; el registro dice si existio alguna vez, aunque su
+    factura se haya borrado despues. Un folio que aparezca en cualquiera de las
+    dos no se puede volver a emitir.
+    """
+    if db.execute(select(Invoice.id).where(Invoice.folio == folio)).first():
+        return True
+    return bool(db.execute(select(FolioLedger.folio).where(FolioLedger.folio == folio)).first())
+
+
+def anotar_folio(
+    db: Session, folio: str, invoice_id: int | None = None, source: str = FOLIO_AUTO
+) -> None:
+    """Deja el folio anotado para siempre en el registro.
+
+    Se llama dentro de la misma transaccion que crea la factura, a proposito: si
+    la creacion se deshace, la anotacion se deshace con ella y el folio sigue
+    libre, que es lo correcto porque esa factura nunca existio. En cuanto la
+    factura se guarda de verdad, la anotacion queda y ya no la borra nadie.
+    """
+    if db.get(FolioLedger, folio) is None:
+        db.add(FolioLedger(folio=folio, invoice_id=invoice_id, source=source))
+
+
 def next_folio(db: Session) -> str:
     """Siguiente folio libre, a partir del contador de Configuracion.
 
@@ -144,19 +189,21 @@ def next_folio(db: Session) -> str:
     factura con ese folio, el contador se salta hasta encontrar uno libre. La
     columna folio es unica, asi que un choque seria un error 500 en la cara del
     operador.
+
+    La comprobacion incluye el registro permanente de folios, de modo que
+    tampoco se propone uno que existio y cuya factura ya se borro.
     """
-    prefijo = (_setting(db, "folio.prefix").value if _setting(db, "folio.prefix") else "") or "RES-"
+    prefijo = folio_prefijo(db)
     fila = _setting(db, "folio.next")
     try:
         numero = int((fila.value if fila else "1") or "1")
     except ValueError:
         numero = 1
 
-    ancho = len(fila.value) if fila and fila.value.isdigit() else 5
+    ancho = folio_ancho(db)
     while True:
         candidato = f"{prefijo}{numero:0{ancho}d}"
-        existe = db.execute(select(Invoice.id).where(Invoice.folio == candidato)).first()
-        if not existe:
+        if not folio_ocupado(db, candidato):
             break
         numero += 1
 
@@ -165,6 +212,108 @@ def next_folio(db: Session) -> str:
         db.add(fila)
     fila.value = f"{numero + 1:0{ancho}d}"
     return candidato
+
+
+def folio_previsto(db: Session) -> str:
+    """Que folio tocaria ahora mismo, SIN consumirlo ni tocar el contador.
+
+    Solo sirve para enseñarlo en pantalla. Se separa de next_folio a proposito:
+    next_folio avanza el contador, y llamarlo solo para pintar una pantalla
+    obligaba a deshacer la transaccion a media peticion.
+    """
+    prefijo = folio_prefijo(db)
+    ancho = folio_ancho(db)
+    fila = _setting(db, "folio.next")
+    try:
+        numero = int((fila.value if fila else "1") or "1")
+    except ValueError:
+        numero = 1
+    while folio_ocupado(db, f"{prefijo}{numero:0{ancho}d}"):
+        numero += 1
+    return f"{prefijo}{numero:0{ancho}d}"
+
+
+class FolioManualInvalido(Exception):
+    """El folio escrito a mano no sirve, y hay que decirlo en voz alta."""
+
+
+def normalizar_folio_manual(db: Session, texto: str) -> str:
+    """Convierte lo que el Admin escribe en un folio valido, o falla.
+
+    Se acepta tanto el folio entero (RES-95000) como solo el numero (95000),
+    porque las dos formas son naturales al teclear. Lo que no se acepta es otro
+    prefijo: el prefijo lo manda Configuracion.
+
+    Falla con excepcion y nunca devuelve "algo parecido". Un folio manual que se
+    corrige solo seria peor que un error: el Admin creeria haber emitido un
+    numero y estaria guardado con otro.
+    """
+    prefijo = folio_prefijo(db)
+    ancho = folio_ancho(db)
+    escrito = (texto or "").strip().upper()
+    if not escrito:
+        raise FolioManualInvalido("Escribe el folio o déjalo en modo Automático.")
+
+    cuerpo = escrito
+    if cuerpo.startswith(prefijo.upper()):
+        cuerpo = cuerpo[len(prefijo):]
+    cuerpo = cuerpo.strip()
+
+    if not cuerpo.isdigit():
+        raise FolioManualInvalido(
+            f"El folio tiene que ser {prefijo} seguido de números. Recibido: «{escrito}»."
+        )
+
+    numero = int(cuerpo)
+    if numero <= 0:
+        raise FolioManualInvalido("El número del folio tiene que ser mayor que cero.")
+
+    folio = f"{prefijo}{numero:0{ancho}d}"
+    if folio_ocupado(db, folio):
+        raise FolioManualInvalido(
+            f"El folio {folio} ya se ha usado. Un folio no se reutiliza nunca, "
+            "ni aunque su factura se haya cancelado o eliminado."
+        )
+    return folio
+
+
+def avanzar_contador_tras_manual(db: Session, folio: str) -> bool:
+    """Deja el contador por delante de un folio puesto a mano.
+
+    La regla que pidio el cliente: si el siguiente automatico era RES-90004 y a
+    mano se emite RES-95000, el siguiente automatico pasa a RES-95001, para no
+    llegar mas adelante a un numero ya usado. Si el folio manual es INFERIOR al
+    contador, el contador no retrocede.
+
+    Solo se mueve si el folio manual respeta el prefijo y el numero de digitos
+    configurados. Con otro formato no hay forma de compararlo con el contador
+    sin inventarse una regla, asi que se deja quieto: el registro de folios ya
+    impide que ese numero se reutilice, de modo que no hacer nada es seguro.
+
+    Devuelve True si el contador se ha movido.
+    """
+    prefijo = folio_prefijo(db)
+    ancho = folio_ancho(db)
+    if not folio.startswith(prefijo):
+        return False
+    cuerpo = folio[len(prefijo):]
+    if not cuerpo.isdigit() or len(cuerpo) != ancho:
+        return False
+
+    fila = _setting(db, "folio.next")
+    try:
+        actual = int((fila.value if fila else "1") or "1")
+    except ValueError:
+        actual = 1
+
+    siguiente = int(cuerpo) + 1
+    if siguiente <= actual:
+        return False
+    if fila is None:
+        fila = Setting(key="folio.next", market=None, value=str(siguiente), is_sensitive=False)
+        db.add(fila)
+    fila.value = f"{siguiente:0{ancho}d}"
+    return True
 
 
 # --- lectura del formulario --------------------------------------------------
@@ -308,24 +457,125 @@ def vin_groups(db: Session) -> list[dict]:
     return grupos
 
 
+# --- marca -------------------------------------------------------------------
+
+
+def perfiles_activos(db: Session) -> list[BrandProfile]:
+    """Los perfiles que se pueden elegir al crear o editar una factura."""
+    return list(
+        db.execute(
+            select(BrandProfile).where(BrandProfile.is_active.is_(True)).order_by(BrandProfile.name)
+        ).scalars()
+    )
+
+
+def perfil_por_defecto(db: Session) -> BrandProfile | None:
+    """El perfil que se propone cuando la factura todavia no tiene ninguno.
+
+    Se elige el activo mas antiguo, que en la practica es el que se dio de alta
+    al migrar con la marca que ya se venia usando.
+    """
+    return db.execute(
+        select(BrandProfile)
+        .where(BrandProfile.is_active.is_(True))
+        .order_by(BrandProfile.id)
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def congelar_marca(db: Session, invoice: Invoice) -> None:
+    """Copia a la factura el nombre y el titulo del perfil elegido.
+
+    Se copian, no se leen del perfil al mostrar, por la misma razon que los
+    datos bancarios: corregir manana el nombre de la marca no puede cambiar lo
+    que decia una factura ya emitida.
+
+    El logotipo y el icono no se copian aqui porque son archivos: de esos se
+    encarga la carpeta del snapshot cuando se genera el PDF.
+    """
+    perfil = db.get(BrandProfile, invoice.brand_profile_id) if invoice.brand_profile_id else None
+    if perfil is None:
+        return
+    invoice.brand_name = perfil.name
+    invoice.brand_doc_title = perfil.doc_title or None
+
+
+def cambiar_marca(db: Session, invoice: Invoice, form) -> bool:
+    """Cambia la marca de una factura ya existente, si el formulario la trae.
+
+    Solo se acepta un perfil activo. Si llega el id de uno desactivado, o algo
+    que no es un id, no se toca nada: es preferible dejar la marca que tenia a
+    dejarla sin ninguna.
+
+    Devuelve True si ha cambiado.
+    """
+    crudo = (form.get("brand_profile_id") or "").strip() if form is not None else ""
+    if not crudo.isdigit():
+        return False
+    nuevo = int(crudo)
+    if nuevo == invoice.brand_profile_id:
+        return False
+    perfil = db.get(BrandProfile, nuevo)
+    if perfil is None or not perfil.is_active:
+        return False
+    invoice.brand_profile_id = perfil.id
+    congelar_marca(db, invoice)
+    return True
+
+
+def inherit_brand(db: Session, invoice: Invoice, form=None) -> None:
+    """Elige el perfil de marca de una factura nueva y lo congela."""
+    elegido = None
+    if form is not None:
+        crudo = (form.get("brand_profile_id") or "").strip()
+        if crudo.isdigit():
+            perfil = db.get(BrandProfile, int(crudo))
+            # Un perfil desactivado no se puede elegir para una factura nueva,
+            # ni aunque llegue su id en el formulario.
+            if perfil is not None and perfil.is_active:
+                elegido = perfil
+    if elegido is None:
+        elegido = perfil_por_defecto(db)
+    invoice.brand_profile_id = elegido.id if elegido else None
+    congelar_marca(db, invoice)
+
+
 # --- alta y duplicado --------------------------------------------------------
 
 
-def create(db: Session, form) -> tuple[Invoice | None, list[str]]:
+def create(db: Session, form, folio_manual: str | None = None) -> tuple[Invoice | None, list[str]]:
     """Crea una factura a partir del formulario. No hace commit: de eso se
-    encarga commit_creation, que ademas reintenta si el folio se ocupa."""
+    encarga commit_creation, que ademas reintenta si el folio se ocupa.
+
+    folio_manual llega ya validado por normalizar_folio_manual y solo despues de
+    haber pasado la Master Password. Si no llega, el folio lo pone el contador,
+    que es el modo normal.
+    """
     invoice = Invoice(status=STATUS_DRAFT, locale=DEFAULT_LOCALE)
     apply_form(invoice, form)
-    # El folio siempre lo pone el contador. No se lee del formulario ni aunque
-    # llegue: el campo es de solo lectura en pantalla y ademas no esta en
-    # EDITABLE_FIELDS, de modo que un envio manipulado tampoco lo cambia.
-    invoice.folio = next_folio(db)
+    # En modo automatico el folio lo pone SIEMPRE el contador. No se lee del
+    # formulario ni aunque llegue: el campo es de solo lectura en pantalla y
+    # ademas no esta en EDITABLE_FIELDS, de modo que un envio manipulado
+    # tampoco lo cambia. El unico camino para escribirlo a mano es el modo
+    # Manual, que pasa por normalizar_folio_manual y por la Master Password.
+    invoice.folio = folio_manual or next_folio(db)
     inherit_settings(db, invoice)
+    inherit_brand(db, invoice, form)
     errores = validate(invoice)
     if errores:
         return None, errores
 
     db.add(invoice)
+    # El flush asigna el id sin cerrar la transaccion, para poder dejar el folio
+    # anotado ya apuntando a su factura. Si esto se deshace, se deshacen las dos
+    # cosas a la vez.
+    db.flush()
+    anotar_folio(
+        db,
+        invoice.folio,
+        invoice.id,
+        FOLIO_MANUAL if folio_manual else FOLIO_AUTO,
+    )
     return invoice, []
 
 
@@ -405,9 +655,86 @@ def duplicate(db: Session, source: Invoice, form=None) -> Invoice:
     # Se llama despues de fijar el mercado: la cuenta depende de el, y la de
     # Mexico no sirve para una factura argentina.
     inherit_settings(db, copia)
+    # La marca SI se hereda del original: duplicar es normalmente atender a otro
+    # interesado por el mismo coche, y el coche es de la misma marca. El nombre
+    # y el titulo se vuelven a copiar del perfil vigente, no del original, por si
+    # el perfil se ha corregido desde entonces.
+    copia.brand_profile_id = source.brand_profile_id
+    congelar_marca(db, copia)
 
     db.add(copia)
+    db.flush()
+    anotar_folio(db, copia.folio, copia.id, FOLIO_AUTO)
     return copia
+
+
+# --- archivar y eliminar -----------------------------------------------------
+
+
+def tiene_historico(db: Session, invoice: Invoice) -> bool:
+    """Si esta factura llego alguna vez a convertirse en documento.
+
+    Se miran las tres huellas posibles, no solo los snapshots: pudo generarse un
+    PDF y borrarse la carpeta a mano, o pudo enviarse. Cualquiera de las tres
+    convierte la factura en algo que el cliente ya vio, y eso no se destruye.
+    """
+    if invoice.pdf_generated_at is not None or invoice.sent_at is not None:
+        return True
+    return bool(
+        db.execute(
+            select(InvoiceSnapshot.id).where(InvoiceSnapshot.invoice_id == invoice.id)
+        ).first()
+    )
+
+
+def motivo_para_no_eliminar(db: Session, invoice: Invoice) -> str | None:
+    """Por que NO se puede eliminar esta factura, o None si si se puede.
+
+    La regla acordada: solo se elimina de verdad una factura Cancelada que nunca
+    llego a emitir documento. Con historico se archiva, porque destruirla
+    romperia la trazabilidad de algo que el cliente ya tuvo en la mano.
+    """
+    if invoice.status != STATUS_CANCELLED:
+        return "Solo se puede eliminar una factura Cancelada."
+    if tiene_historico(db, invoice):
+        return (
+            "Esta factura ya generó documento, así que no se elimina: se archiva, "
+            "para no romper la trazabilidad."
+        )
+    return None
+
+
+def archivar(db: Session, invoice: Invoice) -> None:
+    """Saca la factura del listado normal sin tocar nada suyo.
+
+    Conserva folio, snapshots, fotografias e historial. Es reversible.
+    """
+    if invoice.archived_at is None:
+        invoice.archived_at = utcnow()
+
+
+def desarchivar(db: Session, invoice: Invoice) -> None:
+    invoice.archived_at = None
+
+
+def eliminar(db: Session, invoice: Invoice) -> str:
+    """Borra la factura de verdad. Devuelve el folio, que sobrevive.
+
+    Lo importante de esta funcion es lo que NO borra. La fila del registro de
+    folios se queda, asi que el numero sigue reservado para siempre: eliminar no
+    libera nunca un folio. El historial de actividad tampoco se va, porque su
+    entity_id es un entero suelto y sin clave foranea.
+
+    Las fotografias se borran del disco a mano: el cascade de la ORM se lleva
+    las filas, pero los archivos se quedarian ocupando sitio para siempre.
+    """
+    from . import uploads
+
+    folio = invoice.folio
+    for foto in list(invoice.photos):
+        uploads.borrar(foto.file_path)
+    db.delete(invoice)
+    return folio
 
 
 # --- guardado con reintento de folio -----------------------------------------
@@ -432,7 +759,9 @@ def _es_choque_de_folio(exc: IntegrityError) -> bool:
     return "folio" in mensaje and ("unique" in mensaje or "duplicate" in mensaje)
 
 
-def commit_creation(db: Session, construir, intentos: int = 6) -> Invoice:
+def commit_creation(
+    db: Session, construir, intentos: int = 6, *, reintentar: bool = True
+) -> Invoice:
     """Crea y guarda reintentando si otro operador se lleva el folio primero.
 
     La cuenta de Admin es compartida, asi que dos personas pueden crear una
@@ -445,7 +774,27 @@ def commit_creation(db: Session, construir, intentos: int = 6) -> Invoice:
     converge en la primera vuelta.
 
     construir(db) -> Invoice, ya anadida a la sesion y con su folio puesto.
+
+    reintentar=False para el folio escrito a mano. Ahi el reintento seria un
+    fallo grave y no una ayuda: cogeria un numero distinto del que el Admin
+    escribio y se lo guardaria en silencio, de modo que creeria haber emitido
+    RES-95000 cuando en la base hay otro. Con el folio manual el choque tiene
+    que llegar a la pantalla.
     """
+    if not reintentar:
+        invoice = construir(db)
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if _es_choque_de_folio(exc):
+                raise FolioOcupado(
+                    "Ese folio se ha ocupado mientras guardabas. No se ha creado nada; "
+                    "vuelve a intentarlo con otro número."
+                ) from exc
+            raise
+        return invoice
+
     for _ in range(intentos):
         invoice = construir(db)
         try:

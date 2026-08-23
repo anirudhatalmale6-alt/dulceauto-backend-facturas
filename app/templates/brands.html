@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Marcas</h2>
+      <div class="small muted">
+        Cada marca guarda su nombre, su logotipo, su icono de Compra segura y el
+        título del documento. Al crear una factura se elige con cuál se emite.
+      </div>
+    </div>
+  </div>
+
+  <p class="muted small">
+    Las marcas no se borran, se desactivan. Una marca desactivada deja de
+    ofrecerse en las facturas nuevas, pero las que ya la usan conservan la suya.
+    Y una factura ya emitida no cambia nunca aunque después se corrija la marca:
+    su PDF lleva dentro su propia copia del logotipo y del icono.
+  </p>
+
+  <div class="grid template-grid" style="margin-top:16px">
+    {% for p in perfiles %}
+      <div class="card template">
+        <h3>{{ p.name }}</h3>
+        {% if p.is_active %}
+          <span class="status generated">Activa</span>
+        {% else %}
+          <span class="status draft">Desactivada</span>
+        {% endif %}
+
+        <div style="margin:12px 0; min-height:44px">
+          {% if p.logo_path %}
+            <img src="/marcas/{{ p.id }}/logo.img" alt="{{ p.name }}"
+                 style="max-height:38px;max-width:200px">
+          {% else %}
+            <span class="small muted">Sin logotipo propio · se usa la marca del diseño aprobado</span>
+          {% endif %}
+        </div>
+
+        <dl>
+          <dt>Título del documento</dt>
+          <dd>
+            {% if p.doc_title %}{{ p.doc_title }}
+            {% else %}<span class="muted">El de cada plantilla</span>{% endif %}
+          </dd>
+          <dt>Icono Compra segura</dt>
+          <dd>
+            {% if p.safe_icon_path %}
+              <img src="/marcas/{{ p.id }}/icono.img" alt="" style="width:22px;height:22px;vertical-align:middle">
+              propio
+            {% else %}<span class="muted">El del diseño aprobado</span>{% endif %}
+          </dd>
+          <dt>Facturas</dt><dd>{{ en_uso.get(p.id, 0) }}</dd>
+        </dl>
+
+        <details style="margin-top:10px">
+          <summary class="small">Editar</summary>
+          <form method="post" action="/marcas/guardar" enctype="multipart/form-data" style="margin-top:10px">
+            <input type="hidden" name="id" value="{{ p.id }}">
+            <label class="small">Nombre
+              <input type="text" name="name" value="{{ p.name }}" required>
+            </label>
+            <label class="small">Título del documento
+              <input type="text" name="doc_title" value="{{ p.doc_title or '' }}"
+                     placeholder="Vacío = el de cada plantilla">
+            </label>
+            <label class="small">Sustituir logotipo
+              <input type="file" name="logo" accept="image/*">
+            </label>
+            <label class="small">Sustituir icono de Compra segura
+              <input type="file" name="safe_icon" accept="image/*">
+            </label>
+            <button class="btn" type="submit">Guardar cambios</button>
+          </form>
+        </details>
+
+        <form method="post" action="/marcas/{{ p.id }}/activar" style="margin-top:8px">
+          <button class="btn ghost" type="submit">
+            {{ "Desactivar" if p.is_active else "Activar" }}
+          </button>
+        </form>
+      </div>
+    {% else %}
+      <p class="muted">Todavía no hay ninguna marca.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3>Añadir una marca</h3>
+  <form method="post" action="/marcas/guardar" enctype="multipart/form-data">
+    <div class="grid two">
+      <label class="small">Nombre de la empresa o marca
+        <input type="text" name="name" required placeholder="DulceAuto">
+      </label>
+      <label class="small">Título del documento
+        <input type="text" name="doc_title" placeholder="DulceAuto — Pre-factura de reserva">
+      </label>
+      <label class="small">Logotipo
+        <input type="file" name="logo" accept="image/*">
+      </label>
+      <label class="small">Icono de Compra segura
+        <input type="file" name="safe_icon" accept="image/*">
+      </label>
+    </div>
+    <button class="btn primary" type="submit" style="margin-top:12px">Crear marca</button>
+  </form>
+  <p class="muted small" style="margin-top:12px">
+    El título es lo que se ve en la pestaña al abrir el documento y lo que queda
+    guardado dentro del PDF. Si se deja vacío se conserva el que trae la plantilla
+    aprobada de cada idioma. El icono de Compra segura es opcional: sin icono
+    propio se mantiene el vector del diseño aprobado.
+  </p>
+</div>
+
+{% endblock %}

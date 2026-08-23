@@ -73,6 +73,12 @@ COMMITTED_STATUSES = (STATUS_VALIDATED, STATUS_SCHEDULED, STATUS_DELIVERED)
 CRED_ADMIN = "admin"
 CRED_MASTER = "master"
 
+# De donde salio un folio. Solo sirve para poder mirar el registro y entender
+# como se asigno; ninguna decision del programa depende de este valor.
+FOLIO_AUTO = "auto"
+FOLIO_MANUAL = "manual"
+FOLIO_BACKFILL = "backfill"
+
 
 def utcnow() -> datetime:
     """Ahora en UTC y sin zona, que es como se guarda todo en este proyecto."""
@@ -121,6 +127,70 @@ class Setting(Base):
     # Marca los ajustes que solo deberian tocarse tras pasar la Master Password.
     is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+# --- marca -------------------------------------------------------------------
+
+
+class BrandProfile(Base):
+    """Una marca con la que se emiten facturas: nombre, logotipo, icono de
+    "Compra segura" y titulo del documento.
+
+    Es una ficha de marca y nada mas. No lleva cuentas bancarias, ni usuarios,
+    ni datos fiscales propios: eso seria un sistema multiempresa, que el cliente
+    descarto expresamente para esta version.
+
+    No se borran. Un perfil que ya no se use se marca is_active=False y deja de
+    ofrecerse al crear facturas nuevas, pero las que ya lo tienen conservan su
+    marca. Borrarlo de verdad dejaria sin logotipo a una factura todavia no
+    emitida, que es justo lo que el cliente pidio evitar.
+    """
+
+    __tablename__ = "brand_profile"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Titulo del documento: es lo que se ve en la pestana del navegador y lo que
+    # Chromium copia a los metadatos Title del PDF.
+    doc_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    logo_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    safe_icon_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+# --- folios ------------------------------------------------------------------
+
+
+class FolioLedger(Base):
+    """Todos los folios que han existido alguna vez.
+
+    Existe por una razon concreta. next_folio no reutiliza un folio porque
+    comprueba contra la tabla de facturas, pero esa comprobacion vive en que la
+    fila siga estando: al permitir borrar una factura cancelada, el sistema
+    perderia la memoria de ese folio y podria volver a emitirlo.
+
+    Aqui se anota el folio en el momento de asignarlo y no se borra nunca. La
+    fila sobrevive al archivado y al borrado de la factura, asi que la promesa
+    de "un folio usado no se recicla" deja de depender del ciclo de vida de la
+    factura.
+
+    El folio es la clave primaria a proposito: es la propia base de datos la que
+    impide anotar dos veces el mismo, sin tener que confiar en el codigo.
+
+    invoice_id se guarda como entero suelto y SIN clave foranea, igual que en
+    activity_log: si se borra la factura, la anotacion tiene que quedarse.
+    """
+
+    __tablename__ = "folio_ledger"
+
+    folio: Mapped[str] = mapped_column(String(32), primary_key=True)
+    invoice_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default=FOLIO_AUTO)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
 # --- facturas ----------------------------------------------------------------
@@ -215,6 +285,24 @@ class Invoice(Base):
     duplicated_from_id: Mapped[int | None] = mapped_column(
         ForeignKey("invoice.id", ondelete="SET NULL"), nullable=True
     )
+
+    # brand.* — la marca con la que se emite este documento.
+    #
+    # El perfil se guarda para poder seguir editando la factura y para saber de
+    # donde salio, pero el nombre y el titulo se COPIAN aqui al crearla, igual
+    # que se hace con banking_*. Cambiar el perfil manana no puede cambiar lo
+    # que decia un documento ya emitido. El logotipo y el icono se congelan
+    # aparte, en la carpeta del snapshot, que es el mecanismo que ya existia.
+    brand_profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey("brand_profile.id", ondelete="SET NULL"), nullable=True
+    )
+    brand_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    brand_doc_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # Archivado. Una factura archivada desaparece del listado normal pero no se
+    # toca: conserva su folio, sus snapshots y su historial. Es la salida por
+    # defecto para una cancelada que ya llego a emitir documento.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
