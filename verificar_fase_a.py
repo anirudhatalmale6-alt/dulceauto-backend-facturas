@@ -7,6 +7,7 @@ unico de esta fase que seria grave si fallara.
 
     python verificar_fase_a.py [http://127.0.0.1:8731]
 """
+import re
 import sys
 
 from playwright.sync_api import sync_playwright
@@ -58,20 +59,60 @@ with sync_playwright() as p:
         page.screenshot(path=f"{SHOTS}/{archivo}.png")
 
     print("\n3 · Busqueda")
-    page.goto(f"{BASE}/facturas?q=Audi")
-    # Se comprueba que filtre, no que salga una sola fila: duplicar un Audi es
-    # legitimo y entonces tienen que salir los dos. Lo que no puede aparecer es
-    # una factura que no sea de ese vehiculo.
-    filas = page.locator("tbody tr:not(.empty-row)")
-    textos = [filas.nth(i).inner_text() for i in range(filas.count())]
-    check("buscar 'Audi' devuelve al menos un Audi", len(textos) >= 1, f"{len(textos)} filas")
-    check(
-        "y no cuela ninguna factura de otro vehiculo",
-        all("audi" in t.lower() for t in textos),
-        f"{len(textos)} filas",
-    )
-    page.goto(f"{BASE}/facturas?q=RES-87240")
-    check("buscar por folio funciona", page.locator("tbody tr:not(.empty-row)").count() == 1)
+    # Los terminos de busqueda se sacan de la primera factura que haya en el
+    # listado, no van escritos aqui. Antes se buscaba "Audi" y RES-87240, que
+    # eran datos del entorno de desarrollo: contra cualquier otra base la prueba
+    # fallaba sin que hubiera nada roto. Asi la bateria se puede ejecutar contra
+    # los datos que sean y el resultado sigue siendo limpio.
+    page.goto(f"{BASE}/facturas")
+    filas_todas = page.locator("tbody tr:not(.empty-row)")
+    if filas_todas.count() == 0:
+        check("busqueda: hay alguna factura con la que probar", False, "listado vacio")
+    else:
+        folio = filas_todas.first.locator("td").nth(0).inner_text().strip()
+        # Se recorren las filas hasta dar con un vehiculo del que salga una
+        # palabra utilizable: la primera factura puede no tener vehiculo escrito.
+        termino = ""
+        for i in range(min(filas_todas.count(), 10)):
+            celda = filas_todas.nth(i).locator("td").nth(2).inner_text().strip()
+            # Solo la primera linea: debajo va el VIN, que es alfanumerico y da
+            # trozos de letras sin sentido como termino de busqueda.
+            titulo = celda.splitlines()[0] if celda else ""
+            palabras = re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{4,}", titulo)
+            if palabras:
+                termino = max(palabras, key=len)
+                break
+
+        if termino:
+            page.goto(f"{BASE}/facturas?q={termino}")
+            # Se comprueba que filtre, no que salga una sola fila: duplicar una
+            # factura del mismo vehiculo es legitimo y entonces salen las dos.
+            # Lo que no puede aparecer es una que no tenga que ver.
+            filas = page.locator("tbody tr:not(.empty-row)")
+            textos = [filas.nth(i).inner_text() for i in range(filas.count())]
+            check(
+                f"buscar por vehiculo ('{termino}') devuelve resultados",
+                len(textos) >= 1,
+                f"{len(textos)} filas",
+            )
+            check(
+                "y no cuela ninguna factura que no coincida",
+                all(termino.lower() in t.lower() for t in textos),
+                f"{len(textos)} filas",
+            )
+        else:
+            check(
+                "buscar por vehiculo",
+                False,
+                "ninguna de las primeras facturas tiene vehiculo escrito",
+            )
+
+        page.goto(f"{BASE}/facturas?q={folio}")
+        check(
+            f"buscar por folio funciona ('{folio}')",
+            page.locator("tbody tr:not(.empty-row)").count() == 1,
+        )
+
     page.goto(f"{BASE}/facturas?q=zzzzz")
     check("busqueda sin resultados no rompe", page.locator(".empty-row").count() == 1)
 
