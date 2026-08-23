@@ -172,22 +172,17 @@ def main() -> int:
 
     # ---- 5 y 6 · PDF ------------------------------------------------------
     print("\nPDF")
-    import subprocess
+    # Se cuentan las paginas con la misma funcion que usa el generador, y no con
+    # pdfinfo: asi la comprobacion no depende de tener poppler instalado y se
+    # puede ejecutar tambien dentro del contenedor del servidor.
+    from app.pdf import contar_paginas  # noqa: E402
 
-    marcos, paginas = [], []
+    paginas = []
     for loc, nombre in (("es-MX", "MX"), ("en", "EN"), ("es-AR", "AR")):
         f2, id2 = crear_factura(c, locale=loc, brand_profile_id=str(nuevo), status="pending")
         c.post(f"/facturas/{id2}/pdf")
         pdfs = sorted((cfg.snapshots_dir / str(id2)).glob("v*/*.pdf"))
-        if not pdfs:
-            paginas.append((nombre, 0))
-            continue
-        salida = subprocess.run(["pdfinfo", str(pdfs[-1])], capture_output=True, text=True).stdout
-        n = int(re.search(r"Pages:\s+(\d+)", salida).group(1))
-        paginas.append((nombre, n))
-        html = pdfs[-1].parent / "documento.html"
-        marcos.append(nombre)
-        del html
+        paginas.append((nombre, contar_paginas(pdfs[-1]) if pdfs else 0))
 
     check(
         "PDF · borde exterior mejorado en MX / EN / AR",
