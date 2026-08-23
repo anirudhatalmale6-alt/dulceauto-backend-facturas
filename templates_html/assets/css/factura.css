@@ -713,16 +713,35 @@ td .icon { width: 15px; height: 15px; margin-right: 4px; vertical-align: -3px; }
   html, body { width: 100%; min-height: 0; margin: 0; background: #fff; }
 
   .page-shell {
+    /* content-box a proposito: el ancho y el alto de abajo son la medida
+       EXACTA de la factura ya escalada, calculada en el momento de generar.
+       Con border-box el marco se comeria 2px de esa medida por dentro y el
+       overflow recortaria el borde inferior y el derecho del documento. Asi
+       el marco se dibuja por fuera y no toca al contenido. */
+    box-sizing: content-box;
     width: calc(var(--design-width) * var(--print-scale));
     height: var(--print-height);
     margin: 0 auto;      /* centra la holgura sobrante en la hoja */
     padding: 0;
     min-width: 0;
+
+    /* El marco exterior. En pantalla lo lleva .invoice, pero .invoice va
+       escalada con transform y recortada por este mismo overflow, asi que un
+       borde suyo se perderia por abajo y por la derecha. Aqui va sobre la
+       caja sin escalar, que ya mide justo el documento: cuesta 2px de alto en
+       vez de milimetros, y el margen de 8mm de @page hace de separacion con
+       el borde fisico del papel. */
+    border: 1px solid #d5dbe5;
+    border-radius: 12px;
+    background: var(--white);
+
     /* La caja de .invoice sigue midiendo 900px de ancho aunque se vea
        escalada, porque transform no altera la maquetacion. Sin este recorte
        ese sobrante empuja una segunda pagina en blanco.
        El alto de arriba lo calcula calibrar-impresion.py a partir del
-       contenido real, asi que aqui no se recorta nada visible. */
+       contenido real, asi que aqui no se recorta nada visible.
+       Ademas, junto al border-radius de arriba, es lo que redondea de verdad
+       las esquinas del documento escalado que lleva dentro. */
     overflow: hidden;
   }
 
@@ -730,6 +749,7 @@ td .icon { width: 15px; height: 15px; margin-right: 4px; vertical-align: -3px; }
     width: var(--design-width);
     max-width: none;
     margin: 0;
+    /* El marco lo lleva ahora .page-shell, ver arriba. */
     border: 0;
     border-radius: 0;
     box-shadow: none;

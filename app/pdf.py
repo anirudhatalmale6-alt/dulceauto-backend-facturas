@@ -52,6 +52,11 @@ DESIGN_WIDTH = 900          # px, ancho para el que esta hecho el diseno
 MARGIN_MM = 8
 SAFETY = 0.99               # 1% de holgura para no rozar el borde del papel
 PX_PER_MM = 96 / 25.4
+# Grosor del marco exterior que .page-shell dibuja al imprimir (seccion 11 del
+# CSS). Va en content-box, o sea que se suma por fuera del ancho y del alto
+# calibrados. Se descuenta de la hoja util para que el calculo siga siendo
+# exacto y no dependa de que sobre sitio por el SAFETY.
+MARCO_PX = 1
 
 # Un Chromium cada vez. Ver la nota de arriba.
 _CERROJO = threading.Lock()
@@ -351,8 +356,11 @@ def _calibrar(page) -> tuple[float, int, float]:
     en la hoja util, tanto de ancho como de alto.
     """
     altura = page.evaluate("document.querySelector('.invoice').getBoundingClientRect().height")
-    ancho_util = (210 - 2 * MARGIN_MM) * PX_PER_MM
-    alto_util = (297 - 2 * MARGIN_MM) * PX_PER_MM
+    # El marco de .page-shell se dibuja por fuera del alto y del ancho
+    # calibrados, asi que la hoja util para el documento es la de la caja menos
+    # ese marco por los dos lados.
+    ancho_util = (210 - 2 * MARGIN_MM) * PX_PER_MM - 2 * MARCO_PX
+    alto_util = (297 - 2 * MARGIN_MM) * PX_PER_MM - 2 * MARCO_PX
     escala = min(ancho_util / DESIGN_WIDTH, alto_util / altura) * SAFETY
     return escala, math.ceil(altura * escala), altura
 
