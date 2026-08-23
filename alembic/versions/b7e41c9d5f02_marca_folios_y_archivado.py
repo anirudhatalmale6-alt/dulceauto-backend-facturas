@@ -82,7 +82,22 @@ def upgrade() -> None:
 
 
 def _rellenar_registro_de_folios() -> None:
-    """Anota en el registro todos los folios que ya existen.
+    """Anota en el registro los folios que ya existen, en tres niveles.
+
+    La regla la fijo el cliente y distingue un folio historico de verdad de uno
+    que solo nacio en una bateria de pruebas:
+
+      1. El folio todavia tiene factura                    -> se reserva.
+      2. Ya no tiene factura, pero hay constancia de que
+         llego a emitirse documento (snapshot vivo, o un
+         'pdf_generated' en la actividad)                  -> se reserva.
+      3. Solo aparece en la actividad, sin factura y sin
+         constancia de documento emitido                   -> se informa, pero
+                                                              NO se bloquea.
+
+    El motivo del tercer nivel: mantener la regla de seguridad -- nada que haya
+    podido formar parte de un documento real se reutiliza -- sin inutilizar
+    rangos enteros por folios creados solo por pruebas automaticas.
 
     Se marcan como 'backfill' para poder distinguir luego, mirando la tabla,
     cuales venian de antes de que existiera el registro.
@@ -102,36 +117,69 @@ def _rellenar_registro_de_folios() -> None:
         )
     }
 
+    # Constancia de documento emitido para un folio que ya no tiene factura.
+    # Dos fuentes independientes:
+    #   - un snapshot que haya sobrevivido a su factura
+    #   - una accion 'pdf_generated' en la actividad, que no se borra nunca
+    #     porque su entity_id no tiene clave foranea
+    con_snapshot = {
+        f
+        for (f,) in conn.execute(
+            sa.text("SELECT DISTINCT folio FROM invoice_snapshot WHERE folio IS NOT NULL")
+        )
+    }
+    con_pdf = {
+        f
+        for (f,) in conn.execute(
+            sa.text(
+                "SELECT DISTINCT folio FROM activity_log "
+                "WHERE action = 'pdf_generated' AND folio IS NOT NULL AND folio <> ''"
+            )
+        )
+    }
+
+    huerfanos = de_actividad - de_facturas
+    huerfanos_con_documento = huerfanos & (con_snapshot | con_pdf)
+    huerfanos_de_prueba = huerfanos - huerfanos_con_documento
+
+    a_reservar = de_facturas | huerfanos_con_documento
+
     insertar = sa.text(
         "INSERT INTO folio_ledger (folio, invoice_id, source, created_at) "
         "SELECT :folio, (SELECT id FROM invoice WHERE folio = :folio), "
-        "       'backfill', CURRENT_TIMESTAMP "
+        "       :origen, CURRENT_TIMESTAMP "
         "WHERE NOT EXISTS (SELECT 1 FROM folio_ledger WHERE folio = :folio)"
     )
-    for folio in sorted(de_facturas | de_actividad):
-        conn.execute(insertar, {"folio": folio})
+    for folio in sorted(a_reservar):
+        conn.execute(
+            insertar,
+            {
+                "folio": folio,
+                "origen": "backfill" if folio in de_facturas else "backfill-doc",
+            },
+        )
 
     (anotados,) = conn.execute(sa.text("SELECT COUNT(*) FROM folio_ledger")).one()
-    solo_en_actividad = sorted(de_actividad - de_facturas)
 
-    print(
-        f"[folio_ledger] folios en facturas: {len(de_facturas)} | "
-        f"folios en actividad: {len(de_actividad)} | anotados en total: {anotados}"
-    )
-    if solo_en_actividad:
-        # Folios que la actividad recuerda y que ya no tienen factura. Se anotan
-        # igual, porque existieron y la regla es que un folio usado no vuelve.
-        # Se avisa porque cambia algo que se nota: esos numeros tampoco se
-        # podran escribir a mano en el modo Manual.
-        muestra = ", ".join(solo_en_actividad[:5])
-        if len(solo_en_actividad) > 5:
-            muestra += f", … {solo_en_actividad[-1]}"
-        print(
-            f"[folio_ledger] AVISO: {len(solo_en_actividad)} folios aparecen en la "
-            f"actividad pero ya no tienen factura ({muestra}). Se reservan igual."
-        )
-    else:
-        print("[folio_ledger] las dos fuentes coinciden, sin diferencias.")
+    def _muestra(conjunto: set) -> str:
+        orden = sorted(conjunto)
+        if not orden:
+            return "ninguno"
+        if len(orden) <= 6:
+            return ", ".join(orden)
+        return ", ".join(orden[:5]) + f", … {orden[-1]}"
+
+    print("[folio_ledger] " + "-" * 58)
+    print(f"[folio_ledger] 1. folios con factura ................ {len(de_facturas):5d}  RESERVADOS")
+    print(f"[folio_ledger] 2. huérfanos CON documento emitido .... {len(huerfanos_con_documento):5d}  RESERVADOS")
+    if huerfanos_con_documento:
+        print(f"[folio_ledger]    {_muestra(huerfanos_con_documento)}")
+    print(f"[folio_ledger] 3. huérfanos SIN documento (pruebas) .. {len(huerfanos_de_prueba):5d}  no se bloquean")
+    if huerfanos_de_prueba:
+        print(f"[folio_ledger]    {_muestra(huerfanos_de_prueba)}")
+    print(f"[folio_ledger] folios distintos en actividad ........ {len(de_actividad):5d}")
+    print(f"[folio_ledger] TOTAL anotado en el registro ......... {anotados:5d}")
+    print("[folio_ledger] " + "-" * 58)
 
 
 def downgrade() -> None:
