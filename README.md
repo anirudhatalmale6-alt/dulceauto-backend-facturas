@@ -17,6 +17,8 @@ tocado sus estilos.
 | **B** | Crear, editar, borrador, buscar, duplicar, agrupación por VIN | **Entregada** |
 | **C** | Motor de plantillas, claves fijas en las 3 plantillas, reglas por mercado, vista previa real | **Entregada** |
 | **D** | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | **Entregada** — instalado en producción |
+| **Tuneup — Bloque A** | Perfiles de marca, marco exterior del PDF, archivar/eliminar canceladas, folio manual, registro permanente de folios | **Entregada** — en producción |
+| **Tuneup — Bloque B** | Acceso Operador, búsqueda por folio, los 6 pasos guiados del Call Center V1.4 | **Entregada** |
 
 El sistema está en producción, así que el panel ya no lleva ninguna etiqueta de
 fase ni descripción del alcance: eso era información del desarrollo y no le
@@ -76,13 +78,16 @@ desde Configuración, que a su vez exige la Master Password.
 
 ---
 
-## Las dos contraseñas
+## Las contraseñas
 
 Son barreras independientes, tal y como se pidió:
 
 1. **Contraseña del panel.** Cuenta única y compartida. Da acceso al backend.
 2. **Master Password.** Solo para Configuración. Se pide **aunque la sesión del
    panel ya esté abierta**.
+3. **Contraseña de Operador.** Cuenta aparte para el Call Center, con su propio
+   acceso en `/operador/acceso`. El Operador no conoce ni necesita ninguna de
+   las dos anteriores, y las suyas no abren el panel administrativo.
 
 Configuración arranca siempre bloqueada. Se vuelve a bloquear sola tras
 15 minutos sin actividad (`MASTER_SESSION_MINUTES`) y al cerrar sesión.
@@ -607,6 +612,8 @@ python3 verificar_fase_a.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_b.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_c.py http://127.0.0.1:8000 /tmp/capturas
 python3 verificar_fase_d.py http://127.0.0.1:8000 /tmp/capturas
+python3 verificar_bloque_a.py http://127.0.0.1:8000
+python3 verificar_bloque_b.py http://127.0.0.1:8000
 python3 verificar_plantillas.py
 python3 verificar_pdf.py
 python3 verificar_subidas.py
@@ -615,7 +622,8 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**482 comprobaciones en total.** No miran que las páginas «carguen», miran que
+**533 comprobaciones en total** (551 con `verificar_codigos.py`, que
+necesita pyzbar y por eso no se ejecuta en el servidor). No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
 anterior, para que los recuentos por VIN sigan significando algo.
@@ -630,6 +638,15 @@ anterior, para que los recuentos por VIN sigan significando algo.
   heredar los datos del cliente original, que use la cuenta bancaria vigente y no la del original, que la
   factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
   cuente lo que tiene que contar.
+- **Bloque B · 56.** Que las credenciales de Admin no abran el panel de
+  Operador ni al revés; que las diez rutas de Administración probadas queden
+  bloqueadas al escribirlas a mano y al enviarles un formulario manipulado; que
+  el intento quede en Actividad; que el folio se encuentre entero, solo el
+  número y en minúsculas; que uno inexistente dé un mensaje y no un error; que
+  no se pueda saltar al paso 4 sin verificar dos datos ni al 3 sin confirmar;
+  que una FAQ sin respuesta aprobada no se ofrezca como respuesta; que la
+  sugerencia quede registrada pero **no publicada**; que la factura esté byte a
+  byte igual después de toda una sesión de Operador; y los tres modos visuales.
 - **Fase C · 66.** Con navegador: que la vista previa enseñe el documento real
   y no una imitación, que el CSS aprobado se cargue de verdad, que el del panel
   no se cuele dentro, que lo que se escribe en el editor salga en la factura,
@@ -673,6 +690,83 @@ mandan la petición a mano para verificar que el servidor tampoco lo acepta. Es
 el caso del folio y del estado al duplicar.
 
 Las tres primeras dejan capturas en la carpeta indicada.
+
+---
+
+## Módulo Operador · Call Center
+
+Misma aplicación y misma base de datos que el panel: no hay un segundo backend.
+Lo único que separa los dos mundos es el **papel de la sesión**, y se decide en
+un solo punto.
+
+### El bloqueo, en una sola función
+
+`require_login()` (en `app/main.py`) es la puerta de **todas** las vistas de
+Administración. Si la sesión no es de Admin, devuelve una redirección antes de
+que se ejecute el código de la vista. Por eso el Operador no queda fuera porque
+no se le pinte un botón: queda fuera aunque escriba la dirección a mano, y
+aunque envíe un formulario manipulado.
+
+`app/security.py` guarda el papel en la sesión (`auth_role`) y lo valida contra
+una lista cerrada. Dos detalles deliberados:
+
+- `login_session()` **exige** el papel, sin valor por defecto. Un descuido en
+  una llamada futura provocaría un error, no una sesión de Admin silenciosa.
+- Una sesión sin papel se rechaza. En la práctica solo puede ser una abierta
+  antes de instalar este módulo: hay que volver a entrar una vez.
+
+`master_unlocked()` comprueba además que el papel sea Admin, de modo que una
+sesión de Operador nunca ve Configuración como desbloqueada ni aunque alguna
+ruta futura se olvidara de exigirlo.
+
+Cada intento bloqueado queda anotado en Actividad como
+*«Acceso a Administración bloqueado»*, con la ruta que se intentó abrir.
+
+### Qué puede hacer el Operador
+
+Buscar una reserva por folio, seguir el guion de seis pasos y **añadir notas**.
+Nada más. Ninguna función de `app/callcenter.py` modifica una columna de
+`invoice`: esa es la garantía real de que el perfil es de solo lectura.
+
+Los datos de pago que ve salen de las columnas `banking_*` **de esa factura**,
+congeladas al crearla, y nunca de Configuración. Si el negocio cambia de cuenta,
+el Operador sigue leyendo lo que el cliente tiene delante en su documento.
+
+### El guion vive en la URL
+
+`?folio=…&paso=…&v=…&c=…&necesidad=…`. En el prototipo el avance era una
+variable de JavaScript. Aquí viaja en la dirección, y eso da dos cosas:
+recargar en mitad de una llamada no devuelve al principio, y las dos reglas del
+guion se comprueban **en el servidor**:
+
+- del paso 1 no se sale sin **dos datos verificados** (nombre, folio, últimos 4
+  del teléfono);
+- del paso 2 no se sale sin confirmar que los datos principales coinciden.
+
+Escribir `?paso=4` a mano devuelve al paso que toque, con el aviso.
+
+### La guía de respuestas (FAQ)
+
+Tabla `operator_faq`. El Operador solo ve las que tienen `active=1` **y**
+respuesta escrita: una FAQ activa y vacía sería una invitación a improvisar,
+que es justo lo que el alcance prohíbe.
+
+La guía se siembra con las 12 preguntas del prototipo V1.4. Las 11 que traían
+respuesta entran activas; la que estaba marcada como pendiente entra **sin
+respuesta y desactivada**, no con un texto inventado.
+
+### Notas
+
+Tabla `operator_note`, de solo añadir: no hay ruta de edición ni de borrado
+para el Operador. Una nota que se puede reescribir después no sirve como
+constancia de lo que se dijo en la llamada.
+
+Las sugerencias de FAQ se guardan como notas de tipo `faq` y **no se publican
+solas**: quedan pendientes hasta que Administración las revise.
+
+> La pantalla de Administración para editar FAQs y revisar notas es el bloque
+> siguiente. Hasta entonces la guía se puede editar en la tabla, y las
+> sugerencias quedan guardadas sin perderse.
 
 ---
 

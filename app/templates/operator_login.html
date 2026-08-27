@@ -1,0 +1,45 @@
+{# Acceso del Call Center.
+
+   Es una pantalla aparte de /acceso a proposito: el Operador no debe siquiera
+   ver el formulario del panel administrativo. Usa las clases .loginScreen y
+   .loginCard del prototipo V1.4, sin inventarse ninguna. #}
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acceso Operador · DulceAuto</title>
+<link rel="stylesheet" href="{{ url_for('static', path='/css/operador.css') }}">
+</head>
+<body class="{{ theme_class }}">
+<div class="loginScreen">
+  <div class="loginCard">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+      <div class="brandMark">DA</div>
+      <div>
+        <h1>DulceAuto</h1>
+        <p style="margin:0">Acceso Operador · Call Center</p>
+      </div>
+    </div>
+
+    {% if error %}
+      <div class="banner warn" style="margin-bottom:10px">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/operador/acceso" autocomplete="off">
+      <label>Usuario operador</label>
+      <input name="username" required autofocus autocomplete="username">
+      <label>Contraseña</label>
+      <input name="password" type="password" required autocomplete="current-password">
+      <button type="submit">Entrar al panel de atención</button>
+    </form>
+
+    <div class="demoHint">
+      Cuenta de Operador, independiente de la de Administración. Desde aquí se
+      consultan reservas y se registran notas; no se accede a Configuración,
+      datos bancarios, plantillas ni edición de facturas.
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -17,6 +17,7 @@ from .locales import MARKETS
 from .models import (
     CRED_ADMIN,
     CRED_MASTER,
+    CRED_OPERATOR,
     STATUS_DRAFT,
     STATUS_VALIDATED,
     STATUS_PENDING,
@@ -111,6 +112,15 @@ def seed_credentials(db: Session) -> None:
             Credential(
                 name=CRED_MASTER,
                 password_hash=hash_password(settings.initial_master_password),
+                must_change=True,
+            )
+        )
+    if db.get(Credential, CRED_OPERATOR) is None:
+        db.add(
+            Credential(
+                name=CRED_OPERATOR,
+                username=settings.initial_operator_user,
+                password_hash=hash_password(settings.initial_operator_password),
                 must_change=True,
             )
         )

@@ -1,0 +1,374 @@
+{# Los seis pasos del guion y el panel de notas.
+
+   Viven en un archivo aparte porque en Jinja un macro solo existe a partir de
+   la linea en que se define: teniendolos aqui e importandolos arriba, el orden
+   dentro de operator.html deja de importar.
+
+   Se importan "with context", de modo que ven invoice, paso, nav y el resto
+   sin tener que pasarlos uno a uno en cada llamada. #}
+
+{% macro heading(titulo, sub, badge='') %}
+  <div class="headingRow">
+    <div><h3>{{ titulo }}</h3><p>{{ sub }}</p></div>
+    {% if badge %}<span class="badge">{{ badge }}</span>{% endif %}
+  </div>
+{% endmacro %}
+
+
+{% macro bloque_paso1() %}
+  {{ heading('1 · Identificar al cliente',
+             'Confirma al menos dos datos antes de compartir información sensible.',
+             '✓ LISTO' if verificados | length >= 2 else 'VERIFICACIÓN') }}
+  <div class="identity">
+    {% for d in verificacion %}
+      {% if d.disponible %}
+        {# Marcar y desmarcar son enlaces: el estado vive en la URL, no en una
+           variable que se pierde al recargar. #}
+        <a class="verify {% if d.id in verificados %}active{% endif %}"
+           href="{{ nav.toggle[d.id] }}">
+          <div class="circle">{{ '✓' if d.id in verificados else '○' }}</div>
+          <b>{{ d.titulo }}</b>
+          <small>{{ d.valor }}</small>
+        </a>
+      {% else %}
+        <div class="verify" style="opacity:.55">
+          <div class="circle">—</div>
+          <b>{{ d.titulo }}</b>
+          <small>No consta en esta factura</small>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if verificados | length >= 2 %}
+    <div class="banner ok" style="margin-top:10px">✓ Identidad suficientemente verificada.</div>
+  {% else %}
+    <div class="banner warn" style="margin-top:10px">
+      Confirma por lo menos dos datos. Si no coinciden, guarda una nota y detén
+      la orientación sensible.
+      {% if verificables < 2 %}
+        <br><b>Atención:</b> esta factura solo tiene {{ verificables }} de los tres
+        datos. Verifica con otra información y déjalo escrito en una nota.
+      {% endif %}
+    </div>
+  {% endif %}
+{% endmacro %}
+
+
+{% macro bloque_paso2() %}
+  {{ heading('2 · Confirmar la factura',
+             'Una revisión rápida de los datos que más evitan errores.',
+             '✓ CONFIRMADO' if confirmado else 'CONFIRMAR') }}
+  <div class="grid3">
+    <div class="panel">
+      <h4>Cliente</h4>
+      <div class="kv"><span>Nombre</span><b>{{ invoice.customer_name or '—' }}</b></div>
+      <div class="kv"><span>Ciudad</span><b>{{ invoice.customer_city or '—' }}</b></div>
+    </div>
+    <div class="panel">
+      <h4>Vehículo</h4>
+      <div class="kv"><span>Modelo</span><b>{{ invoice.vehicle_title or '—' }}</b></div>
+      <div class="kv"><span>VIN</span><b>{{ invoice.vehicle_vin or '—' }}</b></div>
+    </div>
+    <div class="panel">
+      <h4>Operación</h4>
+      <div class="kv"><span>Reserva</span><b>{{ money(invoice.pricing_reservation_amount, invoice.locale, currency=invoice.pricing_currency) if invoice.pricing_reservation_amount is not none else '—' }}</b></div>
+      <div class="kv"><span>Entrega</span><b>{{ invoice.delivery_date.strftime('%d/%m/%Y') if invoice.delivery_date else 'sin fecha' }} · {{ delivery_label(invoice.delivery_mode, invoice.locale) if invoice.delivery_mode else '—' }}</b></div>
+    </div>
+  </div>
+  <div class="actionRow">
+    <a class="btn" href="#notas">⚠ Hay una inconsistencia</a>
+    {% if not confirmado %}
+      <a class="btn green" href="{{ nav.confirmar }}">✓ Todo coincide</a>
+    {% else %}
+      <a class="btn primary" href="{{ nav.paso[3] }}">Continuar →</a>
+    {% endif %}
+  </div>
+  {% if not confirmado %}
+    <div class="banner info" style="margin-top:10px">
+      Si algo no coincide, no orientes sobre el pago: registra una nota para que
+      Administración lo revise.
+    </div>
+  {% endif %}
+{% endmacro %}
+
+
+{% macro bloque_paso3() %}
+  {{ heading('3 · Identificar la necesidad',
+             'La selección muestra solo la información útil para este motivo.',
+             'RUTA LISTA' if necesidad_actual else 'SELECCIONAR') }}
+  <div class="choiceGrid">
+    {% for n in necesidades %}
+      <a class="choice {% if necesidad_actual == n.id %}active{% endif %}"
+         href="{{ nav.necesidad[n.id] }}">
+        <span class="choiceIcon">{{ n.icono }}</span>
+        <span><b>{{ n.titulo }}</b><span>{{ n.desc }}</span></span>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div style="margin-top:10px">
+    {% if necesidad_actual == 'delivery' %}
+      <div class="grid3">
+        <div class="panel">
+          <h4>Datos actuales</h4>
+          <div class="kv"><span>Modalidad</span><b>{{ delivery_label(invoice.delivery_mode, invoice.locale) if invoice.delivery_mode else '—' }}</b></div>
+          <div class="kv"><span>Fecha</span><b>{{ invoice.delivery_date.strftime('%d/%m/%Y') if invoice.delivery_date else 'sin fecha' }}</b></div>
+        </div>
+        <div class="panel">
+          <h4>Regla</h4>
+          <div class="banner warn">
+            Si el cliente pide un cambio, registra la solicitud. No prometas una
+            nueva fecha sin confirmación.
+          </div>
+        </div>
+        <div class="panel">
+          <h4>Respuesta</h4>
+          <div class="answer">
+            <div class="answerHead"><b>Diga esto</b></div>
+            {{ invoice.delivery_text or 'Esta factura no tiene texto de entrega redactado. Consulta con Administración antes de dar una fecha.' }}
+          </div>
+        </div>
+      </div>
+    {% elif necesidad_actual == 'payment' %}
+      <div class="grid3">
+        <div class="panel">
+          <h4>Datos de esta reserva</h4>
+          <div class="kv"><span>Banco</span><b>{{ pago.banco or '—' }}</b></div>
+          <div class="kv"><span>{{ pago.etiqueta_cuenta }}</span><b>{{ pago.cuenta or '—' }}</b></div>
+          <div class="kv"><span>Referencia</span><b>{{ pago.referencia or '—' }}</b></div>
+        </div>
+        <div class="panel">
+          <h4>Antes de compartir</h4>
+          <div class="checks">
+            <label><input type="checkbox"><span>Folio coincide</span></label>
+            <label><input type="checkbox"><span>Monto coincide</span></label>
+            <label><input type="checkbox"><span>Los datos salen de esta factura</span></label>
+          </div>
+        </div>
+        <div class="panel">
+          <h4>Respuesta</h4>
+          <div class="answer">
+            <div class="answerHead"><b>Diga esto</b></div>
+            Claro. Los datos para la transferencia aparecen en tu pre-factura. Si
+            quieres, confirmamos juntos el folio y el monto antes de que realices
+            el pago.
+          </div>
+          <div class="internal">
+            <b>Interno:</b> estos datos son los congelados en la factura
+            {{ invoice.folio }}. El Operador no puede editar banco ni cuenta.
+          </div>
+        </div>
+      </div>
+      {% if not pago.completos %}
+        <div class="banner warn" style="margin-top:10px">
+          Esta factura no tiene datos bancarios completos. No orientes sobre el
+          pago: registra una nota para Administración.
+        </div>
+      {% endif %}
+    {% elif necesidad_actual in ('update', 'incident', 'other') %}
+      <div class="panel">
+        <h4>
+          {% if necesidad_actual == 'update' %}Actualización de información
+          {% elif necesidad_actual == 'incident' %}Problema / incidencia
+          {% else %}Otra necesidad{% endif %}
+        </h4>
+        <div class="banner info">
+          {% if necesidad_actual == 'update' %}
+            Registra en Notas qué dato desea cambiar el cliente. Administración
+            revisará y aplicará el cambio si corresponde.
+          {% elif necesidad_actual == 'incident' %}
+            Describe la incidencia en Notas. Si afecta pago, documentos o
+            seguridad, no des una respuesta definitiva hasta revisión
+            administrativa.
+          {% else %}
+            Registra una nota clara con la solicitud para que Administración
+            pueda revisarla.
+          {% endif %}
+        </div>
+        <div class="actionRow"><a class="btn primary" href="#notas">Registrar nota</a></div>
+      </div>
+    {% else %}
+      <div class="banner info">
+        El diseño mantiene pocos clics: seleccionar necesidad → ver respuesta o
+        acción.
+      </div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+
+{% macro bloque_paso4() %}
+  {{ heading('4 · Resolver dudas',
+             'Busca una respuesta aprobada. Si no existe una respuesta autorizada, registra una sugerencia en Notas y no improvises.',
+             'FAQ EDITABLE DESDE ADMIN') }}
+
+  <form class="faqTop" method="get" action="/operador">
+    <input type="hidden" name="folio" value="{{ invoice.folio }}">
+    <input type="hidden" name="paso" value="4">
+    <input type="hidden" name="v" value="{{ verificados | join(',') }}">
+    <input type="hidden" name="c" value="{{ 1 if confirmado else 0 }}">
+    <input type="hidden" name="necesidad" value="{{ necesidad_actual }}">
+    <div class="tabs">
+      <a class="tab {% if faq_cat == 'Todas' %}active{% endif %}" href="{{ nav.categoria['Todas'] }}">Todas</a>
+      {% for c in faq_categorias %}
+        <a class="tab {% if faq_cat == c %}active{% endif %}" href="{{ nav.categoria[c] }}">{{ c }}</a>
+      {% endfor %}
+    </div>
+    <input class="faqSearch" name="q" value="{{ faq_q }}" placeholder="Buscar en la guía..."
+           aria-label="Buscar en la guía">
+    <input type="hidden" name="cat" value="{{ faq_cat }}">
+  </form>
+
+  <div class="faqLayout">
+    <div>
+      {% for f in faqs %}
+        <div class="faqItem open">
+          <div class="faqQ"><span>{{ f.question }}</span></div>
+          <div class="faqA">
+            <div class="answer">
+              <div class="answerHead"><b>Respuesta recomendada</b></div>
+              {{ f.answer }}
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="banner info">
+          {% if faq_q or faq_cat != 'Todas' %}
+            No hay respuestas aprobadas para esa búsqueda.
+          {% else %}
+            La guía todavía no tiene respuestas aprobadas.
+          {% endif %}
+          Si el cliente pregunta algo que no está aquí, no improvises: registra
+          una sugerencia en Notas.
+        </div>
+      {% endfor %}
+
+      {% if faqs_pendientes %}
+        <div class="banner warn" style="margin-top:10px">
+          <b>{{ faqs_pendientes | length }}</b> pregunta(s) recogidas todavía sin
+          respuesta aprobada. No se pueden leer al cliente; puedes sugerir una
+          redacción desde Notas.
+          <div style="margin-top:7px">
+            {% for f in faqs_pendientes %}
+              <div style="margin:4px 0">· {{ f.question }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <aside class="tips">
+      <h4>Cómo responder</h4>
+      <div class="tip">1. Escucha completa.</div>
+      <div class="tip">2. Abre una respuesta aprobada.</div>
+      <div class="tip">3. Confirma el dato de esa reserva.</div>
+      <div class="tip">4. Pregunta si quedó claro.</div>
+      <div class="tip">5. Si no existe FAQ, crea una sugerencia en Notas.</div>
+      <div class="banner info" style="margin-top:9px">
+        El Operador solo consulta respuestas activas. Quien las redacta y
+        publica es Administración.
+      </div>
+    </aside>
+  </div>
+{% endmacro %}
+
+
+{% macro bloque_paso5() %}
+  {{ heading('5 · Confirmar decisión',
+             'Cierra la conversación con una frase simple y deja la acción administrativa fuera del perfil Operador.',
+             'SOLO ORIENTACIÓN') }}
+  <div class="grid2">
+    <div class="panel">
+      <h4>✓ Continuará / necesita seguimiento</h4>
+      <div class="answer">
+        Perfecto. Entonces dejamos claro el siguiente paso y, si hace falta, voy
+        a registrar una nota para que el seguimiento tenga todo el contexto.
+      </div>
+      <div class="actionRow"><a class="btn primary" href="#notas">Añadir nota si hace falta</a></div>
+    </div>
+    <div class="panel">
+      <h4>× No continuará</h4>
+      <div class="banner warn">
+        El Operador registra la decisión en una nota. No elimina ni cancela la
+        factura desde este panel.
+      </div>
+      <div class="actionRow"><a class="btn" href="#notas">Registrar nota</a></div>
+    </div>
+  </div>
+{% endmacro %}
+
+
+{% macro bloque_paso6() %}
+  {{ heading('6 · Registrar nota',
+             'Solo se guarda información útil para el próximo contacto. No se crea un CRM completo.',
+             'NOTAS') }}
+  <div class="grid2">
+    <div class="panel">
+      <h4>Nota sobre el cliente</h4>
+      <div class="banner info">
+        Usa una nota cuando haya una aclaración, seguimiento, cambio solicitado o
+        información que el siguiente operador deba conocer.
+      </div>
+    </div>
+    <div class="panel">
+      <h4>Sugerencia para mejorar la guía</h4>
+      <div class="banner info">
+        Si el cliente hizo una pregunta que no existe en la guía, puedes
+        sugerirla. Administración decidirá si se convierte en FAQ.
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+
+{% macro panel_notas() %}
+  <section class="notesPanel" id="notas">
+    <h4>Notas del folio {{ invoice.folio }}</h4>
+
+    <form method="post" action="/operador/notas">
+      <input type="hidden" name="folio" value="{{ invoice.folio }}">
+      <input type="hidden" name="paso" value="{{ paso }}">
+      <div class="formGrid">
+        <div class="field">
+          <label>Tipo de nota</label>
+          <select name="tipo">
+            {% for t in note_types %}
+              <option value="{{ t }}">{{ note_labels.get(t, t) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Operador</label>
+          <input value="{{ user }}" readonly>
+        </div>
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label>Nota</label>
+        <textarea name="nota" required
+                  placeholder="Ej. El cliente preguntó si puede cambiar la fecha de entrega para el lunes..."></textarea>
+      </div>
+      <div class="actionRow">
+        <button class="btn primary" type="submit">Guardar nota</button>
+      </div>
+    </form>
+
+    <div class="banner info" style="margin-top:10px">
+      Las sugerencias FAQ no se publican automáticamente. Administración las
+      revisa, redacta o aprueba la respuesta y decide si se incorpora a la guía.
+      Las notas guardadas no se pueden editar ni borrar desde este panel.
+    </div>
+
+    <div class="noteList">
+      {% for n in notas %}
+        <div class="noteItem">
+          <div class="noteMeta">{{ n.created_at.strftime('%d/%m/%Y %H:%M') }} UTC · {{ n.actor }}</div>
+          <div class="noteType">{{ note_labels.get(n.type, n.type) | upper }}</div>
+          <div class="noteText">{{ n.note }}</div>
+        </div>
+      {% else %}
+        <div class="banner info">Todavía no hay notas para este folio.</div>
+      {% endfor %}
+    </div>
+  </section>
+{% endmacro %}

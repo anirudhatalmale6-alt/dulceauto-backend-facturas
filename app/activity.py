@@ -26,6 +26,16 @@ PDF_GENERATED = "pdf_generated"
 SETTINGS_UPDATED = "settings_updated"
 PASSWORD_CHANGED = "password_changed"
 
+# Call Center. El acceso del Operador se registra igual que el del Admin: la
+# cuenta es compartida, asi que la Actividad es lo unico que permite reconstruir
+# quien estuvo mirando que reserva y cuando.
+OPERATOR_LOGIN = "operator_login"
+OPERATOR_LOGOUT = "operator_logout"
+OPERATOR_LOGIN_FAILED = "operator_login_failed"
+OPERATOR_LOOKUP = "operator_lookup"
+OPERATOR_NOTE = "operator_note"
+OPERATOR_DENIED = "operator_denied"
+
 LABELS = {
     LOGIN: "Inicio de sesión",
     LOGOUT: "Cierre de sesión",
@@ -40,6 +50,12 @@ LABELS = {
     PDF_GENERATED: "PDF generado",
     SETTINGS_UPDATED: "Configuración modificada",
     PASSWORD_CHANGED: "Contraseña cambiada",
+    OPERATOR_LOGIN: "Acceso de Operador",
+    OPERATOR_LOGOUT: "Salida de Operador",
+    OPERATOR_LOGIN_FAILED: "Acceso de Operador fallido",
+    OPERATOR_LOOKUP: "Consulta de reserva (Operador)",
+    OPERATOR_NOTE: "Nota de Operador",
+    OPERATOR_DENIED: "Acceso a Administración bloqueado",
 }
 
 

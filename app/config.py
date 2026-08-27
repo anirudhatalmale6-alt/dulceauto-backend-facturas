@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     initial_admin_user: str = "admin"
     initial_admin_password: str = "DulceAuto2026"
     initial_master_password: str = "Master2026"
+    # Cuenta del Call Center. Es una contrasena distinta de la de Admin a
+    # proposito: el Operador no debe conocer la del panel.
+    initial_operator_user: str = "operador"
+    initial_operator_password: str = "Operador2026"
 
     @property
     def uploads_dir(self) -> Path:

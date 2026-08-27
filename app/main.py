@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import activity as act
+from . import callcenter as cc
 from . import codes
 from . import documents as doc_engine
 from . import invoices as inv_service
@@ -31,6 +32,12 @@ from .locales import DELIVERY_MODES, MARKETS, delivery_label, format_amount, get
 from .models import (
     CRED_ADMIN,
     CRED_MASTER,
+    CRED_OPERATOR,
+    NOTE_CUSTOMER,
+    NOTE_FAQ,
+    NOTE_TYPES,
+    ROLE_ADMIN,
+    ROLE_OPERATOR,
     STATUS_CANCELLED,
     STATUS_DELIVERED,
     STATUS_DRAFT,
@@ -43,12 +50,16 @@ from .models import (
     FolioLedger,
     Invoice,
     InvoicePhoto,
+    OperatorFaq,
+    OperatorNote,
     Setting,
     utcnow,
 )
 from .security import (
     check_admin,
     check_master,
+    check_operator,
+    current_role,
     current_user,
     lock_master,
     login_session,
@@ -178,9 +189,59 @@ def pop_flashes(request: Request) -> list[dict]:
 
 
 def require_login(request: Request) -> str | RedirectResponse:
+    """Puerta unica de TODO el panel de administracion.
+
+    Este es el punto que pidio el cliente: el Operador no queda fuera porque no
+    se le pinte el boton, sino porque cualquier vista de Admin pasa por aqui.
+    Escribir una direccion de Admin a mano con sesion de Operador acaba en esta
+    misma comprobacion y no llega al codigo de la vista.
+
+    Al Operador se le devuelve a su propio panel en vez de a /acceso: mandarlo
+    al formulario de acceso teniendo sesion valida haria pensar que su sesion
+    ha caducado, cuando lo que pasa es que esa pagina no es suya.
+    """
     user = current_user(request)
     if not user:
         return RedirectResponse("/acceso", status_code=status.HTTP_303_SEE_OTHER)
+    if current_role(request) != ROLE_ADMIN:
+        _registrar_bloqueo(request, user)
+        return RedirectResponse("/operador", status_code=status.HTTP_303_SEE_OTHER)
+    return user
+
+
+def _registrar_bloqueo(request: Request, user: str) -> None:
+    """Deja constancia de que una sesion de Operador intento abrir Administracion.
+
+    Abre su propia sesion de base de datos porque require_login se llama desde
+    decenas de rutas y no recibe la del Depends. Si el registro fallara, el
+    bloqueo tiene que seguir ocurriendo igual: por eso el except no re-lanza.
+    Un fallo al anotar no puede convertirse en un fallo al proteger.
+    """
+    from .db import SessionLocal
+
+    try:
+        with SessionLocal() as db:
+            act.log(
+                db,
+                act.OPERATOR_DENIED,
+                actor=user,
+                request=request,
+                detail=request.url.path,
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def require_operator(request: Request) -> str | RedirectResponse:
+    """Puerta del modulo de Call Center.
+
+    Admite tambien al Admin: el alcance prohibe que el Operador entre en
+    Administracion, no al reves, y el propietario necesita poder abrir el
+    modulo para revisarlo sin tener que salirse de su sesion.
+    """
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/operador/acceso", status_code=status.HTTP_303_SEE_OTHER)
     return user
 
 
@@ -211,7 +272,7 @@ def login_submit(
     db: Session = Depends(get_db),
 ):
     if check_admin(db, username, password):
-        login_session(request, username)
+        login_session(request, username, ROLE_ADMIN)
         act.log(db, act.LOGIN, request=request, detail=f"usuario {username}")
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1721,3 +1782,237 @@ def health(db: Session = Depends(get_db)):
     """Sirve para que el servidor o Docker sepan si la aplicacion esta viva."""
     db.execute(select(func.count(Invoice.id))).scalar_one()
     return {"ok": True, "version": settings.app_version, "utc": utcnow().isoformat()}
+
+
+# --- Call Center · Operador --------------------------------------------------
+#
+# Modulo del Operador. Misma aplicacion y misma base de datos que el panel: no
+# hay un segundo backend, tal y como pedia el alcance. Lo unico que lo separa es
+# el papel de la sesion, que se decide en un solo punto (require_login /
+# require_operator) y no en cada plantilla.
+
+
+def render_operador(
+    request: Request,
+    template: str,
+    db: Session,
+    **context,
+) -> HTMLResponse:
+    """Render propio del modulo.
+
+    No reutiliza render() a proposito: aquella funcion arma el menu de
+    Administracion y los datos de las credenciales, y nada de eso debe llegar a
+    una pantalla que ve el Operador.
+    """
+    theme = theme_from(request)
+    base = {
+        "app_version": settings.app_version,
+        "theme": theme,
+        "theme_class": {"light": "", "soft": "theme-soft", "night": "theme-night"}[theme],
+        "user": current_user(request),
+        "role": current_role(request),
+        "es_admin": current_role(request) == ROLE_ADMIN,
+        "flashes": pop_flashes(request),
+        "status_labels": STATUS_LABELS,
+        "money": format_amount,
+        "delivery_label": delivery_label,
+        "note_labels": cc.NOTE_LABELS,
+    }
+    base.update(context)
+    return templates.TemplateResponse(request, template, base)
+
+
+@app.get("/operador/acceso", response_class=HTMLResponse)
+def operator_login_form(request: Request):
+    if current_role(request) == ROLE_OPERATOR:
+        return RedirectResponse("/operador", status_code=status.HTTP_303_SEE_OTHER)
+    theme = theme_from(request)
+    return templates.TemplateResponse(
+        request,
+        "operator_login.html",
+        {
+            "app_version": settings.app_version,
+            "theme_class": {"light": "", "soft": "theme-soft", "night": "theme-night"}[theme],
+            "error": request.session.pop("_operator_error", None),
+        },
+    )
+
+
+@app.post("/operador/acceso")
+def operator_login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    if check_operator(db, username, password):
+        login_session(request, username, ROLE_OPERATOR)
+        act.log(
+            db,
+            act.OPERATOR_LOGIN,
+            actor=username,
+            request=request,
+            detail=f"usuario {username}",
+        )
+        return RedirectResponse("/operador", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Igual que en el panel: no se distingue usuario inexistente de contrasena
+    # incorrecta.
+    act.log(db, act.OPERATOR_LOGIN_FAILED, actor=username, request=request)
+    request.session["_operator_error"] = "Usuario o contraseña incorrectos."
+    return RedirectResponse("/operador/acceso", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/operador/salir")
+def operator_logout(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request)
+    if user and current_role(request) == ROLE_OPERATOR:
+        act.log(db, act.OPERATOR_LOGOUT, actor=user, request=request)
+        logout_session(request)
+    return RedirectResponse("/operador/acceso", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/operador", response_class=HTMLResponse)
+def operator_panel(
+    request: Request,
+    folio: str = "",
+    paso: int = 1,
+    v: str = "",
+    c: int = 0,
+    necesidad: str = "",
+    cat: str = "",
+    q: str = "",
+    db: Session = Depends(get_db),
+):
+    """Panel de atencion. Con folio busca la reserva; sin folio pide uno.
+
+    El avance del guion viaja en la URL (paso, v, c, necesidad) en lugar de en
+    una variable de JavaScript. Tiene dos ventajas concretas: recargar no
+    devuelve al Operador al principio en mitad de una llamada, y las reglas de
+    los pasos 1 y 2 se pueden comprobar aqui, en el servidor, en vez de confiar
+    en que el navegador no deje pulsar un boton.
+    """
+    user = require_operator(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    buscado = (folio or "").strip()
+    invoice = cc.buscar_por_folio(db, buscado) if buscado else None
+
+    # Datos que el Operador declara haber verificado con quien llama.
+    verificados = {p for p in (v or "").split(",") if p in cc.IDS_VERIFICABLES}
+    confirmado = bool(c)
+    paso = min(max(paso, 1), 6)
+
+    # Las dos puertas del guion. Se aplican aqui y no solo en la pantalla: si
+    # alguien escribe ?paso=4 a mano sin haber verificado, vuelve al paso 1.
+    aviso_paso = None
+    if invoice is not None and paso > 1 and len(verificados) < 2:
+        paso, aviso_paso = 1, "Confirma al menos dos datos antes de continuar."
+    elif invoice is not None and paso > 2 and not confirmado:
+        paso, aviso_paso = 2, "Confirma que los datos principales coinciden."
+
+    if buscado and invoice is not None:
+        act.log(
+            db,
+            act.OPERATOR_LOOKUP,
+            actor=user,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            folio=invoice.folio,
+            request=request,
+        )
+
+    activas = cc.faqs_activas(db)
+    todas_las_categorias = cc.categorias(activas)
+    termino = (q or "").strip()
+    categoria = (cat or "").strip()
+    faqs = cc.filtrar_faqs(activas, termino) if termino else activas
+    if categoria and categoria != "Todas":
+        faqs = [f for f in faqs if f.category == categoria]
+
+    if invoice is not None:
+        nav = cc.navegacion(
+            invoice, paso, verificados, confirmado, necesidad, categoria, termino
+        )
+        nav["categoria"] = {
+            c: nav["con"](paso=4, cat=c) for c in ["Todas"] + todas_las_categorias
+        }
+    else:
+        nav = None
+
+    return render_operador(
+        request,
+        "operator.html",
+        db,
+        buscado=buscado,
+        invoice=invoice,
+        # "no encontrada" solo cuando se ha buscado algo: al entrar, la pantalla
+        # no puede acusar de un error que nadie ha cometido todavia.
+        no_encontrada=bool(buscado) and invoice is None,
+        paso=paso,
+        aviso_paso=aviso_paso,
+        pasos=cc.PASOS,
+        paso_actual=cc.PASOS[paso - 1],
+        verificacion=cc.datos_de_verificacion(invoice) if invoice else [],
+        verificados=verificados,
+        verificables=cc.verificables(invoice) if invoice else 0,
+        confirmado=confirmado,
+        necesidad_actual=(necesidad or "").strip(),
+        necesidades=cc.NECESIDADES,
+        faqs=faqs,
+        faq_categorias=todas_las_categorias,
+        faq_cat=categoria or "Todas",
+        faq_q=termino,
+        faqs_pendientes=cc.faqs_pendientes(db),
+        notas=cc.notas_de(db, invoice.id) if invoice else [],
+        note_types=NOTE_TYPES,
+        pago=cc.datos_de_pago(invoice) if invoice else None,
+        nav=nav,
+    )
+
+
+@app.post("/operador/notas")
+def operator_note_create(
+    request: Request,
+    folio: str = Form(...),
+    tipo: str = Form(NOTE_CUSTOMER),
+    nota: str = Form(""),
+    paso: int = Form(6),
+    db: Session = Depends(get_db),
+):
+    user = require_operator(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    invoice = cc.buscar_por_folio(db, folio)
+    if invoice is None:
+        flash(request, "No se encontró la reserva de esa nota.", "error")
+        return RedirectResponse("/operador", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        guardada = cc.guardar_nota(db, invoice, tipo, nota, actor=user)
+    except cc.NotaInvalida as e:
+        flash(request, str(e), "error")
+    else:
+        act.log(
+            db,
+            act.OPERATOR_NOTE,
+            actor=user,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            folio=invoice.folio,
+            detail=cc.NOTE_LABELS.get(guardada.type, guardada.type),
+            request=request,
+        )
+        if guardada.type == NOTE_FAQ:
+            flash(
+                request,
+                "Sugerencia registrada. Administración decidirá si se publica en la guía.",
+                "ok",
+            )
+        else:
+            flash(request, "Nota guardada.", "ok")
+
+    destino = f"/operador?folio={invoice.folio}&paso={min(max(paso, 1), 6)}"
+    return RedirectResponse(destino, status_code=status.HTTP_303_SEE_OTHER)

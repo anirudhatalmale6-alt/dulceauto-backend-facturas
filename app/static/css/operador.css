@@ -1,0 +1,180 @@
+/*
+ * Call Center · Operador
+ *
+ * Esta hoja es el CSS del prototipo V1.4 del cliente, copiado tal cual y sin
+ * tocar una sola regla, igual que se hizo con panel.css. Cualquier ajuste mio
+ * va al final, en el bloque marcado, para que se vea de un vistazo que es
+ * suyo y que es mio.
+ *
+ * Se carga SOLA en las pantallas del Operador: no convive con panel.css. Las
+ * dos declaran .btn, .card y .chip con valores distintos, y mezclarlas
+ * rompería las dos.
+ */
+
+:root{
+  --navy:#0a294a;--navy2:#123a66;--ink:#112640;--muted:#6f7f93;--gold:#e9aa22;
+  --bg:#f4f7fb;--card:#ffffff;--line:#dce5ee;--soft:#fbf6ec;--soft2:#eef4ff;
+  --green:#168652;--greenbg:#edf9f3;--amber:#9b6900;--amberbg:#fff6df;
+  --red:#c64242;--redbg:#fff1f1;--shadow:0 8px 28px rgba(11,39,70,.08)
+}
+body.theme-soft{
+  --bg:#f6f2ea;--card:#fffdf9;--line:#e5ded1;--soft:#fbf2df;--soft2:#f4f0e8;
+}
+body.theme-night{
+  --bg:#0c1725;--card:#102033;--line:#24364b;--ink:#eef5ff;--muted:#aab8c9;
+  --soft:#192a3d;--soft2:#14263a;--shadow:0 8px 28px rgba(0,0,0,.28)
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+a{color:inherit}
+.topbar{
+  position:sticky;top:0;z-index:40;display:grid;grid-template-columns:310px minmax(380px,1fr) auto;
+  gap:16px;align-items:center;padding:12px 18px;color:#fff;
+  background:linear-gradient(90deg,#062440,#0a3159 60%,#062440);box-shadow:0 4px 16px rgba(0,0,0,.16)
+}
+.brand{display:flex;gap:12px;align-items:center}
+.brandMark{width:44px;height:44px;border-radius:11px;background:var(--gold);display:grid;place-items:center;color:#0a2a4d;font-weight:900;font-size:18px}
+.brand strong{font-size:23px;display:block}.brand small{display:block;color:#d8e2ed;margin-top:1px}
+.search{display:flex;width:min(650px,100%);justify-self:center}
+.search input{flex:1;border:0;outline:0;padding:14px 16px;border-radius:10px 0 0 10px;color:#10233d;background:#fff}
+.search button{border:0;background:linear-gradient(#f1bd43,#dfa016);color:#fff;font-weight:900;padding:0 21px;border-radius:0 10px 10px 0}
+.topmeta{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.chip{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.045);border-radius:9px;padding:9px 11px;font-size:12px;white-space:nowrap}
+.timer{color:#93ef9f;font-weight:900}
+.themeSwitch{display:flex;gap:3px;background:#eef2f7;border:1px solid #d8e0ea;border-radius:999px;padding:4px}
+.themeSwitch button{border:0;background:transparent;color:#53647a;border-radius:999px;padding:7px 11px;font-size:11px;font-weight:800}
+.themeSwitch button.active{background:#fff;color:#18324e;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+
+.layout{display:grid;grid-template-columns:365px minmax(0,1fr);gap:16px;padding:16px 18px 88px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}
+.sidebar{position:sticky;top:84px;height:calc(100vh - 110px);overflow:auto;padding:16px}
+.sidebar h2{font-size:20px;margin:0 0 10px}
+.operatorMode{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-bottom:10px;font-size:11px}
+.readOnly{color:#206748;background:var(--greenbg);border-radius:999px;padding:5px 8px;font-weight:900}
+.progressTitle{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:7px 0}
+.progress{height:6px;background:#e6ebf1;border-radius:999px;overflow:hidden}.progress>div{height:100%;background:linear-gradient(90deg,#174c8e,#efb128)}
+.steps{display:grid;gap:5px;margin-top:10px}
+.step{display:grid;grid-template-columns:38px 28px 1fr;gap:8px;align-items:center;padding:8px 10px;border-radius:9px;color:var(--muted)}
+.step .ico{width:36px;height:36px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;background:var(--card)}
+.step .num{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#a9b3c1;color:#fff;font-weight:900}
+.step.active{background:var(--soft);color:var(--ink)}.step.active .ico{border-color:#e1aa29}.step.active .num{background:#143f76}
+.step.done .num{background:var(--green)}
+.sidebox{margin-top:12px;border:1px solid #ead6a5;border-radius:11px;padding:12px}
+.sideTitle{font-size:12px;color:#17375d;font-weight:900;margin-bottom:7px}.theme-night .sideTitle{color:#e8f1fb}
+.say{background:var(--soft);border-radius:8px;padding:11px;font-size:13px;line-height:1.48}
+.checks{display:grid;gap:7px;font-size:12px}.checks label{display:flex;gap:8px;align-items:flex-start}
+.guard{margin-top:12px;border:1px solid #efcf85;background:var(--amberbg);border-radius:10px;padding:10px 11px;font-size:11px;line-height:1.45;color:#745300}
+.sideActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}
+.btn{border:1px solid #cad6e3;background:var(--card);color:var(--ink);border-radius:9px;padding:10px 12px;font-weight:800}
+.btn.primary{background:#0d3765;color:#fff;border-color:#0d3765}.btn.green{background:#178b51;color:#fff;border-color:#178b51}
+.btn.small{padding:7px 9px;font-size:11px}.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.main{padding:15px;min-width:0}
+.mainHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}
+.mainHead h2{margin:0;font-size:20px}.status{border:1px solid #ebc46a;background:#fff8e8;color:#c18100;border-radius:999px;padding:7px 13px;font-size:11px;font-weight:900}
+.context{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.contextTop{display:grid;grid-template-columns:1fr 1.5fr .7fr .8fr .9fr}
+.contextTop>div{padding:12px 13px;border-right:1px solid var(--line);min-width:0}.contextTop>div:last-child{border-right:0}
+.cap{font-size:10px;color:var(--muted);margin-bottom:5px}.val{font-size:12px;font-weight:800;line-height:1.42}
+.vehicle{display:grid;grid-template-columns:84px 1fr;gap:9px}.pic{height:58px;border-radius:8px;background:linear-gradient(145deg,#cad4de,#eef2f5 55%,#aebbc8);display:grid;place-items:center;color:#5d6b7b;font-size:10px;font-weight:900}
+.barcode{height:24px;width:112px;margin:4px 0;background:repeating-linear-gradient(90deg,#10233d 0 2px,transparent 2px 4px,#10233d 4px 5px,transparent 5px 8px)}
+.nextAction{color:#1653ad}
+.content{border:1px solid var(--line);border-radius:12px;padding:15px;min-height:500px}
+.headingRow{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}
+.headingRow h3{margin:0;font-size:19px}.headingRow p{margin:4px 0 0;font-size:12px;color:var(--muted)}
+.badge{border-radius:999px;padding:6px 9px;font-size:10px;font-weight:900;white-space:nowrap;background:var(--soft2);color:#285699}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.panel{border:1px solid var(--line);border-radius:10px;padding:12px}.panel h4{margin:0 0 9px;font-size:13px}
+.kv{display:grid;grid-template-columns:108px 1fr;gap:7px;font-size:12px;margin:7px 0}.kv span{color:var(--muted)}
+.banner{border-radius:9px;padding:10px 11px;font-size:11px;line-height:1.45}.banner.info{border:1px solid #bdd0ed;background:var(--soft2);color:#244d7d}.banner.ok{border:1px solid #bae0c8;background:var(--greenbg);color:#236a43}.banner.warn{border:1px solid #ecd291;background:var(--amberbg);color:#795600}
+.identity{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.verify{border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer}.verify.active{border-color:#6f95db;background:var(--soft2)}
+.verify .circle{width:28px;height:28px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;margin-bottom:7px}.verify.active .circle{background:var(--green);color:#fff}
+.verify b{font-size:12px}.verify small{display:block;color:var(--muted);margin-top:4px}
+.choiceGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.choice{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:12px;display:flex;gap:10px;align-items:flex-start;text-align:left}
+.choice:hover,.choice.active{border-color:#7298dd;background:var(--soft2)}.choiceIcon{width:40px;height:40px;border-radius:50%;background:var(--soft);display:grid;place-items:center;flex:0 0 40px}
+.choice b{display:block;font-size:12px;margin-bottom:4px}.choice span{font-size:10px;color:var(--muted);line-height:1.35}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.tab{border:1px solid var(--line);background:var(--card);border-radius:7px;padding:7px 9px;font-size:10px;font-weight:800;color:var(--ink)}.tab.active{background:#0d3562;color:#fff;border-color:#0d3562}
+.option{border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:7px;font-size:11px}.option.active{border-color:#7298dd;background:var(--soft2)}
+.answer{border:1px solid #9dbbef;background:var(--soft2);border-radius:10px;padding:11px;font-size:12px;line-height:1.52}.answerHead{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}.answerHead b{color:#174b88}
+.internal{border-left:3px solid #e0aa28;background:var(--soft);padding:9px 10px;font-size:10px;line-height:1.45;margin-top:8px}
+.actionRow{display:flex;gap:7px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-top:10px}
+.faqTop{display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px}.faqSearch{border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:270px;background:var(--card);color:var(--ink)}
+.faqLayout{display:grid;grid-template-columns:minmax(0,1fr) 285px;gap:11px}.faqItem{border:1px solid var(--line);border-radius:9px;margin-bottom:7px;overflow:hidden}.faqQ{padding:10px 11px;background:var(--card);display:flex;justify-content:space-between;gap:8px;font-size:11px;font-weight:900;cursor:pointer}.faqA{display:none;padding:10px 11px;background:var(--soft2);font-size:11px;line-height:1.52}.faqItem.open .faqA{display:block}
+.tips{border:1px solid var(--line);border-radius:10px;padding:11px}.tips h4{margin:0 0 8px}.tip{font-size:10px;line-height:1.45;margin:7px 0}
+.formGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.field label{display:block;color:var(--muted);font-size:10px;margin-bottom:5px}.field input,.field textarea,.field select{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;color:var(--ink);background:var(--card)}.field textarea{min-height:84px;resize:vertical}
+.footer{position:fixed;left:18px;right:18px;bottom:12px;z-index:30;display:flex;gap:8px;align-items:center;padding:10px;background:color-mix(in srgb,var(--card) 96%,transparent);border:1px solid var(--line);border-radius:13px;box-shadow:0 10px 28px rgba(10,41,75,.13)}
+.footer .spacer{flex:1}.safety{background:var(--amberbg);color:#805b00;border-radius:8px;padding:9px 11px;font-size:11px}
+.noteCount{background:#d33;color:#fff;border-radius:999px;padding:2px 6px;font-size:10px}
+.drawer{position:fixed;top:0;right:-470px;width:450px;max-width:95vw;height:100vh;background:var(--card);border-left:1px solid var(--line);box-shadow:-12px 0 32px rgba(0,0,0,.18);z-index:80;transition:.25s;padding:18px;overflow:auto}
+.drawer.open{right:0}.drawerHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.drawerHead h3{margin:0}.close{border:0;background:transparent;font-size:24px;color:var(--muted)}
+.noteItem{border:1px solid var(--line);border-radius:9px;padding:10px;margin-bottom:8px}.noteMeta{font-size:9px;color:var(--muted);margin-bottom:5px}.noteText{font-size:11px;line-height:1.45}.noteType{font-size:9px;font-weight:900;color:#1e5b9f}
+.toast{position:fixed;top:78px;right:20px;z-index:90;background:#14385f;color:#fff;padding:11px 14px;border-radius:9px;opacity:0;transform:translateY(-7px);transition:.2s}.toast.show{opacity:1;transform:translateY(0)}
+.loginScreen{position:fixed;inset:0;background:linear-gradient(135deg,#0a2b4f,#133d69);z-index:120;display:grid;place-items:center;padding:20px}
+.loginCard{width:min(420px,94vw);background:#fff;border-radius:16px;padding:25px;box-shadow:0 20px 50px rgba(0,0,0,.24);color:#10233d}.loginCard h1{margin:0 0 4px}.loginCard p{margin:0 0 18px;color:#6f7f93;font-size:12px}.loginCard label{display:block;font-size:11px;font-weight:800;margin:9px 0 5px}.loginCard input{width:100%;padding:11px;border:1px solid #d6dfeb;border-radius:8px}.loginCard button{width:100%;margin-top:14px;border:0;border-radius:9px;padding:11px;background:#0d3765;color:#fff;font-weight:900}.demoHint{font-size:10px;color:#8a98a8;margin-top:9px}
+@media(max-width:1180px){.topbar{grid-template-columns:1fr;position:static}.layout{grid-template-columns:1fr}.sidebar{position:static;height:auto}.contextTop{grid-template-columns:1fr 1fr}.choiceGrid,.grid3{grid-template-columns:1fr 1fr}.faqLayout{grid-template-columns:1fr}}
+@media(max-width:720px){.contextTop,.choiceGrid,.grid3,.grid2,.identity,.formGrid{grid-template-columns:1fr}.footer{position:static;margin:0 18px 18px;flex-wrap:wrap}.layout{padding-bottom:18px}}
+
+/* --- ajustes propios ------------------------------------------------------
+ * Todo lo de aqui abajo es mio. El prototipo era una sola pagina con todo el
+ * estado en JavaScript; la version real son paginas servidas, y estas reglas
+ * cubren lo que alli no existia: mensajes del servidor, enlaces que se pintan
+ * como botones y el estado vacio de la busqueda.
+ */
+
+.flashes{display:grid;gap:8px;margin-bottom:12px}
+.flash{border-radius:9px;padding:10px 12px;font-size:12px;border:1px solid var(--line);background:var(--soft2)}
+.flash.ok{border-color:#bae0c8;background:var(--greenbg);color:#236a43}
+.flash.error{border-color:#e7b4b4;background:var(--redbg);color:#8f2f2f}
+
+/* Los pasos y los motivos son enlaces, no botones de JavaScript: asi el paso
+   actual esta en la URL y se puede recargar o compartir sin perderlo. */
+a.step,a.choice,a.tab,a.verify,a.chip{text-decoration:none}
+a.btn{text-decoration:none;display:inline-block;text-align:center}
+
+.emptyState{display:grid;place-items:center;gap:10px;padding:64px 20px;text-align:center;color:var(--muted)}
+.emptyState .big{font-size:40px}
+.emptyState h3{margin:0;color:var(--ink);font-size:19px}
+.emptyState p{margin:0;font-size:12px;max-width:430px;line-height:1.5}
+
+/* Panel de notas: en el prototipo era un cajon que abria JavaScript. Aqui es
+   una seccion mas de la pagina, porque guardar una nota es un POST y la
+   pagina se vuelve a pintar de todas formas. */
+.notesPanel{border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
+.notesPanel h4{margin:0 0 10px;font-size:14px}
+.noteList{display:grid;gap:8px;margin-top:12px}
+
+.faqA{display:block}
+.faqItem>.faqQ{cursor:default}
+
+.adminNote{border:1px dashed #b9c6d6;border-radius:9px;padding:9px 11px;font-size:11px;color:var(--muted);margin-bottom:12px}
+
+/* --- legibilidad en modo Noche ---------------------------------------------
+ * El CSS del prototipo fija varios colores de texto en azul oscuro contando
+ * con un fondo claro (.banner.info, .badge, .nextAction, .noteType y el titulo
+ * de las respuestas). En Noche esas mismas reglas pintan azul oscuro sobre
+ * fondo azul oscuro y el texto casi desaparece. Es el mismo fallo que ya salio
+ * en el panel con .duplicate-summary, y lo unico que lo detecta es mirar una
+ * captura de los tres temas: las comprobaciones automaticas pasan igual.
+ *
+ * Se corrige aqui y no arriba para no tocar su hoja. Los tres colores nuevos
+ * son la version clara de los suyos, no colores distintos.
+ */
+body.theme-night .banner.info{color:#bcd6f7}
+body.theme-night .badge{color:#a8c6ee}
+body.theme-night .nextAction{color:#8fb6ee}
+body.theme-night .noteType{color:#9dc0e8}
+body.theme-night .answerHead b{color:#a8c6ee}
+
+/* El codigo de barras del bloque de folio es decorativo y esta dibujado con un
+   degradado azul casi negro: sobre la tarjeta oscura no se ve. */
+body.theme-night .barcode{
+  background:repeating-linear-gradient(90deg,#dbe6f3 0 2px,transparent 2px 4px,#dbe6f3 4px 5px,transparent 5px 8px);
+}
+
+/* El boton de buscar parte "Buscar reserva" en dos lineas y descuadra la barra
+   superior; el texto es fijo, asi que no hay motivo para dejar que se parta. */
+.search button{white-space:nowrap}

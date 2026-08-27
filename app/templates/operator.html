@@ -1,0 +1,244 @@
+{# Panel de atencion del Call Center.
+
+   Es el prototipo V1.4 del cliente convertido en paginas servidas. Se respetan
+   sus clases una a una (.topbar, .layout, .sidebar, .step, .context, .verify,
+   .choice, .faqItem...) porque su CSS depende de ellas: cambiar la estructura
+   por otra "equivalente" deja la hoja intacta y la pantalla rota.
+
+   Lo que en el prototipo era estado en JavaScript aqui viaja en la URL
+   (folio, paso, v, c, necesidad). Asi el guion sobrevive a una recarga en
+   mitad de una llamada, y las reglas de los pasos 1 y 2 las comprueba el
+   servidor. #}
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operador · Call Center · DulceAuto</title>
+<link rel="stylesheet" href="{{ url_for('static', path='/css/operador.css') }}">
+</head>
+<body class="{{ theme_class }}">
+{% import 'operator_steps.html' as ui with context %}
+
+<div class="app">
+<header class="topbar">
+  <div class="brand">
+    <div class="brandMark">DA</div>
+    <div><strong>DulceAuto</strong><small>Panel de atención de reservas</small></div>
+  </div>
+
+  <form class="search" method="get" action="/operador">
+    <input name="folio" value="{{ buscado }}" placeholder="RES-90001" autocomplete="off"
+           aria-label="Buscar reserva por folio" autofocus>
+    <button type="submit">Buscar reserva</button>
+  </form>
+
+  <div class="topmeta">
+    {% if invoice %}
+      <div class="chip">Folio: <b>{{ invoice.folio }}</b></div>
+      <div class="chip">Estado: <b>{{ status_labels.get(invoice.status, (invoice.status, ''))[0] }}</b></div>
+    {% endif %}
+    <div class="chip">Operador: <b>{{ user }}</b></div>
+    <div class="themeSwitch">
+      <button type="button" data-theme-btn="light"{% if theme == 'light' %} class="active"{% endif %} onclick="setTheme('light')">Claro</button>
+      <button type="button" data-theme-btn="soft"{% if theme == 'soft' %} class="active"{% endif %} onclick="setTheme('soft')">Suave</button>
+      <button type="button" data-theme-btn="night"{% if theme == 'night' %} class="active"{% endif %} onclick="setTheme('night')">Noche</button>
+    </div>
+    <a class="chip" href="/operador/salir">Salir</a>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar card">
+    <h2>Asistente de atención</h2>
+    <div class="operatorMode">
+      <span>Perfil actual</span>
+      <span class="readOnly">OPERADOR · SOLO LECTURA + NOTAS</span>
+    </div>
+
+    {% if invoice %}
+      <div class="progressTitle">
+        <span>Paso {{ paso }} de 6</span>
+        <span>{{ (paso * 100 / 6) | round | int }}%</span>
+      </div>
+      <div class="progress"><div style="width:{{ (paso * 100 / 6) | round | int }}%"></div></div>
+
+      <div class="steps">
+        {% for p in pasos %}
+          {# Un paso al que todavia no se puede llegar se pinta pero no enlaza:
+             el servidor lo rechazaria igualmente y es mejor no ofrecerlo. #}
+          {% set alcanzable = p.numero == 1
+                              or (p.numero == 2 and verificados | length >= 2)
+                              or (p.numero > 2 and verificados | length >= 2 and confirmado) %}
+          {% if alcanzable %}
+            <a class="step {% if p.numero == paso %}active{% elif p.numero < paso %}done{% endif %}"
+               href="{{ nav.paso[p.numero] }}">
+              <div class="ico">{{ p.icono }}</div>
+              <div class="num">{{ p.numero }}</div>
+              <div><b>{{ p.nombre }}</b></div>
+            </a>
+          {% else %}
+            <div class="step" style="opacity:.5">
+              <div class="ico">{{ p.icono }}</div>
+              <div class="num">{{ p.numero }}</div>
+              <div><b>{{ p.nombre }}</b></div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="sidebox">
+        <div class="sideTitle">Diga esto</div>
+        <div class="say">{{ paso_actual.say }}</div>
+      </div>
+
+      <div class="sidebox">
+        <div class="sideTitle">Verifique esto</div>
+        <div class="checks">
+          {% for check in paso_actual.checks %}
+            <label><input type="checkbox"><span>{{ check }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="guard">
+        Si folio, cliente, vehículo, importe o datos bancarios no coinciden, no
+        solicitar pago. Registra una nota para revisión administrativa.
+      </div>
+
+      <div class="sideActions">
+        {% if paso > 1 %}
+          <a class="btn" href="{{ nav.paso[paso - 1] }}">← Anterior</a>
+        {% else %}
+          <button class="btn" disabled>← Anterior</button>
+        {% endif %}
+
+        {% if paso < 6 %}
+          {% if (paso == 1 and verificados | length < 2) or (paso == 2 and not confirmado) %}
+            <button class="btn primary" disabled title="Completa este paso para continuar">Continuar →</button>
+          {% else %}
+            <a class="btn primary" href="{{ nav.paso[paso + 1] }}">Continuar →</a>
+          {% endif %}
+        {% else %}
+          <a class="btn primary" href="#notas">Ir a notas</a>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="banner info" style="margin-top:10px">
+        Busca una reserva por su folio para iniciar el guion de atención.
+      </div>
+    {% endif %}
+  </aside>
+
+  <main class="main card">
+    {% if flashes %}
+      <div class="flashes">
+        {% for f in flashes %}<div class="flash {{ f.level }}">{{ f.text }}</div>{% endfor %}
+      </div>
+    {% endif %}
+    {% if aviso_paso %}<div class="banner warn" style="margin-bottom:11px">{{ aviso_paso }}</div>{% endif %}
+    {% if es_admin %}
+      <div class="adminNote">
+        Estás viendo el módulo de Operador con tu sesión de Administración. El
+        Operador ve exactamente esta pantalla, pero sin acceso a ninguna vista
+        administrativa.
+      </div>
+    {% endif %}
+
+    {% if not invoice %}
+      <div class="emptyState">
+        <div class="big">🔎</div>
+        {% if no_encontrada %}
+          <h3>No se encontró ninguna reserva con el folio «{{ buscado }}»</h3>
+          <p>
+            Comprueba el folio con el cliente: aparece en la parte superior de su
+            pre-factura. La búsqueda es exacta a propósito, para no mostrar la
+            reserva de otra persona por parecerse el número.
+          </p>
+        {% else %}
+          <h3>Busca una reserva para empezar</h3>
+          <p>
+            Escribe el folio en el buscador de arriba. Puedes teclearlo completo
+            (RES-90001) o solo el número (90001).
+          </p>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="mainHead">
+        <h2>Reserva localizada</h2>
+        <span class="status">{{ status_labels.get(invoice.status, (invoice.status, ''))[0] | upper }}</span>
+      </div>
+
+      {# Contexto permanente: los cinco bloques del prototipo, con datos reales. #}
+      <section class="context">
+        <div class="contextTop">
+          <div>
+            <div class="cap">Cliente</div>
+            <div class="val">{{ invoice.customer_name or '—' }}<br>
+              <span style="font-weight:500;color:var(--muted)">
+                {{ invoice.customer_phone or 'sin teléfono' }}{% if invoice.customer_city %} · {{ invoice.customer_city }}{% endif %}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div class="cap">Vehículo</div>
+            <div class="vehicle">
+              <div class="pic">VEHÍCULO</div>
+              <div class="val">{{ invoice.vehicle_title or '—' }}<br>
+                <span style="font-weight:500;color:var(--muted)">{{ invoice.vehicle_vin or 'sin VIN' }}</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="cap">Folio</div>
+            <div class="val">{{ invoice.folio }}</div>
+            <div class="barcode"></div>
+          </div>
+          <div>
+            <div class="cap">Reserva</div>
+            <div class="val">{{ money(invoice.pricing_reservation_amount, invoice.locale, currency=invoice.pricing_currency) if invoice.pricing_reservation_amount is not none else '—' }}</div>
+            <div class="cap" style="margin-top:6px">Precio total</div>
+            <div class="val">{{ money(invoice.pricing_vehicle_price, invoice.locale, currency=invoice.pricing_currency) if invoice.pricing_vehicle_price is not none else '—' }}</div>
+          </div>
+          <div>
+            <div class="cap">Siguiente acción</div>
+            <div class="val nextAction">{{ paso_actual.nombre }}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content">
+        {% if paso == 1 %}
+          {{ ui.bloque_paso1() }}
+        {% elif paso == 2 %}
+          {{ ui.bloque_paso2() }}
+        {% elif paso == 3 %}
+          {{ ui.bloque_paso3() }}
+        {% elif paso == 4 %}
+          {{ ui.bloque_paso4() }}
+        {% elif paso == 5 %}
+          {{ ui.bloque_paso5() }}
+        {% else %}
+          {{ ui.bloque_paso6() }}
+        {% endif %}
+      </section>
+
+      {{ ui.panel_notas() }}
+    {% endif %}
+  </main>
+</div>
+
+<div class="footer">
+  {% if invoice %}<a class="btn primary" href="#notas">Notas <span class="noteCount">{{ notas | length }}</span></a>{% endif %}
+  <div class="spacer"></div>
+  <div class="safety">
+    El Operador consulta y orienta; no modifica Configuración, banco, folio ni
+    estado administrativo
+  </div>
+  <div style="font-size:9px;color:var(--muted);padding-left:4px">{{ app_version }}</div>
+</div>
+</div>
+
+<script src="{{ url_for('static', path='/js/panel.js') }}"></script>
+</body>
+</html>

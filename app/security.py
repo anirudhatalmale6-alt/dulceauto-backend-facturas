@@ -26,7 +26,16 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .models import CRED_ADMIN, CRED_MASTER, Credential, utcnow
+from .models import (
+    CRED_ADMIN,
+    CRED_MASTER,
+    CRED_OPERATOR,
+    ROLE_ADMIN,
+    ROLE_OPERATOR,
+    ROLES,
+    Credential,
+    utcnow,
+)
 
 # Parametros de scrypt. n es el coste; subirlo endurece el hash y lo hace mas
 # lento. 2**15 tarda del orden de 100 ms, que es imperceptible al entrar y
@@ -43,6 +52,7 @@ _DKLEN = 64
 _MAXMEM = 128 * _N * _R * 2
 
 SESSION_USER = "auth_user"
+SESSION_ROLE = "auth_role"
 SESSION_LOGIN_AT = "auth_at"
 SESSION_SEEN_AT = "auth_seen"
 SESSION_MASTER_AT = "master_at"
@@ -105,6 +115,21 @@ def check_master(db: Session, password: str) -> bool:
     return bool(cred) and verify_password(password, cred.password_hash)
 
 
+def check_operator(db: Session, username: str, password: str) -> bool:
+    """Cuenta del Call Center, independiente de la de Admin.
+
+    Es deliberadamente identica a check_admin salvo por la fila que consulta:
+    el Operador tiene su propia contrasena y no conoce ni la de Admin ni la
+    Master Password.
+    """
+    cred = get_credential(db, CRED_OPERATOR)
+    if cred is None:
+        return False
+    if (cred.username or "").strip().lower() != (username or "").strip().lower():
+        return False
+    return verify_password(password, cred.password_hash)
+
+
 def set_password(db: Session, name: str, password: str, username: str | None = None) -> None:
     cred = get_credential(db, name)
     if cred is None:
@@ -122,10 +147,19 @@ def set_password(db: Session, name: str, password: str, username: str | None = N
 # --- sesion del panel --------------------------------------------------------
 
 
-def login_session(request: Request, username: str) -> None:
+def login_session(request: Request, username: str, role: str) -> None:
+    """Abre sesion con un papel explicito.
+
+    'role' no tiene valor por defecto a proposito. Si lo tuviera, una llamada
+    nueva que se olvidara de pasarlo abriria una sesion de Admin sin que nadie
+    lo notara, que es el unico fallo grave posible en toda esta parte.
+    """
+    if role not in ROLES:
+        raise ValueError(f"papel desconocido: {role!r}")
     now = utcnow().isoformat()
     request.session.clear()
     request.session[SESSION_USER] = username
+    request.session[SESSION_ROLE] = role
     request.session[SESSION_LOGIN_AT] = now
     request.session[SESSION_SEEN_AT] = now
 
@@ -152,12 +186,40 @@ def current_user(request: Request) -> str | None:
     user = request.session.get(SESSION_USER)
     if not user:
         return None
+    # Una sesion sin papel no se acepta. En la practica solo puede ser una
+    # abierta antes de instalar el modulo Operador; se cierra y se vuelve a
+    # entrar. Es preferible ese unico reinicio de sesion a dar por hecho que
+    # una sesion sin papel es de Admin.
+    if request.session.get(SESSION_ROLE) not in ROLES:
+        request.session.clear()
+        return None
     seen = _parse(request.session.get(SESSION_SEEN_AT))
     if seen is None or utcnow() - seen > timedelta(minutes=settings.session_minutes):
         request.session.clear()
         return None
     request.session[SESSION_SEEN_AT] = utcnow().isoformat()
     return user
+
+
+def current_role(request: Request) -> str | None:
+    """Papel de la sesion viva, o None si no hay sesion.
+
+    Pasa por current_user a proposito, para que la caducidad por inactividad se
+    aplique igual y no exista una segunda forma de leer la sesion que se olvide
+    de comprobarla.
+    """
+    if current_user(request) is None:
+        return None
+    role = request.session.get(SESSION_ROLE)
+    return role if role in ROLES else None
+
+
+def is_admin(request: Request) -> bool:
+    return current_role(request) == ROLE_ADMIN
+
+
+def is_operator(request: Request) -> bool:
+    return current_role(request) == ROLE_OPERATOR
 
 
 # --- puerta de Configuracion -------------------------------------------------
@@ -175,6 +237,11 @@ def master_unlocked(request: Request) -> bool:
     """Configuracion esta desbloqueada solo si se introdujo la Master Password
     hace menos de master_session_minutes. Pasado ese tiempo se vuelve a cerrar
     sola, aunque la sesion del panel siga abierta."""
+    # Segunda barrera, redundante a proposito: aunque alguna ruta futura se
+    # olvidara de exigir Admin, una sesion de Operador nunca vera Configuracion
+    # como desbloqueada.
+    if current_role(request) != ROLE_ADMIN:
+        return False
     at = _parse(request.session.get(SESSION_MASTER_AT))
     if at is None:
         return False

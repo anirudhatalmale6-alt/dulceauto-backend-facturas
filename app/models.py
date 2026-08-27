@@ -72,6 +72,24 @@ COMMITTED_STATUSES = (STATUS_VALIDATED, STATUS_SCHEDULED, STATUS_DELIVERED)
 
 CRED_ADMIN = "admin"
 CRED_MASTER = "master"
+# Cuenta del Call Center. Es una fila mas de la misma tabla, no una tabla de
+# usuarios nueva: el cliente pidio expresamente un unico Operador compartido y
+# no una gestion de equipos. El dia que quiera operadores individuales, lo que
+# cambia es de donde se leen las filas, no el resto del sistema.
+CRED_OPERATOR = "operator"
+
+# Papel de la sesion. Va SIEMPRE en la sesion, nunca deducido de la URL: es lo
+# unico que separa al Operador del Admin, y tiene que decidirse en un solo
+# sitio para que no se pueda saltar escribiendo una direccion a mano.
+ROLE_ADMIN = "admin"
+ROLE_OPERATOR = "operator"
+ROLES = (ROLE_ADMIN, ROLE_OPERATOR)
+
+# Tipos de nota del Operador, con los nombres del prototipo V1.4.
+NOTE_CUSTOMER = "cliente"
+NOTE_FOLLOWUP = "seguimiento"
+NOTE_FAQ = "faq"
+NOTE_TYPES = (NOTE_CUSTOMER, NOTE_FOLLOWUP, NOTE_FAQ)
 
 # De donde salio un folio. Solo sirve para poder mirar el registro y entender
 # como se asigno; ninguna decision del programa depende de este valor.
@@ -384,3 +402,68 @@ class ActivityLog(Base):
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+# --- call center -------------------------------------------------------------
+
+
+class OperatorFaq(Base):
+    """Guia de respuestas aprobadas que lee el Operador.
+
+    Existe para que cambiar una respuesta no obligue a tocar codigo ni a
+    desplegar: el Admin la edita y el Operador la ve en la siguiente peticion.
+
+    'answer' es opcional a proposito. Una pregunta puede estar recogida y
+    todavia no tener respuesta autorizada; en ese caso NO puede publicarse como
+    activa, y esa regla no se deja al criterio de la pantalla: la comprueba
+    tambien 'puede_publicarse'.
+    """
+
+    __tablename__ = "operator_faq"
+    __table_args__ = (Index("ix_faq_orden", "sort_order", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    @property
+    def puede_publicarse(self) -> bool:
+        return bool((self.answer or "").strip())
+
+
+class OperatorNote(Base):
+    """Nota escrita por el Operador durante una llamada.
+
+    Dos decisiones deliberadas:
+
+    - invoice_id va CON clave foranea y CASCADE, al reves que activity_log: una
+      nota es contexto de esa factura y no tiene sentido sin ella. El folio se
+      guarda ademas en texto para poder leer el historico sin cruzar tablas.
+    - Es de solo anadir. No hay ruta de edicion ni de borrado para el Operador,
+      porque una nota que se puede reescribir despues no sirve como constancia
+      de lo que se dijo en la llamada.
+    """
+
+    __tablename__ = "operator_note"
+    __table_args__ = (Index("ix_nota_factura", "invoice_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(
+        ForeignKey("invoice.id", ondelete="CASCADE"), nullable=False
+    )
+    folio: Mapped[str] = mapped_column(String(32), nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False, default=NOTE_CUSTOMER)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False, default="Operador")
+    # Las sugerencias de FAQ nacen sin publicar y solo el Admin las convierte en
+    # una entrada de la guia. Sin esta marca no habria forma de distinguir una
+    # sugerencia ya atendida de una pendiente.
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    invoice: Mapped[Invoice] = relationship()
