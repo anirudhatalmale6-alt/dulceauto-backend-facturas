@@ -1434,6 +1434,11 @@ def settings_view(request: Request, db: Session = Depends(get_db)):
         globales=globales,
         por_mercado=por_mercado,
         etiquetas=ETIQUETAS_AJUSTE,
+        operador_usuario=(
+            (db.get(Credential, CRED_OPERATOR).username or "operador")
+            if db.get(Credential, CRED_OPERATOR)
+            else "operador"
+        ),
         logo_url="/configuracion/logo.img" if _logo_actual(db) else None,
         qr_modo=codes.ajuste(db, "qr.mode") or codes.MODO_DINAMICO,
         qr_url="/configuracion/qr.img" if codes.ajuste(db, "qr.image_path") else None,
@@ -1754,22 +1759,29 @@ def change_passwords(
     if not master_unlocked(request):
         return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
 
-    if which not in (CRED_ADMIN, CRED_MASTER):
+    # La lista sigue siendo cerrada: se anade el Operador, no se acepta
+    # cualquier nombre que llegue en el formulario.
+    if which not in (CRED_ADMIN, CRED_MASTER, CRED_OPERATOR):
         flash(request, "Petición no válida.", "error")
     elif new_password != confirm_password:
         flash(request, "Las dos contraseñas no coinciden.", "error")
     elif len(new_password) < 8:
         flash(request, "La contraseña debe tener al menos 8 caracteres.", "error")
     else:
+        # La Master Password es la unica que no tiene usuario; las otras dos si.
         set_password(
             db,
             which,
             new_password,
-            username=(username.strip() or None) if which == CRED_ADMIN else None,
+            username=(username.strip() or None) if which != CRED_MASTER else None,
         )
         act.log(db, act.PASSWORD_CHANGED, request=request, detail=which)
-        etiqueta = "de acceso al panel" if which == CRED_ADMIN else "Master Password"
-        flash(request, f"Contraseña {etiqueta} actualizada.", "ok")
+        etiquetas = {
+            CRED_ADMIN: "de acceso al panel",
+            CRED_MASTER: "Master Password",
+            CRED_OPERATOR: "de la cuenta Operador",
+        }
+        flash(request, f"Contraseña {etiquetas[which]} actualizada.", "ok")
 
     return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
 

@@ -33,6 +33,7 @@ import urllib.request
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8731").rstrip("/")
 
 ADMIN_USER, ADMIN_PASS = "admin", "DulceAuto2026"
+MASTER = "Master2026"
 OPERADOR_USER, OPERADOR_PASS = "operador", "Operador2026"
 
 _ok = 0
@@ -404,6 +405,47 @@ def main() -> int:
         "la factura sigue exactamente igual tras toda la sesion de Operador",
         antes == despues,
     )
+
+    # --- 7b · el Admin puede cambiar la contrasena del Operador --------------
+    print("\n7b · Cambiar la contrasena del Operador desde Configuracion")
+
+    admin.post("/configuracion/desbloquear", data={"master_password": MASTER})
+    r = admin.get("/configuracion")
+    check("la tarjeta de la cuenta Operador esta en Configuracion", "Cuenta Operador" in r.text)
+
+    NUEVA = "OperadorTemporal2026"
+    r = admin.post("/configuracion/contrasenas", data={
+        "which": "operator", "username": OPERADOR_USER,
+        "new_password": NUEVA, "confirm_password": NUEVA,
+    })
+    check("el Admin cambia la contrasena del Operador", "cuenta Operador actualizada" in r.text)
+
+    c = Cliente(BASE)
+    r = c.post("/operador/acceso", data={"username": OPERADOR_USER, "password": NUEVA})
+    check("la contrasena nueva entra", not r.url.endswith("/operador/acceso"))
+
+    c = Cliente(BASE)
+    r = c.post("/operador/acceso", data={"username": OPERADOR_USER, "password": OPERADOR_PASS})
+    check("la contrasena antigua ya NO entra", r.url.endswith("/operador/acceso"))
+
+    # Se deja como estaba: la bateria tiene que poder ejecutarse dos veces
+    # seguidas y la segunda empezar en las mismas condiciones que la primera.
+    admin.post("/configuracion/contrasenas", data={
+        "which": "operator", "username": OPERADOR_USER,
+        "new_password": OPERADOR_PASS, "confirm_password": OPERADOR_PASS,
+    })
+    c = Cliente(BASE)
+    r = c.post("/operador/acceso", data={"username": OPERADOR_USER, "password": OPERADOR_PASS})
+    check("restaurada, vuelve a entrar", not r.url.endswith("/operador/acceso"))
+
+    # Y el Operador no puede cambiarsela a si mismo ni tocar las otras dos.
+    r = operador.post("/configuracion/contrasenas", data={
+        "which": "admin", "new_password": "loquesea1", "confirm_password": "loquesea1",
+    })
+    check("el Operador NO puede cambiar contrasenas", r.url.rstrip("/").endswith("/operador"))
+    c = Cliente(BASE)
+    r = c.post("/acceso", data={"username": ADMIN_USER, "password": ADMIN_PASS})
+    check("y la del Admin sigue siendo la misma", not r.url.endswith("/acceso"))
 
     # --- 8 · temas -----------------------------------------------------------
     print("\n8 · Los tres modos visuales")

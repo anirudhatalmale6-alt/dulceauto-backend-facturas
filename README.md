@@ -89,6 +89,9 @@ Son barreras independientes, tal y como se pidió:
    acceso en `/operador/acceso`. El Operador no conoce ni necesita ninguna de
    las dos anteriores, y las suyas no abren el panel administrativo.
 
+Las tres se cambian desde **Configuración**, detrás de la Master Password. No
+hace falta entrar al servidor para cambiar ninguna.
+
 Configuración arranca siempre bloqueada. Se vuelve a bloquear sola tras
 15 minutos sin actividad (`MASTER_SESSION_MINUTES`) y al cerrar sesión.
 
@@ -622,7 +625,7 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**533 comprobaciones en total** (551 con `verificar_codigos.py`, que
+**540 comprobaciones en total** (551 con `verificar_codigos.py`, que
 necesita pyzbar y por eso no se ejecuta en el servidor). No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
@@ -638,7 +641,7 @@ anterior, para que los recuentos por VIN sigan significando algo.
   heredar los datos del cliente original, que use la cuenta bancaria vigente y no la del original, que la
   factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
   cuente lo que tiene que contar.
-- **Bloque B · 56.** Que las credenciales de Admin no abran el panel de
+- **Bloque B · 63.** Que las credenciales de Admin no abran el panel de
   Operador ni al revés; que las diez rutas de Administración probadas queden
   bloqueadas al escribirlas a mano y al enviarles un formulario manipulado; que
   el intento quede en Actividad; que el folio se encuentre entero, solo el
@@ -646,7 +649,9 @@ anterior, para que los recuentos por VIN sigan significando algo.
   no se pueda saltar al paso 4 sin verificar dos datos ni al 3 sin confirmar;
   que una FAQ sin respuesta aprobada no se ofrezca como respuesta; que la
   sugerencia quede registrada pero **no publicada**; que la factura esté byte a
-  byte igual después de toda una sesión de Operador; y los tres modos visuales.
+  byte igual después de toda una sesión de Operador; que el Admin pueda cambiar
+  la contraseña del Operador desde Configuración y que la antigua deje de
+  entrar; y los tres modos visuales.
 - **Fase C · 66.** Con navegador: que la vista previa enseñe el documento real
   y no una imitación, que el CSS aprobado se cargue de verdad, que el del panel
   no se cuele dentro, que lo que se escribe en el editor salga en la factura,

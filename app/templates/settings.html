@@ -49,6 +49,26 @@
       <button class="btn gold" type="submit" style="margin-top:12px">Cambiar Master Password</button>
     </form>
   </div>
+
+  {# Tercera credencial: la del Call Center. Se cambia desde aqui, detras de la
+     misma Master Password, para no tener que entrar al servidor. #}
+  <div class="card">
+    <h3>Cuenta Operador</h3>
+    <p class="small muted">
+      Acceso al Call Center en <code>/operador/acceso</code>. Es independiente:
+      con ella no se entra al panel, y con la del panel no se entra al módulo
+      de Operador.
+    </p>
+    <form method="post" action="/configuracion/contrasenas" autocomplete="off">
+      <input type="hidden" name="which" value="operator">
+      <div class="form-grid">
+        <label>Usuario<input name="username" value="{{ operador_usuario }}"></label>
+        <label>Nueva contraseña<input name="new_password" type="password" minlength="8" required></label>
+        <label>Repetir contraseña<input name="confirm_password" type="password" minlength="8" required></label>
+      </div>
+      <button class="btn gold" type="submit" style="margin-top:12px">Cambiar contraseña de Operador</button>
+    </form>
+  </div>
 </div>
 
 <div class="settings-section-title">02 · Datos bancarios y representante, por mercado</div>
