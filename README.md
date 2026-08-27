@@ -18,7 +18,8 @@ tocado sus estilos.
 | **C** | Motor de plantillas, claves fijas en las 3 plantillas, reglas por mercado, vista previa real | **Entregada** |
 | **D** | Generación PDF A4, snapshot histórico, logo, QR, código de barras, actividad, instalación | **Entregada** — instalado en producción |
 | **Tuneup — Bloque A** | Perfiles de marca, marco exterior del PDF, archivar/eliminar canceladas, folio manual, registro permanente de folios | **Entregada** — en producción |
-| **Tuneup — Bloque B** | Acceso Operador, búsqueda por folio, los 6 pasos guiados del Call Center V1.4 | **Entregada** |
+| **Tuneup — Bloque B** | Acceso Operador, búsqueda por folio, los 6 pasos guiados del Call Center V1.4 | **Entregada** — en producción |
+| **Tuneup — Bloque C** | Administración de la guía de respuestas y de las notas del Call Center | **Entregada** |
 
 El sistema está en producción, así que el panel ya no lleva ninguna etiqueta de
 fase ni descripción del alcance: eso era información del desarrollo y no le
@@ -625,7 +626,7 @@ python3 verificar_folios.py
 python3 verificar_datos.py
 ```
 
-**540 comprobaciones en total** (551 con `verificar_codigos.py`, que
+**610 comprobaciones en total** (551 con `verificar_codigos.py`, que
 necesita pyzbar y por eso no se ejecuta en el servidor). No miran que las páginas «carguen», miran que
 hagan lo que tienen que hacer. Se pueden ejecutar tantas veces seguidas como se
 quiera: la de Fase B borra al arrancar las facturas que dejó la ejecución
@@ -641,6 +642,14 @@ anterior, para que los recuentos por VIN sigan significando algo.
   heredar los datos del cliente original, que use la cuenta bancaria vigente y no la del original, que la
   factura de origen no cambie al duplicarla, y que el agrupamiento por VIN
   cuente lo que tiene que contar.
+- **Bloque C · 70.** Que el Admin cree, edite, publique, retire, reordene y
+  elimine entradas de la guía; que una pregunta sin respuesta escrita no se
+  pueda publicar ni por el formulario ni por el botón; que lo que el Admin
+  publica o retira cambie **lo que ve el Operador** en la misma consulta; que
+  una sugerencia se convierta en entrada y quede marcada como atendida sin que
+  su texto original se altere; que las notas se vean desde Administración y
+  desde la propia factura y **no exista** ninguna ruta para editarlas o
+  borrarlas; y que el Operador siga sin poder abrir nada de esto.
 - **Bloque B · 63.** Que las credenciales de Admin no abran el panel de
   Operador ni al revés; que las diez rutas de Administración probadas queden
   bloqueadas al escribirlas a mano y al enviarles un formulario manipulado; que
@@ -772,6 +781,52 @@ solas**: quedan pendientes hasta que Administración las revise.
 > La pantalla de Administración para editar FAQs y revisar notas es el bloque
 > siguiente. Hasta entonces la guía se puede editar en la tabla, y las
 > sugerencias quedan guardadas sin perderse.
+
+---
+
+## Administración de la guía y de las notas
+
+Dos pantallas de Admin, `/guia` y `/notas`. **No añaden ninguna tabla**: las dos
+que creó el Bloque B ya tenían las columnas necesarias, incluida `handled_at`
+para marcar una sugerencia como revisada. Este bloque no lleva migración.
+
+### La guía
+
+Añadir, editar, publicar, retirar, reordenar y eliminar. Los cambios los ve el
+Operador en su siguiente consulta; no hay caché ni despliegue de por medio.
+
+La regla del alcance —*una pregunta sin respuesta aprobada no se publica*— vive
+en `callcenter._limpiar_faq()` y en `alternar_faq()`, no en la pantalla. Se
+comprueba por los dos caminos: el formulario y el botón «Publicar». Una pregunta
+puede guardarse **sin** respuesta para no perderla; queda desactivada y el
+Operador la ve listada como pendiente, nunca como respuesta que leer.
+
+Reordenar **intercambia** el `sort_order` con el vecino en vez de renumerar la
+lista entera: mover una entrada no reescribe todas las filas. Si dos entradas
+compartieran número —por una importación, por ejemplo— el intercambio las separa
+en lugar de dejarlas pegadas para siempre.
+
+Eliminar sí borra de verdad, al contrario que en las marcas, las facturas o las
+notas. Una entrada de la guía no es constancia de nada: es el texto que el
+Operador tiene delante hoy. Una escrita por error no aporta nada guardada, y la
+alternativa —dejarla despublicada para siempre— llena la pantalla de restos.
+
+### Las notas
+
+Se listan todas, con filtro por tipo y un filtro aparte para las sugerencias
+pendientes. Se ven también **desde la propia factura**, en el editor, y el
+listado de facturas avisa de cuántas tiene cada una.
+
+No hay ruta para editarlas ni para borrarlas, y la batería lo comprueba pidiendo
+esas direcciones y exigiendo un 404. Lo único que se marca es si una sugerencia
+ya la has revisado.
+
+### De sugerencia a entrada de la guía
+
+Una sugerencia **no se publica tal cual**. El Admin escribe la pregunta y la
+respuesta definitivas; el texto original de la nota queda intacto como
+constancia de lo que preguntó el cliente, y la nota pasa a «atendida» para que
+deje de aparecer como pendiente. Se puede devolver a pendientes.
 
 ---
 

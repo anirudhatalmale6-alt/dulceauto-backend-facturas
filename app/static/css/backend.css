@@ -266,3 +266,17 @@ body.theme-soft .logo-preview { background: var(--cream2); }
    cinco fluyen y envuelven juntos como antes. */
 td.actions form { display: contents; }
 td.actions .btn { padding: 7px 10px; font-size: 12px; }
+
+/* Los filtros y algunas acciones son enlaces con aspecto de boton. panel.css
+   define .btn dando por hecho un <button>, que no lleva subrayado; en un <a> el
+   navegador lo pone y las pestanas de filtro salen subrayadas. */
+a.btn { text-decoration: none; }
+
+/* Un boton de filtro con contador: el badge iba a la linea de abajo y descolgaba
+   la fila entera. */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters .btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* La columna de orden de la guia lleva dos botones minusculos; sin esto el
+   segundo cae debajo del primero y la fila crece al doble. */
+td.actions .btn { white-space: nowrap; }

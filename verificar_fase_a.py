@@ -69,7 +69,12 @@ with sync_playwright() as p:
     if filas_todas.count() == 0:
         check("busqueda: hay alguna factura con la que probar", False, "listado vacio")
     else:
-        folio = filas_todas.first.locator("td").nth(0).inner_text().strip()
+        # Solo la primera linea, igual que con la celda del vehiculo: debajo
+        # del folio puede ir el aviso de "N notas" del Call Center, y con el
+        # texto entero pegado la busqueda no encuentra nada. La celda es de dos
+        # lineas desde que existe el modulo de Operador.
+        celda_folio = filas_todas.first.locator("td").nth(0).inner_text().strip()
+        folio = celda_folio.splitlines()[0].strip() if celda_folio else ""
         # Se recorren las filas hasta dar con un vehiculo del que salga una
         # palabra utilizable: la primera factura puede no tener vehiculo escrito.
         termino = ""

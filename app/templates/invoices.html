@@ -52,7 +52,19 @@
         {% set label, css = status_labels.get(inv.status, (inv.status, 'muted')) %}
         {% set n = interesados.get(inv.vehicle_vin, 1) if inv.vehicle_vin else 1 %}
         <tr>
-          <td><a class="folio-link" href="/facturas/{{ inv.id }}/editar">{{ inv.folio }}</a></td>
+          <td>
+            <a class="folio-link" href="/facturas/{{ inv.id }}/editar">{{ inv.folio }}</a>
+            {# Aviso de que esa reserva tiene notas de una llamada: sin esto hay
+               que abrir la factura para saber si el Call Center anoto algo. #}
+            {% set n_notas = notas_por_factura.get(inv.id, 0) %}
+            {% if n_notas %}
+              <div class="small muted">
+                <a class="folio-link" href="/facturas/{{ inv.id }}/editar">
+                  {{ n_notas }} nota{{ '' if n_notas == 1 else 's' }}
+                </a>
+              </div>
+            {% endif %}
+          </td>
           <td>{{ inv.customer_name or '—' }}</td>
           <td>
             {{ inv.vehicle_title or '—' }}

@@ -103,6 +103,8 @@ NAV_ITEMS = [
     {"key": "editor", "label": "Crear / Editar", "icon": "✎", "url": "/facturas/nueva"},
     {"key": "brands", "label": "Marcas", "icon": "◈", "url": "/marcas"},
     {"key": "templates", "label": "Plantillas", "icon": "◫", "url": "/plantillas"},
+    {"key": "faqs", "label": "Guía Call Center", "icon": "◇", "url": "/guia"},
+    {"key": "notes", "label": "Notas", "icon": "✐", "url": "/notas"},
     {"key": "activity", "label": "Actividad", "icon": "◷", "url": "/actividad"},
     {"key": "settings", "label": "Configuración", "icon": "⚙", "url": "/configuracion"},
 ]
@@ -384,6 +386,7 @@ def invoices(
         request,
         "invoices.html",
         db,
+        notas_por_factura=cc.contar_notas_por_factura(db),
         active_view="invoices",
         page_title="Facturas",
         page_sub="Consulta la factura enviada, edita o duplica una pre-factura.",
@@ -439,6 +442,10 @@ def editor_page(
         comprometidas=[i for i in historial if i.status in inv_service.COMMITTED_STATUSES],
         marcas=inv_service.perfiles_activos(db),
         folio_ejemplo=inv_service.folio_previsto(db),
+        # Las notas del Call Center de ESTA factura, para verlas sin salir de
+        # aqui. Solo se leen: el Admin las revisa, no las reescribe.
+        notas=cc.notas_de(db, invoice.id) if invoice else [],
+        note_labels=cc.NOTE_LABELS,
     )
 
 
@@ -2027,4 +2034,203 @@ def operator_note_create(
             flash(request, "Nota guardada.", "ok")
 
     destino = f"/operador?folio={invoice.folio}&paso={min(max(paso, 1), 6)}"
+    return RedirectResponse(destino, status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- Administracion de la guia y de las notas --------------------------------
+#
+# Estas vistas son de Admin y por tanto pasan por require_login, igual que el
+# resto del panel. No hace falta ninguna comprobacion de perfil aqui dentro: si
+# se anadiera, habria dos respuestas a la misma pregunta.
+
+
+@app.get("/guia", response_class=HTMLResponse)
+def faqs_view(request: Request, editar: int = 0, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    faqs = cc.faqs_todas(db)
+    return render(
+        request,
+        "faqs.html",
+        db,
+        active_view="faqs",
+        page_title="Guía del Call Center",
+        page_sub="Respuestas aprobadas que consulta el Operador. Cambiarlas no requiere desplegar nada.",
+        faqs=faqs,
+        resumen=cc.resumen_guia(db),
+        editando=db.get(OperatorFaq, editar) if editar else None,
+        sugerencias=cc.notas_todas(db, solo_pendientes=True),
+    )
+
+
+@app.post("/guia/guardar")
+def faq_save(
+    request: Request,
+    faq_id: int = Form(0),
+    category: str = Form(""),
+    question: str = Form(""),
+    answer: str = Form(""),
+    active: str = Form(""),
+    desde_nota: int = Form(0),
+    db: Session = Depends(get_db),
+):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    activa = active in ("1", "on", "true")
+    try:
+        if faq_id:
+            faq = db.get(OperatorFaq, faq_id)
+            if faq is None:
+                flash(request, "Esa entrada de la guía ya no existe.", "error")
+                return RedirectResponse("/guia", status_code=status.HTTP_303_SEE_OTHER)
+            cc.editar_faq(db, faq, category, question, answer, activa)
+            act.log(db, act.FAQ_UPDATED, request=request, entity_type="faq",
+                    entity_id=faq.id, detail=faq.question[:80])
+            flash(request, "Entrada actualizada.", "ok")
+        elif desde_nota:
+            nota = db.get(OperatorNote, desde_nota)
+            if nota is None:
+                flash(request, "Esa sugerencia ya no existe.", "error")
+                return RedirectResponse("/notas", status_code=status.HTTP_303_SEE_OTHER)
+            faq = cc.faq_desde_sugerencia(db, nota, category, question, answer, activa)
+            act.log(db, act.FAQ_CREATED, request=request, entity_type="faq",
+                    entity_id=faq.id, folio=nota.folio,
+                    detail=f"desde sugerencia del folio {nota.folio}")
+            flash(
+                request,
+                "Sugerencia convertida en entrada de la guía y marcada como atendida.",
+                "ok",
+            )
+        else:
+            faq = cc.crear_faq(db, category, question, answer, activa)
+            act.log(db, act.FAQ_CREATED, request=request, entity_type="faq",
+                    entity_id=faq.id, detail=faq.question[:80])
+            flash(request, "Entrada añadida a la guía.", "ok")
+    except cc.FaqInvalida as e:
+        flash(request, str(e), "error")
+
+    return RedirectResponse("/guia", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/guia/{faq_id}/publicar")
+def faq_toggle(request: Request, faq_id: int, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    faq = db.get(OperatorFaq, faq_id)
+    if faq is None:
+        flash(request, "Esa entrada de la guía ya no existe.", "error")
+    else:
+        try:
+            activa = cc.alternar_faq(db, faq)
+        except cc.FaqInvalida as e:
+            flash(request, str(e), "error")
+        else:
+            act.log(db, act.FAQ_UPDATED, request=request, entity_type="faq",
+                    entity_id=faq.id,
+                    detail="publicada" if activa else "retirada de la guía")
+            flash(
+                request,
+                "Publicada: el Operador ya la ve." if activa
+                else "Retirada: el Operador deja de verla.",
+                "ok",
+            )
+    return RedirectResponse("/guia", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/guia/{faq_id}/eliminar")
+def faq_delete(request: Request, faq_id: int, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    faq = db.get(OperatorFaq, faq_id)
+    if faq is None:
+        flash(request, "Esa entrada de la guía ya no existe.", "error")
+    else:
+        # Se anota ANTES de borrar: despues, el id ya no existe y la pregunta
+        # tampoco, y en Actividad quedaria una linea que no dice nada.
+        act.log(db, act.FAQ_DELETED, request=request, entity_type="faq",
+                entity_id=faq.id, detail=faq.question[:80])
+        cc.borrar_faq(db, faq)
+        flash(request, "Entrada eliminada de la guía.", "ok")
+    return RedirectResponse("/guia", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/guia/{faq_id}/mover")
+def faq_move(request: Request, faq_id: int, arriba: int = Form(1),
+             db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    faq = db.get(OperatorFaq, faq_id)
+    if faq is not None:
+        cc.mover_faq(db, faq, bool(arriba))
+    return RedirectResponse("/guia", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/notas", response_class=HTMLResponse)
+def notes_view(request: Request, tipo: str = "", pendientes: int = 0,
+               db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    filtro = tipo if tipo in NOTE_TYPES else ""
+    notas = cc.notas_todas(db, tipo=filtro, solo_pendientes=bool(pendientes))
+    # Se resuelven las facturas de una vez para poder enlazarlas sin hacer una
+    # consulta por fila.
+    ids = {n.invoice_id for n in notas}
+    facturas = {
+        i.id: i
+        for i in db.execute(select(Invoice).where(Invoice.id.in_(ids))).scalars().all()
+    } if ids else {}
+
+    return render(
+        request,
+        "notes.html",
+        db,
+        active_view="notes",
+        page_title="Notas del Call Center",
+        page_sub="Lo que registran los Operadores durante las llamadas. No se editan ni se borran.",
+        notas=notas,
+        facturas=facturas,
+        resumen=cc.resumen_notas(db),
+        note_labels=cc.NOTE_LABELS,
+        note_types=NOTE_TYPES,
+        filtro=filtro,
+        solo_pendientes=bool(pendientes),
+    )
+
+
+@app.post("/notas/{nota_id}/atendida")
+def note_handled(request: Request, nota_id: int, atendida: int = Form(1),
+                 db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    nota = db.get(OperatorNote, nota_id)
+    if nota is None:
+        flash(request, "Esa nota ya no existe.", "error")
+    else:
+        cc.marcar_atendida(db, nota, bool(atendida))
+        act.log(db, act.NOTE_REVIEWED, request=request, entity_type="note",
+                entity_id=nota.id, folio=nota.folio,
+                detail="atendida" if atendida else "vuelta a pendiente")
+        flash(
+            request,
+            "Sugerencia marcada como atendida." if atendida
+            else "Sugerencia devuelta a pendientes.",
+            "ok",
+        )
+    destino = request.headers.get("referer") or "/notas"
+    if "/notas" not in destino and "/guia" not in destino:
+        destino = "/notas"
     return RedirectResponse(destino, status_code=status.HTTP_303_SEE_OTHER)

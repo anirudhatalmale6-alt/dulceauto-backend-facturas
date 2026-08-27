@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Guía del Call Center</h2>
+      <div class="small muted">
+        Estas son las respuestas que el Operador tiene delante durante una
+        llamada. Se editan aquí y el cambio se ve en la siguiente consulta: no
+        hace falta desplegar nada.
+      </div>
+    </div>
+  </div>
+
+  <div class="grid stats" style="margin-top:14px">
+    <div class="card stat"><small>Entradas</small><strong>{{ resumen.total }}</strong></div>
+    <div class="card stat"><small>Publicadas</small><strong>{{ resumen.activas }}</strong></div>
+    <div class="card stat"><small>Sin publicar</small><strong>{{ resumen.pendientes }}</strong></div>
+    <div class="card stat"><small>Sin respuesta escrita</small><strong>{{ resumen.sin_respuesta }}</strong></div>
+  </div>
+
+  <p class="muted small" style="margin-top:14px">
+    Una pregunta sin respuesta escrita no se puede publicar. Puede guardarse para
+    no perderla, y el Operador la verá listada como pendiente, pero nunca como
+    respuesta que leer al cliente. El orden de esta lista es el orden en que las
+    ve el Operador.
+  </p>
+
+  <table style="margin-top:14px">
+    <thead>
+      <tr>
+        <th style="width:92px">Orden</th>
+        <th>Categoría</th>
+        <th>Pregunta y respuesta</th>
+        <th style="width:120px">Estado</th>
+        <th style="width:260px">Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in faqs %}
+        <tr{% if editando and editando.id == f.id %} class="row-active"{% endif %}>
+          <td class="actions">
+            <form method="post" action="/guia/{{ f.id }}/mover">
+              <input type="hidden" name="arriba" value="1">
+              <button class="btn ghost" type="submit" title="Subir"
+                      {% if loop.first %}disabled{% endif %}>↑</button>
+            </form>
+            <form method="post" action="/guia/{{ f.id }}/mover">
+              <input type="hidden" name="arriba" value="0">
+              <button class="btn ghost" type="submit" title="Bajar"
+                      {% if loop.last %}disabled{% endif %}>↓</button>
+            </form>
+          </td>
+          <td>{{ f.category }}</td>
+          <td>
+            <b>{{ f.question }}</b>
+            <div class="small muted" style="margin-top:5px">
+              {% if f.answer %}{{ f.answer }}
+              {% else %}<i>Sin respuesta aprobada todavía.</i>{% endif %}
+            </div>
+          </td>
+          <td>
+            {% if f.active %}
+              <span class="status generated">Publicada</span>
+            {% elif f.answer %}
+              <span class="status draft">Sin publicar</span>
+            {% else %}
+              <span class="status pending">Sin respuesta</span>
+            {% endif %}
+          </td>
+          <td class="actions">
+            <a class="btn ghost" href="/guia?editar={{ f.id }}#editor">Editar</a>
+            <form method="post" action="/guia/{{ f.id }}/publicar">
+              <button class="btn" type="submit">
+                {{ "Retirar" if f.active else "Publicar" }}
+              </button>
+            </form>
+            {# Eliminar de verdad. Una entrada de la guia no documenta nada: es
+               el texto que el Operador lee hoy, y una escrita por error no
+               aporta nada guardada. #}
+            <form method="post" action="/guia/{{ f.id }}/eliminar"
+                  onsubmit="return confirm('¿Eliminar esta entrada de la guía? No se puede deshacer.')">
+              <button class="btn ghost" type="submit">Eliminar</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr class="empty-row">
+          <td colspan="5" class="muted">La guía todavía está vacía.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if sugerencias %}
+<div class="card" style="margin-top:16px">
+  <h3>Sugerencias del Operador pendientes de revisar <span class="badge">{{ sugerencias | length }}</span></h3>
+  <p class="muted small">
+    Preguntas que a los Operadores les han hecho por teléfono y no estaban en la
+    guía. No se publican solas: aquí decides tú la redacción definitiva de la
+    pregunta y de la respuesta. El texto original de la nota no se toca.
+  </p>
+
+  {% for n in sugerencias %}
+    <div class="card" style="margin-top:10px">
+      <div class="small muted">
+        {{ n.created_at.strftime('%d/%m/%Y %H:%M') }} UTC ·
+        folio <a href="/facturas?q={{ n.folio }}">{{ n.folio }}</a> · {{ n.actor }}
+      </div>
+      <p style="margin:8px 0">{{ n.note }}</p>
+
+      <details>
+        <summary class="small">Convertir en entrada de la guía</summary>
+        <form method="post" action="/guia/guardar" style="margin-top:10px">
+          <input type="hidden" name="desde_nota" value="{{ n.id }}">
+          <div class="grid two">
+            <label class="small">Categoría
+              <input type="text" name="category" required
+                     placeholder="Entrega, Reserva y pago, Proceso general...">
+            </label>
+            <label class="small">Pregunta, ya redactada
+              <input type="text" name="question" required>
+            </label>
+          </div>
+          <label class="small">Respuesta aprobada
+            <textarea name="answer" rows="4"
+                      placeholder="Déjala vacía para guardar la pregunta sin publicarla todavía."></textarea>
+          </label>
+          <label class="small" style="margin-top:8px">
+            <input type="checkbox" name="active" value="1"> Publicar ya, para que el Operador la vea
+          </label>
+          <button class="btn primary" type="submit" style="margin-top:10px">
+            Crear entrada y marcar la sugerencia como atendida
+          </button>
+        </form>
+      </details>
+
+      <form method="post" action="/notas/{{ n.id }}/atendida" style="margin-top:8px">
+        <input type="hidden" name="atendida" value="1">
+        <button class="btn ghost" type="submit">Descartar: marcar como atendida sin crear entrada</button>
+      </form>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:16px" id="editor">
+  <h3>{{ "Editar la entrada" if editando else "Añadir una entrada" }}</h3>
+  <form method="post" action="/guia/guardar">
+    {% if editando %}<input type="hidden" name="faq_id" value="{{ editando.id }}">{% endif %}
+    <div class="grid two">
+      <label class="small">Categoría
+        <input type="text" name="category" required
+               value="{{ editando.category if editando else '' }}"
+               placeholder="Entrega, Reserva y pago, Proceso general...">
+      </label>
+      <label class="small">Pregunta
+        <input type="text" name="question" required
+               value="{{ editando.question if editando else '' }}">
+      </label>
+    </div>
+    <label class="small">Respuesta aprobada
+      <textarea name="answer" rows="5"
+                placeholder="Lo que el Operador va a leerle al cliente.">{{ editando.answer if editando and editando.answer else '' }}</textarea>
+    </label>
+    <label class="small" style="margin-top:8px">
+      <input type="checkbox" name="active" value="1"
+             {% if editando and editando.active %}checked{% endif %}>
+      Publicada: el Operador la ve
+    </label>
+    <div style="margin-top:12px">
+      <button class="btn primary" type="submit">
+        {{ "Guardar cambios" if editando else "Añadir a la guía" }}
+      </button>
+      {% if editando %}<a class="btn ghost" href="/guia">Cancelar</a>{% endif %}
+    </div>
+  </form>
+  <p class="muted small" style="margin-top:12px">
+    La categoría es lo que sale como pestaña en la pantalla del Operador. Si
+    escribes una que ya existe, la entrada se agrupa con las demás de esa
+    pestaña; si escribes una nueva, aparece una pestaña más.
+  </p>
+</div>
+
+{% endblock %}

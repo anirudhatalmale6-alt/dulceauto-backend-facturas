@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2>Notas del Call Center</h2>
+      <div class="small muted">
+        Lo que los Operadores han ido registrando durante las llamadas, con su
+        folio y su fecha.
+      </div>
+    </div>
+  </div>
+
+  <div class="grid stats" style="margin-top:14px">
+    <div class="card stat"><small>Notas</small><strong>{{ resumen.total }}</strong></div>
+    <div class="card stat"><small>Del cliente</small><strong>{{ resumen.cliente }}</strong></div>
+    <div class="card stat"><small>Seguimiento</small><strong>{{ resumen.seguimiento }}</strong></div>
+    <div class="card stat"><small>Sugerencias pendientes</small><strong>{{ resumen.pendientes }}</strong></div>
+  </div>
+
+  <p class="muted small" style="margin-top:14px">
+    Las notas no se editan ni se borran, tampoco desde aquí. Una nota que se
+    pudiera reescribir después no serviría como constancia de lo que se habló en
+    la llamada. Lo único que se marca es si una sugerencia ya la has revisado.
+  </p>
+
+  <div class="toolbar" style="margin-top:14px">
+    <div class="filters">
+      <a class="btn {{ 'ghost' if filtro or solo_pendientes else '' }}" href="/notas">Todas</a>
+      {% for t in note_types %}
+        <a class="btn {{ '' if filtro == t and not solo_pendientes else 'ghost' }}"
+           href="/notas?tipo={{ t }}">{{ note_labels.get(t, t) }}</a>
+      {% endfor %}
+      <a class="btn {{ '' if solo_pendientes else 'ghost' }}" href="/notas?pendientes=1">
+        Sugerencias pendientes
+        {% if resumen.pendientes %}<span class="badge">{{ resumen.pendientes }}</span>{% endif %}
+      </a>
+    </div>
+  </div>
+
+  <table style="margin-top:14px">
+    <thead>
+      <tr>
+        <th style="width:150px">Fecha</th>
+        <th style="width:120px">Folio</th>
+        <th style="width:170px">Tipo</th>
+        <th>Nota</th>
+        <th style="width:170px">Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in notas %}
+        <tr>
+          <td class="small">
+            {{ n.created_at.strftime('%d/%m/%Y') }}<br>
+            <span class="muted">{{ n.created_at.strftime('%H:%M') }} UTC</span>
+          </td>
+          <td>
+            {% if facturas.get(n.invoice_id) %}
+              <a href="/facturas/{{ n.invoice_id }}/editar">{{ n.folio }}</a>
+            {% else %}
+              {{ n.folio }}
+            {% endif %}
+          </td>
+          <td>
+            {% if n.type == 'faq' %}
+              {% if n.handled_at %}
+                <span class="status generated">Sugerencia atendida</span>
+              {% else %}
+                <span class="status pending">Sugerencia pendiente</span>
+              {% endif %}
+            {% else %}
+              <span class="status draft">{{ note_labels.get(n.type, n.type) }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {{ n.note }}
+            <div class="small muted" style="margin-top:5px">{{ n.actor }}</div>
+          </td>
+          <td class="actions">
+            {% if n.type == 'faq' %}
+              {% if n.handled_at %}
+                <form method="post" action="/notas/{{ n.id }}/atendida">
+                  <input type="hidden" name="atendida" value="0">
+                  <button class="btn ghost" type="submit">Volver a pendiente</button>
+                </form>
+              {% else %}
+                <a class="btn" href="/guia#editor">Ir a la guía</a>
+                <form method="post" action="/notas/{{ n.id }}/atendida">
+                  <input type="hidden" name="atendida" value="1">
+                  <button class="btn ghost" type="submit">Marcar atendida</button>
+                </form>
+              {% endif %}
+            {% else %}
+              <span class="small muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr class="empty-row">
+          <td colspan="5" class="muted">
+            {% if filtro or solo_pendientes %}
+              No hay notas que cumplan ese filtro.
+            {% else %}
+              Todavía no hay ninguna nota. Aparecerán aquí en cuanto un Operador
+              registre la primera durante una llamada.
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

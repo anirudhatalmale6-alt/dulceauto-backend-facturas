@@ -105,6 +105,18 @@ class Cliente:
         return self._abrir(self.base + ruta, cuerpo)
 
 
+def sin_contador_de_notas(html: str) -> str:
+    """El listado, quitando el aviso de cuantas notas tiene cada factura.
+
+    Ese contador SI cambia cuando el Operador escribe una nota, y debe cambiar:
+    es justo la senal de que hay algo anotado en esa reserva. Lo que esta
+    bateria comprueba es otra cosa -- que la FACTURA no se ha tocado -- asi que
+    se compara el listado sin esa parte. Comparar el HTML entero mezclaba las
+    dos preguntas y daba un fallo con el codigo correcto.
+    """
+    return re.sub(r"\d+ notas?", "", html)
+
+
 def entrar_admin() -> Cliente:
     c = Cliente(BASE)
     r = c.post("/acceso", data={"username": ADMIN_USER, "password": ADMIN_PASS})
@@ -403,7 +415,7 @@ def main() -> int:
     despues = admin.get(f"/facturas?q={folio}").text
     check(
         "la factura sigue exactamente igual tras toda la sesion de Operador",
-        antes == despues,
+        sin_contador_de_notas(antes) == sin_contador_de_notas(despues),
     )
 
     # --- 7b · el Admin puede cambiar la contrasena del Operador --------------

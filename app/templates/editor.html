@@ -375,6 +375,57 @@
 {% endif %}
 
 
+{% if invoice %}
+<div class="card" style="margin-top:16px">
+  <details{% if notas %} open{% endif %}>
+    <summary>
+      Notas del Call Center · {{ notas|length }} nota{{ '' if notas|length == 1 else 's' }}
+      de esta factura <span>⌄</span>
+    </summary>
+    <div style="margin-top:12px">
+      {% if notas %}
+        <table>
+          <thead>
+            <tr><th style="width:150px">Fecha</th><th style="width:190px">Tipo</th><th>Nota</th></tr>
+          </thead>
+          <tbody>
+            {% for n in notas %}
+              <tr>
+                <td class="small">
+                  {{ n.created_at.strftime('%d/%m/%Y') }}<br>
+                  <span class="muted">{{ n.created_at.strftime('%H:%M') }} UTC · {{ n.actor }}</span>
+                </td>
+                <td>
+                  {% if n.type == 'faq' %}
+                    {% if n.handled_at %}
+                      <span class="status generated">Sugerencia atendida</span>
+                    {% else %}
+                      <span class="status pending">Sugerencia pendiente</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="status draft">{{ note_labels.get(n.type, n.type) }}</span>
+                  {% endif %}
+                </td>
+                <td>{{ n.note }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="muted small" style="margin-top:10px">
+          Las escribe el Operador durante la llamada. No se editan ni se borran
+          desde ninguna pantalla: sirven de constancia de lo que se habló.
+          <a href="/notas">Ver todas las notas</a>.
+        </p>
+      {% else %}
+        <p class="muted small">
+          Ningún Operador ha registrado todavía una nota para esta factura.
+        </p>
+      {% endif %}
+    </div>
+  </details>
+</div>
+{% endif %}
+
 <div class="devnote" style="margin-top:16px">
   <b>Estado del documento.</b> Un borrador se guarda a medias; para salir de
   borrador se exigen cliente, vehículo, VIN válido, importes y fecha de emisión.

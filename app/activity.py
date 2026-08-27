@@ -36,6 +36,12 @@ OPERATOR_LOOKUP = "operator_lookup"
 OPERATOR_NOTE = "operator_note"
 OPERATOR_DENIED = "operator_denied"
 
+# Administracion de la guia y de las notas.
+FAQ_CREATED = "faq_created"
+FAQ_UPDATED = "faq_updated"
+FAQ_DELETED = "faq_deleted"
+NOTE_REVIEWED = "note_reviewed"
+
 LABELS = {
     LOGIN: "Inicio de sesión",
     LOGOUT: "Cierre de sesión",
@@ -56,6 +62,10 @@ LABELS = {
     OPERATOR_LOOKUP: "Consulta de reserva (Operador)",
     OPERATOR_NOTE: "Nota de Operador",
     OPERATOR_DENIED: "Acceso a Administración bloqueado",
+    FAQ_CREATED: "Entrada añadida a la guía",
+    FAQ_UPDATED: "Entrada de la guía modificada",
+    FAQ_DELETED: "Entrada de la guía eliminada",
+    NOTE_REVIEWED: "Nota revisada",
 }
 
 

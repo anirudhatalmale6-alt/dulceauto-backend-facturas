@@ -18,7 +18,7 @@ Dos ideas gobiernan el modulo entero:
    datos que figuran en SU documento, que es lo unico que el cliente tiene
    delante.
 """
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .invoices import folio_ancho, folio_prefijo
@@ -481,3 +481,242 @@ def sugerencias_faq_pendientes(db: Session) -> list[OperatorNote]:
         .where(OperatorNote.type == NOTE_FAQ, OperatorNote.handled_at.is_(None))
         .order_by(OperatorNote.created_at.desc())
     ).scalars().all()
+
+
+# --- administracion de la guia ------------------------------------------------
+#
+# Todo lo de aqui abajo lo usa SOLO el Admin. Las funciones no comprueban el
+# perfil: eso lo hace require_login antes de llegar, en un unico sitio. Ponerlo
+# tambien aqui daria una segunda respuesta a la misma pregunta, y el dia que las
+# dos discreparan no habria forma de saber cual manda.
+
+MAX_PREGUNTA = 300
+MAX_RESPUESTA = 4000
+MAX_CATEGORIA = 64
+
+PASO_ORDEN = 10
+
+
+class FaqInvalida(ValueError):
+    """No se puede guardar la FAQ. El mensaje es para el Admin."""
+
+
+def faqs_todas(db: Session) -> list[OperatorFaq]:
+    return db.execute(
+        select(OperatorFaq).order_by(OperatorFaq.sort_order, OperatorFaq.id)
+    ).scalars().all()
+
+
+def _limpiar_faq(categoria: str, pregunta: str, respuesta: str, activa: bool) -> tuple:
+    cat = (categoria or "").strip()
+    preg = (pregunta or "").strip()
+    resp = (respuesta or "").strip()
+
+    if not cat:
+        raise FaqInvalida("La categoría no puede quedar vacía.")
+    if len(cat) > MAX_CATEGORIA:
+        raise FaqInvalida(f"La categoría no puede pasar de {MAX_CATEGORIA} caracteres.")
+    if not preg:
+        raise FaqInvalida("Escribe la pregunta.")
+    if len(preg) > MAX_PREGUNTA:
+        raise FaqInvalida(f"La pregunta no puede pasar de {MAX_PREGUNTA} caracteres.")
+    if len(resp) > MAX_RESPUESTA:
+        raise FaqInvalida(f"La respuesta no puede pasar de {MAX_RESPUESTA} caracteres.")
+
+    # La regla del alcance, aplicada aqui y no en la pantalla: una pregunta sin
+    # respuesta aprobada no puede publicarse. Si se deja sin respuesta, se
+    # guarda desactivada; lo que no se hace es guardarla activa y vacia.
+    if activa and not resp:
+        raise FaqInvalida(
+            "No se puede activar una pregunta sin respuesta. Escribe la respuesta "
+            "aprobada o guárdala desactivada."
+        )
+    return cat, preg, (resp or None), activa
+
+
+def _siguiente_orden(db: Session) -> int:
+    ultimo = db.execute(select(func.max(OperatorFaq.sort_order))).scalar()
+    return (ultimo or 0) + PASO_ORDEN
+
+
+def crear_faq(
+    db: Session, categoria: str, pregunta: str, respuesta: str, activa: bool
+) -> OperatorFaq:
+    cat, preg, resp, act = _limpiar_faq(categoria, pregunta, respuesta, activa)
+    faq = OperatorFaq(
+        category=cat,
+        question=preg,
+        answer=resp,
+        active=act,
+        sort_order=_siguiente_orden(db),
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+    db.add(faq)
+    db.commit()
+    db.refresh(faq)
+    return faq
+
+
+def editar_faq(
+    db: Session, faq: OperatorFaq, categoria: str, pregunta: str, respuesta: str, activa: bool
+) -> OperatorFaq:
+    cat, preg, resp, act = _limpiar_faq(categoria, pregunta, respuesta, activa)
+    faq.category, faq.question, faq.answer, faq.active = cat, preg, resp, act
+    faq.updated_at = utcnow()
+    db.commit()
+    db.refresh(faq)
+    return faq
+
+
+def alternar_faq(db: Session, faq: OperatorFaq) -> bool:
+    """Activa o desactiva. Devuelve el estado en el que queda.
+
+    Desactivar siempre se puede. Activar exige respuesta escrita, porque es la
+    misma regla que en _limpiar_faq y tiene que valer tambien cuando se llega
+    por el boton y no por el formulario.
+    """
+    if not faq.active and not (faq.answer or "").strip():
+        raise FaqInvalida(
+            "Esa pregunta no tiene respuesta aprobada. Escríbela antes de publicarla."
+        )
+    faq.active = not faq.active
+    faq.updated_at = utcnow()
+    db.commit()
+    return faq.active
+
+
+def mover_faq(db: Session, faq: OperatorFaq, arriba: bool) -> bool:
+    """Intercambia el orden con la vecina. Devuelve si se ha movido.
+
+    Se intercambian los dos valores en vez de renumerar la lista entera: asi
+    mover una no reescribe todas las filas, y si dos entradas compartieran
+    numero de orden -por una importacion, por ejemplo- el intercambio las
+    separa en vez de dejarlas pegadas para siempre.
+    """
+    filas = faqs_todas(db)
+    posiciones = {f.id: i for i, f in enumerate(filas)}
+    i = posiciones.get(faq.id)
+    if i is None:
+        return False
+    j = i - 1 if arriba else i + 1
+    if j < 0 or j >= len(filas):
+        return False
+
+    vecina = filas[j]
+    if faq.sort_order == vecina.sort_order:
+        # Empatadas: se les da un orden distinto antes de intercambiar, o el
+        # intercambio no cambiaria nada y el boton pareceria roto.
+        faq.sort_order, vecina.sort_order = (
+            (vecina.sort_order - 1, vecina.sort_order)
+            if arriba
+            else (vecina.sort_order + 1, vecina.sort_order)
+        )
+    else:
+        faq.sort_order, vecina.sort_order = vecina.sort_order, faq.sort_order
+    faq.updated_at = utcnow()
+    db.commit()
+    return True
+
+
+def borrar_faq(db: Session, faq: OperatorFaq) -> None:
+    """Elimina una entrada de la guia.
+
+    Aqui SI se borra de verdad, al contrario que con las marcas, las facturas o
+    las notas. El motivo es que una entrada de la guia no es constancia de nada:
+    no documenta una operacion ni algo que dijera un cliente, es solo el texto
+    que el Operador tiene delante hoy. Una escrita por error no aporta nada
+    guardada, y la alternativa -dejarla despublicada para siempre- llena la
+    pantalla de restos.
+
+    La nota de la que salio, si vino de una sugerencia, no se toca: esa si es
+    constancia de una llamada.
+    """
+    db.delete(faq)
+    db.commit()
+
+
+def resumen_guia(db: Session) -> dict:
+    filas = faqs_todas(db)
+    return {
+        "total": len(filas),
+        "activas": sum(1 for f in filas if f.active),
+        "pendientes": sum(1 for f in filas if not f.active),
+        "sin_respuesta": sum(1 for f in filas if not (f.answer or "").strip()),
+    }
+
+
+# --- administracion de las notas ---------------------------------------------
+
+
+def notas_todas(
+    db: Session, tipo: str = "", solo_pendientes: bool = False
+) -> list[OperatorNote]:
+    consulta = select(OperatorNote).order_by(
+        OperatorNote.created_at.desc(), OperatorNote.id.desc()
+    )
+    if tipo in NOTE_TYPES:
+        consulta = consulta.where(OperatorNote.type == tipo)
+    if solo_pendientes:
+        consulta = consulta.where(
+            OperatorNote.type == NOTE_FAQ, OperatorNote.handled_at.is_(None)
+        )
+    return db.execute(consulta).scalars().all()
+
+
+def resumen_notas(db: Session) -> dict:
+    filas = db.execute(select(OperatorNote)).scalars().all()
+    return {
+        "total": len(filas),
+        "cliente": sum(1 for n in filas if n.type == "cliente"),
+        "seguimiento": sum(1 for n in filas if n.type == "seguimiento"),
+        "sugerencias": sum(1 for n in filas if n.type == NOTE_FAQ),
+        "pendientes": sum(
+            1 for n in filas if n.type == NOTE_FAQ and n.handled_at is None
+        ),
+    }
+
+
+def contar_notas_por_factura(db: Session) -> dict:
+    """{invoice_id: cuantas notas} en una sola consulta.
+
+    De una en una serian tantas consultas como facturas tenga el listado, que es
+    justo la forma de que una pantalla se vuelva lenta sin que se note al
+    principio.
+    """
+    filas = db.execute(
+        select(OperatorNote.invoice_id, func.count(OperatorNote.id)).group_by(
+            OperatorNote.invoice_id
+        )
+    ).all()
+    return {invoice_id: n for invoice_id, n in filas}
+
+
+def marcar_atendida(db: Session, nota: OperatorNote, atendida: bool = True) -> None:
+    """Marca o desmarca una sugerencia como ya revisada.
+
+    No borra la nota ni la edita: el texto que escribio el Operador se queda
+    como esta. Lo unico que cambia es si el Admin ya la ha mirado.
+    """
+    nota.handled_at = utcnow() if atendida else None
+    db.commit()
+
+
+def faq_desde_sugerencia(
+    db: Session,
+    nota: OperatorNote,
+    categoria: str,
+    pregunta: str,
+    respuesta: str,
+    activa: bool,
+) -> OperatorFaq:
+    """Convierte una sugerencia del Operador en una entrada de la guia.
+
+    La sugerencia NO se publica tal cual: el Admin escribe la pregunta y la
+    respuesta definitivas, y el texto original queda intacto como constancia de
+    lo que preguntó el cliente. Al crearla, la nota queda marcada como atendida
+    para que deje de aparecer como pendiente.
+    """
+    faq = crear_faq(db, categoria, pregunta, respuesta, activa)
+    marcar_atendida(db, nota, True)
+    return faq
