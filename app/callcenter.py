@@ -409,10 +409,23 @@ def faqs_pendientes(db: Session) -> list[OperatorFaq]:
 
     El Operador las ve como pendientes y puede sugerir una redaccion, pero
     nunca como respuesta que leer al cliente.
+
+    Hace falta el filtro por respuesta vacia, no basta con `active is False`.
+    Estar retirada y no tener respuesta son dos estados distintos que se cuentan
+    igual en la columna `active`:
+
+      - sin respuesta  -> nadie ha escrito todavia que contestar;
+      - retirada       -> tiene respuesta y Administracion ha decidido que hoy
+                          no se usa.
+
+    Si se listan las dos, al retirar una entrada su pregunta reaparece en el
+    panel de pendientes, que dice literalmente "sin respuesta aprobada". Seria
+    mentira sobre una entrada que si la tiene, y "retirar" dejaria de retirar.
     """
     return db.execute(
         select(OperatorFaq)
         .where(OperatorFaq.active.is_(False))
+        .where(func.coalesce(func.trim(OperatorFaq.answer), "") == "")
         .order_by(OperatorFaq.sort_order, OperatorFaq.id)
     ).scalars().all()
 

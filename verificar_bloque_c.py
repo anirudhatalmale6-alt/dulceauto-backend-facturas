@@ -132,6 +132,18 @@ def respuestas_de_la_guia(html: str) -> str:
     return " ".join(re.findall(r'<div class="faqItem open">.*?</div> </div> </div>', html))
 
 
+def bloque_pendientes(html: str) -> str:
+    """El aviso de 'preguntas recogidas todavia sin respuesta aprobada'.
+
+    Se mira aparte porque ahi es donde se colaba una entrada RETIRADA: la
+    respuesta ya no se ofrecia, pero la pregunta seguia listada bajo un texto
+    que afirma que no tiene respuesta aprobada. Devuelve cadena vacia si el
+    aviso no esta, que es lo normal cuando no hay ninguna pendiente.
+    """
+    m = re.search(r'<div class="banner warn".*?</div>\s*</div>', html, re.S)
+    return m.group(0) if m else ""
+
+
 def ids_de_guia(html: str, contiene: str = "") -> list[int]:
     """Los ids de las entradas de la guia que se ven en la pagina."""
     filas = re.findall(r'/guia\?editar=(\d+)', html)
@@ -317,12 +329,21 @@ def main() -> int:
         r = admin.post(f"/guia/{id_ok}/publicar")
         check("se retira de la guia", "deja de verla" in r.text)
         r = operador.get(f"/operador?folio={folio}&v=name,folio&c=1&paso=4")
-        check("el Operador deja de verla", nueva not in r.text)
+        check("el Operador deja de ver la respuesta", nueva not in r.text)
+        # Mirar solo la RESPUESTA dejaba pasar el fallo entero: la respuesta se
+        # iba, pero la PREGUNTA reaparecia en el panel de "recogidas sin
+        # respuesta aprobada", que ademas es falso para una entrada retirada.
+        # Retirar tiene que retirar las dos cosas.
+        check("y tampoco ve la pregunta por ningun lado",
+              pregunta_ok not in plano(r.text))
+        check("no aparece en el panel de pendientes sin respuesta",
+              pregunta_ok not in plano(bloque_pendientes(r.text)))
 
         r = admin.post(f"/guia/{id_ok}/publicar")
         check("se vuelve a publicar", "ya la ve" in r.text)
         r = operador.get(f"/operador?folio={folio}&v=name,folio&c=1&paso=4")
         check("el Operador vuelve a verla", nueva in r.text)
+        check("y vuelve a ver la pregunta", pregunta_ok in plano(r.text))
 
     # --- 5 · orden -----------------------------------------------------------
     print("\n5 · El orden de la guia")
