@@ -87,11 +87,33 @@ svg{fill:none;stroke-linecap:round;stroke-linejoin:round}
 .trust h3{margin:0;color:var(--navy);font-size:17px;line-height:1.25}
 .trust p{margin:7px 0 0;color:#4D5C74;font-size:14px;line-height:1.4}
 
-.thanks{margin-top:13px;border-radius:16px;background:linear-gradient(90deg,#082957,#0C3A70);color:#fff;padding:16px 20px;display:grid;grid-template-columns:86px 1fr 190px;gap:16px;align-items:center;overflow:hidden}
+/* min-height 127px = el alto EXACTO que tenia este banner antes de sacar la
+   marca de agua del flujo. Al pasar a posicion absoluta dejo de contar para
+   la altura de la fila y el banner se encogia 3 px, que empujaban hacia
+   arriba todo lo que va debajo. Medido, no supuesto. */
+.thanks{margin-top:13px;border-radius:16px;background:linear-gradient(90deg,#082957,#0C3A70);color:#fff;padding:16px 20px;display:grid;grid-template-columns:86px 1fr 190px;gap:16px;align-items:center;overflow:hidden;position:relative;min-height:127px}
 .heart{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#EBAE27,#C88906);display:grid;place-items:center}
 .thanks h2{margin:0;font-size:23px}
 .thanks p{margin:5px 0 0;font-size:14px;line-height:1.42;color:#F3F6FB}
-.handshake{opacity:.22;display:grid;place-items:center}
+
+/* La marca de agua de las manos.
+   Va en posicion ABSOLUTA, y eso no es un capricho: asi no participa en el
+   flujo de la maqueta y NO PUEDE desplazar ni una linea de texto por mucho que
+   crezca. La tercera columna de 190px se conserva para que el parrafo siga sin
+   meterse debajo del dibujo. Centrada verticalmente a la derecha, como pidio
+   el cliente el 29-ago-2026.
+   El recorte lo hace el overflow:hidden de .thanks, asi que si sobresaliera un
+   poco por la derecha se corta sola sin ensanchar el banner. */
+.handshake{
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  width:212px;height:106px;display:grid;place-items:center;
+  opacity:.30;pointer-events:none
+}
+.handshake svg{width:100%;height:100%;display:block}
+/* Tono azul/gris integrado con el banner, no blanco puro: el blanco a esta
+   opacidad se lee como suciedad sobre el degradado. */
+.handshake .hs{stroke:#A8C0DE;stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 
 .info-grid{margin-top:13px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .list-card ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
@@ -177,7 +199,22 @@ svg[width="48"] .w{stroke-width:1.25}
     box-sizing:content-box;
     width:calc(var(--design-width) * var(--print-scale));
     height:var(--print-height);
-    margin:0 auto;padding:0;overflow:hidden
+    margin:0 auto;padding:0;
+
+    /* Marco exterior, el mismo tratamiento que la pre-factura aprobada.
+       Va sobre la caja SIN escalar, que ya mide justo el documento, asi que
+       cuesta 2 px de ancho y 2 px de alto y NO milimetros. pdf.py ya descuenta
+       esos 2 px de la hoja util (MARCO_PX), de modo que anadirlo NO cambia la
+       escala: el hueco ya estaba reservado desde el Milestone 1.
+
+       El borde tiene que ir aqui y no en .page: el documento de dentro va
+       escalado con transform y recortado por este mismo overflow, asi que un
+       borde suyo se perderia por abajo y por la derecha. Junto al radio, es
+       ademas lo que redondea de verdad las esquinas del documento escalado. */
+    border:1px solid #d5dbe5;
+    border-radius:12px;
+    background:#fff;
+    overflow:hidden
   }
   .page{
     width:var(--design-width) !important;min-height:0 !important;
@@ -243,10 +280,10 @@ svg[width="48"] .w{stroke-width:1.25}
       <div class="vehicle-row"><div class="k"><svg viewBox="0 0 24 24"><path class="n" d="M3 10h11v7H3zM14 12h3l4 3v2h-7z"></path><circle class="n" cx="7" cy="18" r="2"></circle><circle class="n" cx="17" cy="18" r="2"></circle></svg>Entrega</div><div class="v" data-field="delivery.method">Domicilio o concesionaria cercana</div></div>
       <div class="vehicle-row"><div class="k"><svg viewBox="0 0 24 24"><path class="n" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="n" d="M9 12l2 2 4-5"></path></svg>Folio de operación</div><div class="v" data-field="transaction.folio">RES-90010</div></div>
     </div>
-    <div class="trust"><div class="trust-icon"><span class="safe-badge-image" data-safe-icon><svg viewBox="0 0 24 24" width="48" height="48"><path class="w" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="w" d="M9 12l2 2 4-5"></path></svg></span></div><h3 data-field="doc_registro_titulo">Su operación ha quedado registrada</h3><p data-field="doc_registro_texto">Continuamos con la validación documental y los trámites correspondientes.</p></div>
+    <div class="trust"><div class="trust-icon"><span class="safe-badge-image" data-safe-icon><svg viewBox="0 0 24 24" width="48" height="48" style="transform:translate(0.00px,2.00px)"><path class="w" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="w" d="M9 12l2 2 4-5"></path></svg></span></div><h3 data-field="doc_registro_titulo">Su operación ha quedado registrada</h3><p data-field="doc_registro_texto">Continuamos con la validación documental y los trámites correspondientes.</p></div>
   </section>
 
-  <section class="thanks"><div class="heart"><svg viewBox="0 0 24 24" width="38" height="38"><path class="w" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.3A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg></div><div><h2>Gracias por su confianza</h2><p>Agradecemos sinceramente su confianza y preferencia. Su pago de <strong data-field="payment.deposit_amount">$5,000 MXN</strong> correspondiente al apartado de la unidad <strong data-field="vehicle.model">Audi Q5 Sportback SLine Mild Hybrid</strong> ya quedó registrado correctamente en nuestro sistema.</p></div><div class="handshake"><svg viewBox="0 0 64 40" width="150" height="95"><path class="w" d="M3 14l13-9 12 8 8-5 11 8-18 18-8-4-8 3-10-10z"></path><path class="w" d="M25 13l7 6c3 3 6 3 9 0l5-4"></path></svg></div></section>
+  <section class="thanks"><div class="heart"><svg viewBox="0 0 24 24" width="38" height="38" style="transform:translate(0.00px,-1.84px)"><path class="w" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.3A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg></div><div><h2>Gracias por su confianza</h2><p>Agradecemos sinceramente su confianza y preferencia. Su pago de <strong data-field="payment.deposit_amount">$5,000 MXN</strong> correspondiente al apartado de la unidad <strong data-field="vehicle.model">Audi Q5 Sportback SLine Mild Hybrid</strong> ya quedó registrado correctamente en nuestro sistema.</p></div><div class="handshake" aria-hidden="true"><svg viewBox="0 0 64 40"><path class="hs" d="M3 14l13-9 12 8 8-5 11 8-18 18-8-4-8 3-10-10z"></path><path class="hs" d="M25 13l7 6c3 3 6 3 9 0l5-4"></path></svg></div></section>
 
   <section class="info-grid">
     <article class="card list-card"><div class="card-title"><div class="icon-orb"><svg viewBox="0 0 24 24" width="28" height="28"><path class="g" d="M3 6h7l2 2h9v11H3z"></path></svg></div>Documentos y datos que necesitamos para continuar</div><div class="underline"></div><ul><li><span class="check">✓</span><span>Copia de su INE o licencia de conducir vigente.</span></li><li><span class="check">✓</span><span>Dirección donde desea recibir el vehículo.</span></li><li><span class="check">✓</span><span>O, si lo prefiere, la concesionaria más cercana de su elección.</span></li><li><span class="check">✓</span><span>Horario más conveniente para la entrega.</span></li></ul></article>

@@ -170,3 +170,36 @@ archivo que parece una copia.
       despliegue, y de root si también se añadió allí).
 - [ ] Comprobar que ya no puedo entrar.
 - [ ] Guía de trabajo para los empleados.
+
+## 16 · Desplegar una versión nueva
+
+Usar **`./despliegue/desplegar.sh`**. Hace los pasos en el orden correcto y se
+detiene si algo no cuadra, en lugar de seguir adelante.
+
+El orden importa y no es opcional:
+
+1. Copia de seguridad, y **se abre** para comprobar que sirve.
+2. `git pull`.
+3. **Reconstruir la imagen.**
+4. Migrar la base de datos.
+5. **Comprobar que `alembic current` coincide con `head`.**
+6. Levantar y esperar a `healthy`.
+7. `/acceso` responde 200 y no hay trazas de error en el log.
+
+- [ ] El paso 1 **abre** la copia, no sólo la crea. Una copia truncada también
+      existe; existir no es servir.
+- [ ] El paso 3 va **antes** del 4. `docker compose run` levanta un contenedor
+      de la **imagen que ya existe**: si se migra sin reconstruir, ese contenedor
+      es el de la versión anterior y **ni siquiera tiene dentro el archivo de la
+      migración nueva**. Alembic termina diciendo que ha ido bien y no migra
+      nada. Pasó el 29-ago-2026 desplegando el Milestone 4 y no dio ningún
+      error: la única señal era que faltaba la línea `Running upgrade`.
+- [ ] El paso 5 no se salta nunca, y **no mira la salida de la migración**: le
+      pregunta a la base. Era esa salida la que decía "terminado" cuando no
+      había migrado nada. Si `current` y `head` no coinciden, el script **no
+      levanta el servicio**.
+- [ ] Si algo falla, volver atrás con
+      `./despliegue/restaurar.sh <la copia que imprimió el paso 1>`.
+- [ ] Una migración se prueba antes sobre una **copia** de la base de
+      producción, en ida **y** en vuelta, comprobando que después del rollback
+      los recuentos y las rutas del histórico quedan idénticos.

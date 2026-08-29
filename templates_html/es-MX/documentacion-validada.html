@@ -187,7 +187,22 @@ svg[width="58"] .w{stroke-width:1.03}
     box-sizing:content-box;
     width:calc(var(--design-width) * var(--print-scale));
     height:var(--print-height);
-    margin:0 auto;padding:0;overflow:hidden
+    margin:0 auto;padding:0;
+
+    /* Marco exterior, el mismo tratamiento que la pre-factura aprobada.
+       Va sobre la caja SIN escalar, que ya mide justo el documento, asi que
+       cuesta 2 px de ancho y 2 px de alto y NO milimetros. pdf.py ya descuenta
+       esos 2 px de la hoja util (MARCO_PX), de modo que anadirlo NO cambia la
+       escala: el hueco ya estaba reservado desde el Milestone 1.
+
+       El borde tiene que ir aqui y no en .page: el documento de dentro va
+       escalado con transform y recortado por este mismo overflow, asi que un
+       borde suyo se perderia por abajo y por la derecha. Junto al radio, es
+       ademas lo que redondea de verdad las esquinas del documento escalado. */
+    border:1px solid #d5dbe5;
+    border-radius:12px;
+    background:#fff;
+    overflow:hidden
   }
   .page{
     width:var(--design-width) !important;min-height:0 !important;
@@ -209,7 +224,7 @@ svg[width="58"] .w{stroke-width:1.03}
     <div class="protected">
       <div class="protected-badge">
         <span class="safe-badge-image" data-safe-icon>
-        <svg viewBox="0 0 24 24" width="58" height="58">
+        <svg viewBox="0 0 24 24" width="58" height="58" style="transform:translate(0.00px,2.19px)">
           <path class="fill-g" d="M12 1.8l7 3v6.3c0 5-3.3 8.3-7 10.9-3.7-2.6-7-5.9-7-10.9V4.8l7-3z"></path>
           <path class="w" d="M9 11.8l2 2.2 4.2-5"></path>
         </svg>
@@ -221,7 +236,7 @@ svg[width="58"] .w{stroke-width:1.03}
 
   <section class="hero">
     <div class="hero-check">
-      <svg viewBox="0 0 24 24" width="46" height="46"><path class="g" d="M5 12l4 4 10-10"></path></svg>
+      <svg viewBox="0 0 24 24" width="46" height="46" style="transform:translate(0.00px,1.92px)"><path class="g" d="M5 12l4 4 10-10"></path></svg>
     </div>
     <h1>Tu documentación ha sido validada</h1>
     <p>
@@ -245,14 +260,14 @@ svg[width="58"] .w{stroke-width:1.03}
     </article>
     <article class="summary-card">
       <div class="icon-orb">
-        <svg viewBox="0 0 24 24" width="44" height="44"><rect class="g" x="3.5" y="6" width="17" height="10.5" rx="2.6"></rect><path class="g" d="M6.2 13h4.8"></path><path class="g" d="M15.5 9.3h2.4"></path><circle class="go" cx="17.8" cy="17.2" r="3"></circle><path class="go" d="M16.8 17.2l.7.8 1.7-1.9"></path></svg>
+        <svg viewBox="0 0 24 24" width="44" height="44" style="transform:translate(-0.27px,-2.02px)"><rect class="g" x="3.5" y="6" width="17" height="10.5" rx="2.6"></rect><path class="g" d="M6.2 13h4.8"></path><path class="g" d="M15.5 9.3h2.4"></path><circle class="go" cx="17.8" cy="17.2" r="3"></circle><path class="go" d="M16.8 17.2l.7.8 1.7-1.9"></path></svg>
       </div>
       <h3>Pago de apartado<br>recibido</h3>
       <div class="value money" data-field="payment.deposit_amount">$5,000 MXN</div>
     </article>
     <article class="summary-card">
       <div class="icon-orb">
-        <svg viewBox="0 0 24 24" width="44" height="44"><rect class="g" x="3.5" y="6.2" width="14.5" height="10.6" rx="2.2"></rect><circle class="g" cx="10.7" cy="11.5" r="2.1"></circle><path class="g" d="M6 9h1.4M14 14h1.4"></path><path class="go" d="M16.5 19h4"></path><path class="go" d="M18.8 16.8 21 19l-2.2 2.2"></path></svg>
+        <svg viewBox="0 0 24 24" width="44" height="44" style="transform:translate(-0.46px,-3.12px)"><rect class="g" x="3.5" y="6.2" width="14.5" height="10.6" rx="2.2"></rect><circle class="g" cx="10.7" cy="11.5" r="2.1"></circle><path class="g" d="M6 9h1.4M14 14h1.4"></path><path class="go" d="M16.5 19h4"></path><path class="go" d="M18.8 16.8 21 19l-2.2 2.2"></path></svg>
       </div>
       <h3>Pago restante</h3>
       <div class="value money" data-field="payment.remaining_amount">$1,150,000 MXN</div>
@@ -260,7 +275,7 @@ svg[width="58"] .w{stroke-width:1.03}
     </article>
     <article class="summary-card">
       <div class="icon-orb">
-        <svg viewBox="0 0 24 24" width="44" height="44"><path class="g" d="M3 8h11v8H3z"></path><path class="g" d="M14 10h3l4 3v3h-7z"></path><circle class="g" cx="7" cy="18" r="2"></circle><circle class="g" cx="17" cy="18" r="2"></circle><path class="g" d="M5 6h6M3 12h3M2 15h2"></path></svg>
+        <svg viewBox="0 0 24 24" width="44" height="44" style="transform:translate(0.92px,-1.83px)"><path class="g" d="M3 8h11v8H3z"></path><path class="g" d="M14 10h3l4 3v3h-7z"></path><circle class="g" cx="7" cy="18" r="2"></circle><circle class="g" cx="17" cy="18" r="2"></circle><path class="g" d="M5 6h6M3 12h3M2 15h2"></path></svg>
       </div>
       <h3>Método de entrega</h3>
       <!-- El valor de muestra va en capitalizacion normal a proposito. El motor
@@ -305,7 +320,7 @@ svg[width="58"] .w{stroke-width:1.03}
     </article>
     <article class="step">
       <div class="step-no">2</div>
-      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><rect class="g" x="3.5" y="6.2" width="14.5" height="10.6" rx="2.2"></rect><circle class="g" cx="10.7" cy="11.5" r="2.1"></circle><path class="g" d="M6 9h1.4M14 14h1.4"></path><path class="go" d="M16.2 19h4.3"></path><path class="go" d="M18.2 16.9 20.5 19l-2.3 2.1"></path></svg></div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50" style="transform:translate(0.00px,-3.44px)"><rect class="g" x="3.5" y="6.2" width="14.5" height="10.6" rx="2.2"></rect><circle class="g" cx="10.7" cy="11.5" r="2.1"></circle><path class="g" d="M6 9h1.4M14 14h1.4"></path><path class="go" d="M16.2 19h4.3"></path><path class="go" d="M18.2 16.9 20.5 19l-2.3 2.1"></path></svg></div>
       <h4>Pago restante</h4><p data-field="doc_paso_pago">Realiza el pago restante en la misma cuenta bancaria indicada en tu pre-factura.</p>
     </article>
     <article class="step">
@@ -315,12 +330,12 @@ svg[width="58"] .w{stroke-width:1.03}
     </article>
     <article class="step">
       <div class="step-no">4</div>
-      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><circle class="g" cx="7.7" cy="8.2" r="2.8"></circle><path class="g" d="M3.8 17c1.2-2.5 2.8-3.6 4-3.6 1.3 0 2.9 1.1 4.1 3.6"></path><rect class="g" x="13" y="6" width="8" height="9" rx="1.6"></rect><path class="g" d="M15 4v4M19 4v4M13 9h8"></path><path class="go" d="M15.4 12h3.2"></path></svg></div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50" style="transform:translate(-0.83px,3.13px)"><circle class="g" cx="7.7" cy="8.2" r="2.8"></circle><path class="g" d="M3.8 17c1.2-2.5 2.8-3.6 4-3.6 1.3 0 2.9 1.1 4.1 3.6"></path><rect class="g" x="13" y="6" width="8" height="9" rx="1.6"></rect><path class="g" d="M15 4v4M19 4v4M13 9h8"></path><path class="go" d="M15.4 12h3.2"></path></svg></div>
       <h4>Coordinación de entrega</h4><p>Nuestro representante confirmará contigo la fecha, el horario y la modalidad de entrega.</p>
     </article>
     <article class="step">
       <div class="step-no">5</div>
-      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><path class="g" d="M3.5 11h12.5l2.8 3v4.4H3.5z"></path><path class="g" d="M6.8 11 8.3 7.5h6.2L16 11"></path><circle class="g" cx="7.5" cy="18.2" r="1.8"></circle><circle class="g" cx="15.8" cy="18.2" r="1.8"></circle><path class="go" d="M19 5.2l2 1v1.8c0 1.5-.9 2.6-2 3.4-1.1-.8-2-1.9-2-3.4V6.2l2-1z"></path><path class="go" d="M18.2 8.1l.6.6 1.2-1.4"></path></svg></div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50" style="transform:translate(-0.52px,-1.25px)"><path class="g" d="M3.5 11h12.5l2.8 3v4.4H3.5z"></path><path class="g" d="M6.8 11 8.3 7.5h6.2L16 11"></path><circle class="g" cx="7.5" cy="18.2" r="1.8"></circle><circle class="g" cx="15.8" cy="18.2" r="1.8"></circle><path class="go" d="M19 5.2l2 1v1.8c0 1.5-.9 2.6-2 3.4-1.1-.8-2-1.9-2-3.4V6.2l2-1z"></path><path class="go" d="M18.2 8.1l.6.6 1.2-1.4"></path></svg></div>
       <h4>Entrega segura</h4><p>Recibe la unidad, revísala con calma y formaliza la entrega únicamente si todo está conforme.</p>
     </article>
   </section>
@@ -328,16 +343,16 @@ svg[width="58"] .w{stroke-width:1.03}
   <section class="info">
     <div class="info-title"><svg viewBox="0 0 24 24" width="24" height="24"><path class="go" d="M12 3l8 3v6c0 5-3.6 8.2-8 10.8C7.6 20.2 4 17 4 12V6l8-3z"></path><path class="go" d="M12 8v5M12 16h.01"></path></svg>Información importante</div>
     <div class="info-grid">
-      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M4 19h16M4 7l8-4 8 4z"></path><path class="go" d="M17 15l2 2 3-3"></path></svg></div>Pagos únicamente por transferencia</div><p>Nuestro personal no está autorizado para recibir efectivo ni cheques. Realiza los pagos únicamente mediante depósito o transferencia bancaria a la cuenta indicada en tu documentación.</p></article>
-      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M4 13h9l1.7 2.2V18H4z"></path><path class="g" d="M6 13l1.1-2.6h5L13.2 13"></path><circle class="g" cx="6.5" cy="18" r="1.5"></circle><circle class="g" cx="12" cy="18" r="1.5"></circle><circle class="go" cx="17.2" cy="8.5" r="3.2"></circle><path class="go" d="M19.6 10.9 22 13.3"></path></svg></div>Revisión con total tranquilidad</div><p>Al recibir la unidad, podrás revisarla con calma antes de firmar y formalizar la entrega.</p></article>
-      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M19.5 9A7 7 0 1 0 20.8 14"></path><path class="g" d="M20 4v5h-5"></path><rect class="go" x="8.2" y="9.2" width="7.6" height="5.8" rx="1.2"></rect><circle class="go" cx="12" cy="12.1" r="1.2"></circle></svg></div>Garantía de reembolso</div><p>Si al recibir el vehículo detectas alguna diferencia respecto a la información indicada, infórmalo en ese momento. Si corresponde cancelar la operación, el reembolso total se realizará a tu cuenta bancaria en un máximo de <strong>24 horas hábiles, sin cargos adicionales.</strong></p></article>
+      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35" style="transform:translate(-0.72px,1.46px)"><path class="g" d="M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M4 19h16M4 7l8-4 8 4z"></path><path class="go" d="M17 15l2 2 3-3"></path></svg></div>Pagos únicamente por transferencia</div><p>Nuestro personal no está autorizado para recibir efectivo ni cheques. Realiza los pagos únicamente mediante depósito o transferencia bancaria a la cuenta indicada en tu documentación.</p></article>
+      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35" style="transform:translate(-1.46px,-0.58px)"><path class="g" d="M4 13h9l1.7 2.2V18H4z"></path><path class="g" d="M6 13l1.1-2.6h5L13.2 13"></path><circle class="g" cx="6.5" cy="18" r="1.5"></circle><circle class="g" cx="12" cy="18" r="1.5"></circle><circle class="go" cx="17.2" cy="8.5" r="3.2"></circle><path class="go" d="M19.6 10.9 22 13.3"></path></svg></div>Revisión con total tranquilidad</div><p>Al recibir la unidad, podrás revisarla con calma antes de firmar y formalizar la entrega.</p></article>
+      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35" style="transform:translate(-2.66px,-0.10px)"><path class="g" d="M19.5 9A7 7 0 1 0 20.8 14"></path><path class="g" d="M20 4v5h-5"></path><rect class="go" x="8.2" y="9.2" width="7.6" height="5.8" rx="1.2"></rect><circle class="go" cx="12" cy="12.1" r="1.2"></circle></svg></div>Garantía de reembolso</div><p>Si al recibir el vehículo detectas alguna diferencia respecto a la información indicada, infórmalo en ese momento. Si corresponde cancelar la operación, el reembolso total se realizará a tu cuenta bancaria en un máximo de <strong>24 horas hábiles, sin cargos adicionales.</strong></p></article>
       <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="g" d="M8.3 11.5c1.1-1.4 2.3-2.1 3.7-2.1s2.6.7 3.7 2.1c-1.1 1.4-2.3 2.1-3.7 2.1s-2.6-.7-3.7-2.1z"></path><circle class="g" cx="12" cy="11.5" r="1.2"></circle><path class="go" d="M14.9 16.2l.8.8 1.8-2"></path></svg></div>Compra supervisada</div><p>DulceAuto verifica cada etapa y mantiene registro de la operación para brindarte mayor seguridad durante todo el proceso.</p></article>
     </div>
   </section>
 
   <section class="bottom">
     <div class="card contact"><div class="card-orb"><svg viewBox="0 0 24 24" width="39" height="39"><path class="g" d="M5 8a4 4 0 0 1 4-4h1M19 8a4 4 0 0 0-4-4h-1M5 16a4 4 0 0 0 4 4h1M19 16a4 4 0 0 1-4 4h-1"></path><rect class="g" x="3" y="9" width="4" height="6" rx="1.5"></rect><rect class="g" x="17" y="9" width="4" height="6" rx="1.5"></rect></svg></div><div><h3>¿Dudas o comentarios?</h3><p>Tu representante está disponible para apoyarte durante todo el proceso.</p><div class="contact-line"><span class="mark">☎</span><span data-field="representative.phone">55 1234 5678</span></div><div class="contact-line"><span class="mark">✉</span><span data-field="representative.email">soporte@dulceauto.com</span></div><div class="contact-line"><span class="mark">◷</span>Lunes a viernes, 8:00 a. m.–4:00 p. m.</div></div></div>
-    <div class="card thanks"><div class="heart-orb"><svg viewBox="0 0 24 24" width="40" height="40"><path class="w" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.3A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg></div><div><h3>Gracias por tu confianza</h3><p>Seguimos contigo hasta la entrega, con un proceso claro, seguro y acompañado.</p><div class="final">¡Será un gusto entregarte tu nuevo vehículo!</div></div></div>
+    <div class="card thanks"><div class="heart-orb"><svg viewBox="0 0 24 24" width="40" height="40" style="transform:translate(0.00px,-1.94px)"><path class="w" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.3A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg></div><div><h3>Gracias por tu confianza</h3><p>Seguimos contigo hasta la entrega, con un proceso claro, seguro y acompañado.</p><div class="final">¡Será un gusto entregarte tu nuevo vehículo!</div></div></div>
   </section>
 
   <footer class="footer"><svg viewBox="0 0 24 24" width="27" height="27"><path class="n" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="n" d="M9 12l2 2 4-5"></path></svg><div>Este documento confirma el estado actual de tu operación y es informativo; no sustituye la factura final ni los términos y condiciones aplicables. Folio: <strong data-field="transaction.folio">RES-90010</strong>. La información es confidencial y está dirigida exclusivamente a <strong data-field="customer.name">Garcia Marquez Tomas</strong>.</div></footer>

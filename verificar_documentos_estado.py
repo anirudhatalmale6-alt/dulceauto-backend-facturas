@@ -149,6 +149,27 @@ for clave in NUEVOS:
     check(f"{clave}: ningun dato de la maqueta fuera de un hueco", total == 0, detalle)
 
 
+print("\n1b · El micro-polish esta puesto y no se cae solo")
+for clave in NUEVOS:
+    fuente = documents.cargar("es-MX", clave).fuente
+    # El marco va sobre .page-shell, la caja SIN escalar. Puesto en .page se
+    # perderia por abajo y por la derecha, porque el documento va escalado con
+    # transform y recortado por el overflow del shell.
+    marco = fuente.split("@media print")[-1]
+    check(f"{clave}: el marco va en el shell, no en la pagina escalada",
+          "border:1px solid #d5dbe5" in marco and "border-radius:12px" in marco)
+    check(f"{clave}: y la pagina de dentro sigue sin borde al imprimir",
+          "border:none !important" in marco)
+    # El grosor de icono igualado: una regla por tamano.
+    check(f"{clave}: grosor de icono igualado por tamano",
+          fuente.count('svg[width="') >= 8, f"{fuente.count('svg[width=')} reglas")
+
+pago = documents.cargar("es-MX", doctypes.PAGO_APARTADO).fuente
+check("la marca de agua no participa en la maqueta (posicion absoluta)",
+      ".handshake{" in pago.replace("\n", "") or "position:absolute" in pago)
+check("y el banner lleva fijado su alto de antes, para no encoger",
+      "min-height:127px" in pago)
+
 print("\n2 · Ningun hueco MUDO (marcado pero imposible de rellenar)")
 # Un hueco con hijos dentro lo trata el motor como hueco de atributos y NO le
 # cambia el contenido nunca. Es una regla a proposito -- mejor un hueco sin
