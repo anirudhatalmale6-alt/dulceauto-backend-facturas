@@ -131,6 +131,39 @@ svg{fill:none;stroke-linecap:round;stroke-linejoin:round}
    ESTE documento con SUS datos; una escala fija dejaria fuera media hoja en
    cuanto un nombre ocupara dos lineas.                                       */
 
+/* --- Grosor de los iconos ---------------------------------------------------
+
+   Todos los iconos son viewBox="0 0 24 24" con stroke-width fijo, asi que el
+   trazo se escala con el icono: medido, iba de 1,19 px en el de 15 px a 4,59 px
+   en el de 58 px. Casi cuatro veces. Por eso los grandes se veian pesados y los
+   pequenos casi transparentes, y no parecian de la misma familia.
+
+   Aqui se iguala el grosor REAL en pantalla (2,3 px) recalculando el
+   stroke-width para cada tamano: stroke = objetivo * 24 / tamano. No se
+   redibuja ningun icono, no cambia ningun trazado y no se mueve nada de sitio;
+   solo el grosor. Acordado con el cliente el 29-ago-2026.                     */
+/* Estos siete no llevan atributo width: los dimensiona el CSS a 21 px
+   (.vehicle-row svg y .contact-line svg), asi que hay que alcanzarlos por su
+   contenedor o se quedaban fuera de la igualada. Se vieron midiendo, no
+   leyendo el archivo. */
+.vehicle-row svg [class],.contact-line svg [class]{stroke-width:2.63}
+svg[width="15"] [class]{stroke-width:3.68}
+svg[width="15"] .w{stroke-width:4.00}
+svg[width="22"] [class]{stroke-width:2.51}
+svg[width="22"] .w{stroke-width:2.73}
+svg[width="28"] [class]{stroke-width:1.97}
+svg[width="28"] .w{stroke-width:2.14}
+svg[width="38"] [class]{stroke-width:1.45}
+svg[width="38"] .w{stroke-width:1.58}
+svg[width="40"] [class]{stroke-width:1.38}
+svg[width="40"] .w{stroke-width:1.50}
+svg[width="42"] [class]{stroke-width:1.31}
+svg[width="42"] .w{stroke-width:1.43}
+svg[width="46"] [class]{stroke-width:1.20}
+svg[width="46"] .w{stroke-width:1.30}
+svg[width="48"] [class]{stroke-width:1.15}
+svg[width="48"] .w{stroke-width:1.25}
+
 @page{size:A4 portrait;margin:8mm}
 
 @media print{

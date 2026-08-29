@@ -143,6 +143,40 @@ svg{fill:none;stroke-linecap:round;stroke-linejoin:round}
    caja de maquetacion, .page-shell lleva ya el ancho y el alto escalados, y los
    dos numeros los calcula pdf.py midiendo este documento con sus datos.      */
 
+/* --- Grosor de los iconos ---------------------------------------------------
+
+   Todos los iconos son viewBox="0 0 24 24" con stroke-width fijo, asi que el
+   trazo se escala con el icono: medido, iba de 1,19 px en el de 15 px a 4,59 px
+   en el de 58 px. Casi cuatro veces. Por eso los grandes se veian pesados y los
+   pequenos casi transparentes, y no parecian de la misma familia.
+
+   Aqui se iguala el grosor REAL en pantalla (2,3 px) recalculando el
+   stroke-width para cada tamano: stroke = objetivo * 24 / tamano. No se
+   redibuja ningun icono, no cambia ningun trazado y no se mueve nada de sitio;
+   solo el grosor. Acordado con el cliente el 29-ago-2026.                     */
+svg[width="22"] [class]{stroke-width:2.51}
+svg[width="22"] .w{stroke-width:2.73}
+svg[width="24"] [class]{stroke-width:2.30}
+svg[width="24"] .w{stroke-width:2.50}
+svg[width="27"] [class]{stroke-width:2.04}
+svg[width="27"] .w{stroke-width:2.22}
+svg[width="35"] [class]{stroke-width:1.58}
+svg[width="35"] .w{stroke-width:1.71}
+svg[width="39"] [class]{stroke-width:1.42}
+svg[width="39"] .w{stroke-width:1.54}
+svg[width="40"] [class]{stroke-width:1.38}
+svg[width="40"] .w{stroke-width:1.50}
+svg[width="44"] [class]{stroke-width:1.25}
+svg[width="44"] .w{stroke-width:1.36}
+svg[width="46"] [class]{stroke-width:1.20}
+svg[width="46"] .w{stroke-width:1.30}
+svg[width="50"] [class]{stroke-width:1.10}
+svg[width="50"] .w{stroke-width:1.20}
+svg[width="52"] [class]{stroke-width:1.06}
+svg[width="52"] .w{stroke-width:1.15}
+svg[width="58"] [class]{stroke-width:0.95}
+svg[width="58"] .w{stroke-width:1.03}
+
 @page{size:A4 portrait;margin:8mm}
 
 @media print{
@@ -229,7 +263,13 @@ svg{fill:none;stroke-linecap:round;stroke-linejoin:round}
         <svg viewBox="0 0 24 24" width="44" height="44"><path class="g" d="M3 8h11v8H3z"></path><path class="g" d="M14 10h3l4 3v3h-7z"></path><circle class="g" cx="7" cy="18" r="2"></circle><circle class="g" cx="17" cy="18" r="2"></circle><path class="g" d="M5 6h6M3 12h3M2 15h2"></path></svg>
       </div>
       <h3>Método de entrega</h3>
-      <div class="value delivery" data-field="delivery.method">TRANSPORTE TERRESTRE A TU DOMICILIO</div>
+      <!-- El valor de muestra va en capitalizacion normal a proposito. El motor
+           copia las mayusculas del hueco cuando la muestra esta toda en
+           mayusculas (es lo que hace que la pastilla de estado siga gritando),
+           y aqui el texto lo escribe el operador: una frase larga entera en
+           mayusculas ocupa cuatro lineas y grita. Decidido con el cliente el
+           29-ago-2026. -->
+      <div class="value delivery" data-field="delivery.method">Transporte terrestre a tu domicilio</div>
       <div class="sub">O entrega en una sede<br>o concesionaria cercana.</div>
     </article>
     <article class="summary-card">
