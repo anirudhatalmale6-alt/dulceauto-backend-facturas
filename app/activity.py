@@ -42,6 +42,11 @@ FAQ_UPDATED = "faq_updated"
 FAQ_DELETED = "faq_deleted"
 NOTE_REVIEWED = "note_reviewed"
 
+# Retirada de un documento del historico. No se hace desde el panel: no hay
+# boton de borrar un snapshot, y es a proposito. Se registra igualmente para que
+# quede explicado por que un historico tiene un hueco.
+SNAPSHOT_REMOVED = "snapshot_removed"
+
 LABELS = {
     LOGIN: "Inicio de sesión",
     LOGOUT: "Cierre de sesión",
@@ -66,6 +71,7 @@ LABELS = {
     FAQ_UPDATED: "Entrada de la guía modificada",
     FAQ_DELETED: "Entrada de la guía eliminada",
     NOTE_REVIEWED: "Nota revisada",
+    SNAPSHOT_REMOVED: "Documento retirado del histórico",
 }
 
 
