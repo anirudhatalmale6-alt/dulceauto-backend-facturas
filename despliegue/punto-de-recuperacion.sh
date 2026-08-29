@@ -138,6 +138,15 @@ COMMIT_CORTO="$(git rev-parse --short HEAD)"
   echo "  4. tar xzf $(basename "$BASE").nginx.tar.gz -C /   # si hace falta nginx"
   echo "  5. docker compose build && docker compose up -d"
   echo "  6. comprobar que alembic current == $(echo "$RECUENTOS" | awk '/^alembic/{print $2}')"
+  echo
+  echo "LO QUE NO VA EN LA COPIA, Y POR QUE"
+  echo "  - Los certificados de /etc/letsencrypt NO se copian. Son secretos, caducan"
+  echo "    cada 90 dias y se vuelven a emitir solos. En un servidor nuevo:"
+  echo "        sudo certbot --nginx -d admin.mxenar.pro"
+  echo "    La configuracion de nginx que si esta en la copia los referencia, asi que"
+  echo "    hay que emitirlos ANTES de recargar nginx o no arrancara."
+  echo "  - El .env va en su propio archivo, no en este. Sin el, el panel arranca con"
+  echo "    otra clave de firma y las sesiones y la Master Password no funcionan."
 } | sudo tee "$INVENTARIO" > /dev/null
 echo "   $INVENTARIO"
 
