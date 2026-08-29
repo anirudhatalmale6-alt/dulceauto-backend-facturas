@@ -7,12 +7,15 @@
   HTML dentro de esta página: si se copiara, el CSS del panel podría cambiar el
   aspecto de la factura y la vista previa dejaría de ser una prueba de nada.
 
-  El iframe se pinta a 900 px, que es el ancho para el que está diseñado el A4,
-  y se reduce con transform: scale(). Reducir con scale no cambia la
-  maquetación; estrechar el iframe sí la cambiaría, porque el CSS aprobado tiene
-  puntos de ruptura para móvil.
+  El iframe se pinta al ancho de diseño DEL DOCUMENTO que se está viendo (900 px
+  la pre-factura, 1038 px los dos complementarios) y se reduce con
+  transform: scale(). Reducir con scale no cambia la maquetación; estrechar el
+  iframe sí la cambiaría, porque el CSS aprobado tiene puntos de ruptura para
+  móvil. Ese ancho lo dice doctypes, para que la vista previa y el PDF usen
+  exactamente el mismo número.
 #}
-{% set alto = 1360 %}
+{% set ancho = tipo_doc.ancho %}
+{% set alto = 1360 if tipo_doc.clave == 'factura' else 1760 %}
 {% block content %}
 
 <div class="card">
@@ -26,11 +29,11 @@
     </div>
     <div class="actions">
       <a class="btn ghost" href="/facturas/{{ invoice.id }}/editar">Volver al editor</a>
-      <a class="btn ghost" href="/facturas/{{ invoice.id }}/documento" target="_blank">Abrir a tamaño real</a>
+      <a class="btn ghost" href="/facturas/{{ invoice.id }}/documento?doc={{ tipo_doc.clave }}" target="_blank">Abrir a tamaño real</a>
       {% if snapshots %}
-        <a class="btn ghost" href="/facturas/{{ invoice.id }}/pdf">Descargar PDF</a>
+        <a class="btn ghost" href="/facturas/{{ invoice.id }}/pdf?doc={{ tipo_doc.clave }}">Descargar PDF</a>
       {% endif %}
-      <form method="post" action="/facturas/{{ invoice.id }}/pdf" style="display:inline">
+      <form method="post" action="/facturas/{{ invoice.id }}/pdf?doc={{ tipo_doc.clave }}" style="display:inline">
         <button class="btn gold" type="submit">
           {{ 'Volver a generar el PDF' if snapshots else 'Generar PDF' }}
         </button>
@@ -38,11 +41,28 @@
     </div>
   </div>
 
+  {# Los tres documentos de la reserva. Cambiar de pestaña NO genera nada: solo
+     enseña. El PDF sale únicamente del botón de arriba, que fue una condición
+     del cliente para no emitir versiones por accidente. #}
+  <div class="preview-bar" style="margin-top:10px">
+    <span class="small muted">Documento</span>
+    {% for t in tipos_doc %}
+      <a class="btn ghost {{ 'is-on' if t.clave == tipo_doc.clave }}"
+         href="/facturas/{{ invoice.id }}/vista-previa?doc={{ t.clave }}&zoom={{ zoom }}">{{ t.nombre }}</a>
+    {% endfor %}
+    {% if doc_sugerido and doc_sugerido != tipo_doc.clave %}
+      <span class="info-chip">Para este estado corresponde
+        <b>{{ tipos_doc | selectattr('clave', 'equalto', doc_sugerido) | map(attribute='nombre') | first }}</b></span>
+    {% elif doc_sugerido and doc_sugerido == tipo_doc.clave %}
+      <span class="info-chip">Es el documento que corresponde a este estado</span>
+    {% endif %}
+  </div>
+
   <div class="preview-bar">
     <span class="small muted">Zoom</span>
     {% for z in zooms %}
       <a class="btn ghost {{ 'is-on' if z == zoom }}"
-         href="/facturas/{{ invoice.id }}/vista-previa?zoom={{ z }}">{{ (z * 100) | int }}%</a>
+         href="/facturas/{{ invoice.id }}/vista-previa?zoom={{ z }}&doc={{ tipo_doc.clave }}">{{ (z * 100) | int }}%</a>
     {% endfor %}
     <span class="info-chip">Moneda <b>{{ invoice.pricing_currency or market.currency }}</b></span>
     <span class="info-chip">{{ market.account_label }}</span>
@@ -62,10 +82,10 @@
        sigue midiendo 900 px por dentro, que es su ancho de diseño; sin esta
        caja, el hueco que deja al reducirse quedaría en blanco a la derecha. #}
     <div class="preview-page"
-         style="width:{{ (900 * zoom) | round | int }}px;height:{{ (alto * zoom) | round | int }}px">
-      <iframe class="preview-frame" title="Vista previa de {{ invoice.folio }}"
-              src="/facturas/{{ invoice.id }}/documento"
-              style="transform:scale({{ zoom }});width:900px;height:{{ alto }}px"></iframe>
+         style="width:{{ (ancho * zoom) | round | int }}px;height:{{ (alto * zoom) | round | int }}px">
+      <iframe class="preview-frame" title="Vista previa de {{ invoice.folio }} · {{ tipo_doc.nombre }}"
+              src="/facturas/{{ invoice.id }}/documento?doc={{ tipo_doc.clave }}"
+              style="transform:scale({{ zoom }});width:{{ ancho }}px;height:{{ alto }}px"></iframe>
     </div>
   </div>
 </div>
@@ -74,10 +94,11 @@
 <div class="card" style="margin-top:16px">
   <div class="toolbar">
     <div>
-      <h2>Historial de PDF</h2>
+      <h2>Historial de PDF · {{ tipo_doc.nombre }}</h2>
       <div class="small muted">
         Cada generación guarda una copia congelada del documento con sus propias
         imágenes. Cambiar el logotipo o la cuenta bancaria no altera un PDF ya emitido.
+        Cada documento lleva su propia numeración: generar éste no toca a los otros.
       </div>
     </div>
   </div>
@@ -91,7 +112,7 @@
           <td>{{ markets[s.locale].label if s.locale in markets else s.locale }}</td>
           <td class="small muted">{{ s.created_at.strftime('%d %b %Y · %H:%M') }} UTC</td>
           <td class="actions">
-            <a class="btn ghost" href="/facturas/{{ invoice.id }}/pdf?version={{ s.version }}">Descargar</a>
+            <a class="btn ghost" href="/facturas/{{ invoice.id }}/pdf?version={{ s.version }}&doc={{ tipo_doc.clave }}">Descargar</a>
           </td>
         </tr>
       {% endfor %}

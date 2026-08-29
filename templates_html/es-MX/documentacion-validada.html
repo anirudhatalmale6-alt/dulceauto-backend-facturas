@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-doc-title>DulceAuto · Documentación validada · Premium final</title>
+<style>
+/* Paleta.
+   El azul y el dorado se igualan a los de la factura aprobada (factura.css):
+   --navy #0b1f3a y --gold #e0aa35; --navy2 es su --steel. Los verdes se
+   MANTIENEN: son la identidad de este documento y cambiarlos seria rediseniar
+   la maqueta, que es justo lo que el cliente pidio no hacer. Solo cambian
+   valores de color; ni un selector ni una medida se han tocado. */
+:root{
+  --navy:#0b1f3a;
+  --navy2:#23436f;
+  --green:#07563F;
+  --green2:#0B6C50;
+  --green3:#0E4839;
+  --gold:#e0aa35;
+  --gold2:#f0c46a;
+  --ink:#19263D;
+  --muted:#607089;
+  --line:#D8E0EA;
+  --line2:#E8EDF2;
+  --paper:#FFFFFF;
+  --soft:#F8FAFC;
+  --softGreen:#F4FAF7;
+  --softGold:#FFF9EE;
+
+  /* Ancho al que esta calibrado el diseno. Ver el bloque de impresion del
+     final: el documento conserva este ancho y se escala entero, en vez de
+     remaquetarse dentro de 210 mm. --print-scale y --print-height los calcula
+     pdf.py midiendo la altura real de ESTE documento con SUS datos. */
+  --design-width:1038px;
+  --print-scale:1;
+  --print-height:0px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#EEF2F6;color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif;padding:18px;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+.page{
+  width:1038px;min-height:1469px;margin:0 auto;background:var(--paper);
+  border:1px solid #D2DAE5;border-radius:30px;padding:26px 28px 22px;
+  box-shadow:0 18px 46px rgba(13,35,65,.08);overflow:hidden
+}
+svg{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.g{stroke:var(--green);stroke-width:1.9}
+.go{stroke:var(--gold);stroke-width:1.9}
+.n{stroke:var(--navy);stroke-width:1.9}
+.w{stroke:#fff;stroke-width:2.1}
+.fill-g{fill:var(--green);stroke:none}
+.fill-go{fill:var(--gold);stroke:none}
+
+.header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-logo{
+  width:58px;height:58px;border-radius:15px;background:linear-gradient(180deg,var(--navy2),var(--navy));
+  display:grid;place-items:center;color:#fff;font-size:25px;font-weight:900;box-shadow:0 10px 20px rgba(14,42,88,.18)
+}
+.brand-name{font-size:41px;letter-spacing:-1px;font-weight:900;color:var(--navy)}
+.brand-name span{display:inline-block;margin-left:6px;padding:3px 10px 4px;border-radius:8px;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#fff;font-size:26px;vertical-align:7px}
+.protected{display:flex;align-items:center;gap:10px;color:var(--green);font-size:18px;font-weight:900;line-height:1.05}
+.protected-badge{width:62px;height:62px;display:grid;place-items:center}
+
+.hero{text-align:center;margin-top:2px}
+.hero-check{width:84px;height:84px;border:4px solid var(--green);border-radius:50%;margin:0 auto 8px;display:grid;place-items:center;position:relative;background:linear-gradient(180deg,#fff,#FAFDFC)}
+.hero-check:after{content:"✦";position:absolute;right:-24px;top:-12px;color:var(--gold);font-size:31px}
+.hero h1{margin:0;color:#063E31;font-size:51px;line-height:1.03;font-weight:900;letter-spacing:-1.25px}
+.hero p{margin:11px auto 0;max-width:900px;font-size:17.5px;line-height:1.42;color:#223149}
+.hero p strong{color:var(--navy)}
+.auth-pill{margin:17px auto 0;width:max-content;max-width:100%;display:flex;align-items:center;gap:11px;padding:10px 26px;border-radius:999px;background:linear-gradient(180deg,#0C7558,#064838);color:#fff;font-size:19px;font-weight:900;box-shadow:0 8px 18px rgba(7,83,62,.15)}
+
+.summary{margin-top:18px;border:1px solid #D4DFD9;border-radius:23px;background:linear-gradient(180deg,#FDFFFE,#F7FBF9);display:grid;grid-template-columns:repeat(5,1fr);overflow:hidden}
+.summary-card{min-height:204px;padding:16px 12px 14px;text-align:center;position:relative}
+.summary-card:not(:last-child):after{content:"";position:absolute;right:0;top:22px;bottom:22px;width:1px;background:#DFE7E2}
+.icon-orb{width:76px;height:76px;border-radius:50%;margin:0 auto 11px;display:grid;place-items:center;background:radial-gradient(circle at 30% 30%,#fff 0,#F6F8F6 45%,#EDF4EF 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.summary-card h3{margin:0;color:#15243C;font-size:15px;line-height:1.18}
+.summary-card .value{margin-top:10px;color:#12243D;font-size:18px;font-weight:900;line-height:1.18}
+.summary-card .value.money{font-size:19.2px;color:#0A503E;font-variant-numeric:tabular-nums;white-space:nowrap}
+.summary-card .value.delivery{font-size:17px;color:#0E4034}
+.summary-card .sub{margin-top:8px;color:#3F4E64;font-size:12.6px;line-height:1.36}
+
+.protection{margin:13px auto 0;width:530px;max-width:100%;border:1px solid #ABCABD;background:#F8FCFA;border-radius:18px;display:grid;grid-template-columns:82px 1.05fr 1fr;align-items:center;overflow:hidden}
+.protection .p-icon{display:grid;place-items:center;padding:13px}
+.protection .p-main{padding:13px 8px 13px 0}
+.protection .p-title{font-size:15px;font-weight:800;color:#22334A}
+.protection .p-date{font-size:26px;font-weight:900;color:var(--green);line-height:1.1}
+.protection .p-text{border-left:1px solid #CFDDD6;padding:0 18px;color:#3B4B61;font-size:13.6px;line-height:1.34}
+
+.section-title{margin:14px 0 8px;display:flex;align-items:center;gap:16px}
+.section-title:before,.section-title:after{content:"";height:1px;background:#D1DAE6;flex:1}
+.section-title b{font-size:24px;color:var(--navy);letter-spacing:-.2px}
+
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.step{text-align:center;position:relative;padding:0 7px}
+.step:not(:last-child):after{content:"";position:absolute;top:66px;right:-20%;width:40%;border-top:3px dotted #BCC5D2}
+.step-no{width:36px;height:36px;border-radius:50%;margin:0 auto 8px;background:var(--green);color:#fff;font-size:20px;font-weight:900;display:grid;place-items:center}
+.step-icon{width:78px;height:78px;border-radius:50%;margin:0 auto 8px;background:radial-gradient(circle at 30% 30%,#fff 0,#F7FAF7 50%,#EEF5F0 100%);display:grid;place-items:center}
+.step h4{margin:0 0 6px;color:#073F32;font-size:14.8px}
+.step p{margin:0;color:#35445C;font-size:12.7px;line-height:1.38}
+
+.info{margin-top:16px;border:1px solid #EFCF8A;border-radius:20px;background:#FFFDF8;padding:13px 15px 15px}
+.info-title{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--navy);font-size:21px;font-weight:900}
+.info-grid{display:grid;grid-template-columns:repeat(4,1fr)}
+.info-item{padding:4px 15px 5px;min-height:180px}
+.info-item:not(:last-child){border-right:1px solid #EAD8AF}
+.info-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:#183053;font-size:14.6px;font-weight:900;line-height:1.18}
+.info-orb{width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff 0,#F8F8F2 55%,#EEF3EE 100%);display:grid;place-items:center}
+.info-item p{margin:0;color:#30405B;font-size:12.7px;line-height:1.42}
+.info-item strong{color:#163052}
+
+.bottom{margin-top:13px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{border:1px solid #CEDAD4;border-radius:18px;background:#FBFDFC;min-height:126px;padding:15px 18px}
+.contact,.thanks{display:grid;grid-template-columns:84px 1fr;gap:12px;align-items:center}
+.card-orb{width:68px;height:68px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff 0,#F3F8F5 52%,#E9F2ED 100%);display:grid;place-items:center}
+.heart-orb{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#0D7758,#044434);display:grid;place-items:center;box-shadow:0 10px 18px rgba(4,68,52,.16)}
+.card h3{margin:0;color:var(--navy);font-size:18px}
+.card p{margin:4px 0 0;color:#36455E;font-size:13px;line-height:1.42}
+.contact-line{margin-top:7px;color:#1D2F4D;font-size:13.4px;font-weight:800;line-height:1.28}
+.contact-line .mark{color:var(--green);margin-right:7px}
+.final{margin-top:8px;color:var(--navy);font-size:16px;font-weight:900}
+.footer{margin-top:10px;border:1px solid #D7DFEB;border-radius:14px;padding:9px 13px;display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;color:#40516C;font-size:11.8px;line-height:1.38}
+
+
+.summary,.protection,.steps,.info,.bottom,.footer{break-inside:avoid;page-break-inside:avoid}
+
+/* Logotipo del perfil de marca. El motor sustituye el contenido de .brand por
+   un <img class="brand-logo"> cuando la factura lleva perfil con logotipo; sin
+   perfil no se toca nada y se queda la marca aprobada. Hueco de alto fijo: un
+   logotipo grande no puede estirar la cabecera. */
+.brand img.brand-logo{height:58px;width:auto;max-width:250px;object-fit:scale-down;object-position:left center;display:block}
+
+/* --- Impresion -------------------------------------------------------------
+
+   El bloque original imprimia con .page{width:300mm;zoom:.70}. Ese 0,70 es un
+   numero fijo escrito a mano: entra en una hoja con los datos de la maqueta y
+   se sale en cuanto un nombre ocupa dos lineas. Ademas el zoom remaqueta, y el
+   diseno esta calibrado a 1038 px.
+
+   Aqui se hace lo mismo que en la factura aprobada: el documento conserva su
+   ancho de diseno y se escala entero con transform. Como transform no reduce la
+   caja de maquetacion, .page-shell lleva ya el ancho y el alto escalados, y los
+   dos numeros los calcula pdf.py midiendo este documento con sus datos.      */
+
+@page{size:A4 portrait;margin:8mm}
+
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
+  html,body{width:100%;min-height:0;margin:0;padding:0;background:#fff}
+
+  .page-shell{
+    box-sizing:content-box;
+    width:calc(var(--design-width) * var(--print-scale));
+    height:var(--print-height);
+    margin:0 auto;padding:0;overflow:hidden
+  }
+  .page{
+    width:var(--design-width) !important;min-height:0 !important;
+    transform:scale(var(--print-scale));transform-origin:top left;
+    border:none !important;border-radius:0 !important;box-shadow:none !important;
+    zoom:1 !important
+  }
+}
+</style>
+</head>
+<body>
+<div class="page-shell">
+<main class="page">
+  <header class="header">
+    <div class="brand" data-logo aria-label="DulceAuto">
+      <div class="brand-logo">DA</div>
+      <div class="brand-name">DulceAuto<span>MX</span></div>
+    </div>
+    <div class="protected">
+      <div class="protected-badge">
+        <span class="safe-badge-image" data-safe-icon>
+        <svg viewBox="0 0 24 24" width="58" height="58">
+          <path class="fill-g" d="M12 1.8l7 3v6.3c0 5-3.3 8.3-7 10.9-3.7-2.6-7-5.9-7-10.9V4.8l7-3z"></path>
+          <path class="w" d="M9 11.8l2 2.2 4.2-5"></path>
+        </svg>
+        </span>
+      </div>
+      <div>COMPRA<br>PROTEGIDA</div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-check">
+      <svg viewBox="0 0 24 24" width="46" height="46"><path class="g" d="M5 12l4 4 10-10"></path></svg>
+    </div>
+    <h1>Tu documentación ha sido validada</h1>
+    <p>
+      <span data-field="customer.name">Garcia Marquez Tomas</span>, hemos confirmado tu apartado de
+      <strong data-field="payment.deposit_amount">$5,000 MXN</strong> y validado correctamente la documentación recibida.
+      <strong>Tu expediente está completo y listo para continuar.</strong> <span data-field="doc_estado_frase">Solo falta acreditar el pago restante para autorizar y programar la entrega de tu vehículo.</span>
+    </p>
+    <div class="auth-pill">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path class="w" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="w" d="M9 12l2 2 4-5"></path></svg>
+      <span><span data-field="estado">Pre-reserva confirmada</span> &nbsp;·&nbsp; <span data-field="transaction.authorization">AUT-2026-87252</span></span>
+    </div>
+  </section>
+
+  <section class="summary">
+    <article class="summary-card">
+      <div class="icon-orb">
+        <svg viewBox="0 0 24 24" width="44" height="44"><circle class="g" cx="12" cy="8" r="4"></circle><path class="g" d="M4 20c1.8-3.4 4.7-5 8-5s6.2 1.6 8 5"></path></svg>
+      </div>
+      <h3>Cliente</h3>
+      <div class="value" data-field="customer.name">Garcia Marquez Tomas</div>
+    </article>
+    <article class="summary-card">
+      <div class="icon-orb">
+        <svg viewBox="0 0 24 24" width="44" height="44"><rect class="g" x="3.5" y="6" width="17" height="10.5" rx="2.6"></rect><path class="g" d="M6.2 13h4.8"></path><path class="g" d="M15.5 9.3h2.4"></path><circle class="go" cx="17.8" cy="17.2" r="3"></circle><path class="go" d="M16.8 17.2l.7.8 1.7-1.9"></path></svg>
+      </div>
+      <h3>Pago de apartado<br>recibido</h3>
+      <div class="value money" data-field="payment.deposit_amount">$5,000 MXN</div>
+    </article>
+    <article class="summary-card">
+      <div class="icon-orb">
+        <svg viewBox="0 0 24 24" width="44" height="44"><rect class="g" x="3.5" y="6.2" width="14.5" height="10.6" rx="2.2"></rect><circle class="g" cx="10.7" cy="11.5" r="2.1"></circle><path class="g" d="M6 9h1.4M14 14h1.4"></path><path class="go" d="M16.5 19h4"></path><path class="go" d="M18.8 16.8 21 19l-2.2 2.2"></path></svg>
+      </div>
+      <h3>Pago restante</h3>
+      <div class="value money" data-field="payment.remaining_amount">$1,150,000 MXN</div>
+      <div class="sub" data-field="doc_restante_sub">Pendiente para autorizar y programar la entrega.</div>
+    </article>
+    <article class="summary-card">
+      <div class="icon-orb">
+        <svg viewBox="0 0 24 24" width="44" height="44"><path class="g" d="M3 8h11v8H3z"></path><path class="g" d="M14 10h3l4 3v3h-7z"></path><circle class="g" cx="7" cy="18" r="2"></circle><circle class="g" cx="17" cy="18" r="2"></circle><path class="g" d="M5 6h6M3 12h3M2 15h2"></path></svg>
+      </div>
+      <h3>Método de entrega</h3>
+      <div class="value delivery" data-field="delivery.method">TRANSPORTE TERRESTRE A TU DOMICILIO</div>
+      <div class="sub">O entrega en una sede<br>o concesionaria cercana.</div>
+    </article>
+    <article class="summary-card">
+      <div class="icon-orb">
+        <svg viewBox="0 0 24 24" width="44" height="44"><rect class="g" x="4" y="5" width="16" height="15" rx="2.5"></rect><path class="g" d="M8 3v4M16 3v4M4 9h16"></path><path class="go" d="M9 14l2 2 4-4"></path></svg>
+      </div>
+      <h3>Entrega estimada</h3>
+      <!-- El valor de muestra va SIN <br>: un hueco con hijos dentro es, para el
+           motor, un hueco de atributos, y no se rellenaria nunca (regla a
+           proposito, para no tragarse marcado por accidente). Los saltos de
+           linea del rango los pone el motor, que es el unico que sabe si hay
+           una fecha o dos. -->
+      <div class="value delivery" data-field="delivery.estimated">LUNES 25/08 A MÁS TARDAR MIÉRCOLES 26/08</div>
+      <div class="sub" data-field="doc_entrega_sub">Sujeto a confirmación del pago restante.</div>
+    </article>
+  </section>
+
+  <section class="protection">
+    <div class="p-icon">
+      <svg viewBox="0 0 24 24" width="52" height="52"><path class="g" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="g" d="M9 12l2 2 4-5"></path></svg>
+    </div>
+    <div class="p-main"><div class="p-title">Vigencia de la protección</div><div class="p-date" data-field="protection.until">29/08/2026</div></div>
+    <div class="p-text">Tu operación se mantiene protegida hasta esta fecha conforme al proceso indicado.</div>
+  </section>
+
+  <div class="section-title"><b>¿Qué sigue?</b></div>
+
+  <section class="steps">
+    <article class="step">
+      <div class="step-no">1</div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><path class="g" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="g" d="M9 12l2 2 4-5"></path></svg></div>
+      <h4>Protección activa</h4><p>Tu apartado y documentación validada mantienen protegida tu operación hasta el <span data-field="protection.until">29/08/2026</span>.</p>
+    </article>
+    <article class="step">
+      <div class="step-no">2</div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><rect class="g" x="3.5" y="6.2" width="14.5" height="10.6" rx="2.2"></rect><circle class="g" cx="10.7" cy="11.5" r="2.1"></circle><path class="g" d="M6 9h1.4M14 14h1.4"></path><path class="go" d="M16.2 19h4.3"></path><path class="go" d="M18.2 16.9 20.5 19l-2.3 2.1"></path></svg></div>
+      <h4>Pago restante</h4><p data-field="doc_paso_pago">Realiza el pago restante en la misma cuenta bancaria indicada en tu pre-factura.</p>
+    </article>
+    <article class="step">
+      <div class="step-no">3</div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><path class="g" d="M6 4h12v16l-2-1.4L14 20l-2-1.4L10 20l-2-1.4L6 20V4z"></path><path class="g" d="M9 8h6M9 11h5"></path><path class="go" d="M12 17v-4"></path><path class="go" d="M10.3 14.7 12 13l1.7 1.7"></path></svg></div>
+      <h4>Envío del comprobante</h4><p>Comparte tu comprobante para validar el pago y liberar la coordinación de entrega.</p>
+    </article>
+    <article class="step">
+      <div class="step-no">4</div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><circle class="g" cx="7.7" cy="8.2" r="2.8"></circle><path class="g" d="M3.8 17c1.2-2.5 2.8-3.6 4-3.6 1.3 0 2.9 1.1 4.1 3.6"></path><rect class="g" x="13" y="6" width="8" height="9" rx="1.6"></rect><path class="g" d="M15 4v4M19 4v4M13 9h8"></path><path class="go" d="M15.4 12h3.2"></path></svg></div>
+      <h4>Coordinación de entrega</h4><p>Nuestro representante confirmará contigo la fecha, el horario y la modalidad de entrega.</p>
+    </article>
+    <article class="step">
+      <div class="step-no">5</div>
+      <div class="step-icon"><svg viewBox="0 0 24 24" width="50" height="50"><path class="g" d="M3.5 11h12.5l2.8 3v4.4H3.5z"></path><path class="g" d="M6.8 11 8.3 7.5h6.2L16 11"></path><circle class="g" cx="7.5" cy="18.2" r="1.8"></circle><circle class="g" cx="15.8" cy="18.2" r="1.8"></circle><path class="go" d="M19 5.2l2 1v1.8c0 1.5-.9 2.6-2 3.4-1.1-.8-2-1.9-2-3.4V6.2l2-1z"></path><path class="go" d="M18.2 8.1l.6.6 1.2-1.4"></path></svg></div>
+      <h4>Entrega segura</h4><p>Recibe la unidad, revísala con calma y formaliza la entrega únicamente si todo está conforme.</p>
+    </article>
+  </section>
+
+  <section class="info">
+    <div class="info-title"><svg viewBox="0 0 24 24" width="24" height="24"><path class="go" d="M12 3l8 3v6c0 5-3.6 8.2-8 10.8C7.6 20.2 4 17 4 12V6l8-3z"></path><path class="go" d="M12 8v5M12 16h.01"></path></svg>Información importante</div>
+    <div class="info-grid">
+      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M4 19h16M4 7l8-4 8 4z"></path><path class="go" d="M17 15l2 2 3-3"></path></svg></div>Pagos únicamente por transferencia</div><p>Nuestro personal no está autorizado para recibir efectivo ni cheques. Realiza los pagos únicamente mediante depósito o transferencia bancaria a la cuenta indicada en tu documentación.</p></article>
+      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M4 13h9l1.7 2.2V18H4z"></path><path class="g" d="M6 13l1.1-2.6h5L13.2 13"></path><circle class="g" cx="6.5" cy="18" r="1.5"></circle><circle class="g" cx="12" cy="18" r="1.5"></circle><circle class="go" cx="17.2" cy="8.5" r="3.2"></circle><path class="go" d="M19.6 10.9 22 13.3"></path></svg></div>Revisión con total tranquilidad</div><p>Al recibir la unidad, podrás revisarla con calma antes de firmar y formalizar la entrega.</p></article>
+      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M19.5 9A7 7 0 1 0 20.8 14"></path><path class="g" d="M20 4v5h-5"></path><rect class="go" x="8.2" y="9.2" width="7.6" height="5.8" rx="1.2"></rect><circle class="go" cx="12" cy="12.1" r="1.2"></circle></svg></div>Garantía de reembolso</div><p>Si al recibir el vehículo detectas alguna diferencia respecto a la información indicada, infórmalo en ese momento. Si corresponde cancelar la operación, el reembolso total se realizará a tu cuenta bancaria en un máximo de <strong>24 horas hábiles, sin cargos adicionales.</strong></p></article>
+      <article class="info-item"><div class="info-head"><div class="info-orb"><svg viewBox="0 0 24 24" width="35" height="35"><path class="g" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="g" d="M8.3 11.5c1.1-1.4 2.3-2.1 3.7-2.1s2.6.7 3.7 2.1c-1.1 1.4-2.3 2.1-3.7 2.1s-2.6-.7-3.7-2.1z"></path><circle class="g" cx="12" cy="11.5" r="1.2"></circle><path class="go" d="M14.9 16.2l.8.8 1.8-2"></path></svg></div>Compra supervisada</div><p>DulceAuto verifica cada etapa y mantiene registro de la operación para brindarte mayor seguridad durante todo el proceso.</p></article>
+    </div>
+  </section>
+
+  <section class="bottom">
+    <div class="card contact"><div class="card-orb"><svg viewBox="0 0 24 24" width="39" height="39"><path class="g" d="M5 8a4 4 0 0 1 4-4h1M19 8a4 4 0 0 0-4-4h-1M5 16a4 4 0 0 0 4 4h1M19 16a4 4 0 0 1-4 4h-1"></path><rect class="g" x="3" y="9" width="4" height="6" rx="1.5"></rect><rect class="g" x="17" y="9" width="4" height="6" rx="1.5"></rect></svg></div><div><h3>¿Dudas o comentarios?</h3><p>Tu representante está disponible para apoyarte durante todo el proceso.</p><div class="contact-line"><span class="mark">☎</span><span data-field="representative.phone">55 1234 5678</span></div><div class="contact-line"><span class="mark">✉</span><span data-field="representative.email">soporte@dulceauto.com</span></div><div class="contact-line"><span class="mark">◷</span>Lunes a viernes, 8:00 a. m.–4:00 p. m.</div></div></div>
+    <div class="card thanks"><div class="heart-orb"><svg viewBox="0 0 24 24" width="40" height="40"><path class="w" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.3A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg></div><div><h3>Gracias por tu confianza</h3><p>Seguimos contigo hasta la entrega, con un proceso claro, seguro y acompañado.</p><div class="final">¡Será un gusto entregarte tu nuevo vehículo!</div></div></div>
+  </section>
+
+  <footer class="footer"><svg viewBox="0 0 24 24" width="27" height="27"><path class="n" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="n" d="M9 12l2 2 4-5"></path></svg><div>Este documento confirma el estado actual de tu operación y es informativo; no sustituye la factura final ni los términos y condiciones aplicables. Folio: <strong data-field="transaction.folio">RES-90010</strong>. La información es confidencial y está dirigida exclusivamente a <strong data-field="customer.name">Garcia Marquez Tomas</strong>.</div></footer>
+</main>
+</div>
+</body>
+</html>

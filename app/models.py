@@ -278,6 +278,11 @@ class Invoice(Base):
 
     # delivery.*
     delivery_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    # Segunda fecha de entrega, "a mas tardar". Es OPCIONAL a proposito: con las
+    # dos, el documento de Documentacion validada ensena el rango; vacia, ensena
+    # solo delivery_date en una linea. Vaciarla tiene que seguir siendo posible,
+    # asi que no lleva ningun valor por defecto que la rellene sola.
+    delivery_date_latest: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     delivery_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     delivery_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     delivery_alt: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -365,12 +370,25 @@ class InvoiceSnapshot(Base):
     """
 
     __tablename__ = "invoice_snapshot"
-    __table_args__ = (UniqueConstraint("invoice_id", "version", name="uq_snapshot_invoice_ver"),)
+    # La unicidad es por (factura, TIPO de documento, version).
+    #
+    # Hasta el Milestone 4 era solo (factura, version), porque una factura tenia
+    # un unico documento. Con los complementarios, esa clave haria que la
+    # pre-factura y el "Pago de apartado confirmado" compartieran una sola
+    # numeracion y se listaran mezclados: generar uno parecia sustituir al otro.
+    # Con el tipo dentro, cada documento lleva su propio historial y generar uno
+    # no toca a los demas.
+    __table_args__ = (
+        UniqueConstraint("invoice_id", "doc_type", "version", name="uq_snapshot_invoice_doc_ver"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     invoice_id: Mapped[int] = mapped_column(
         ForeignKey("invoice.id", ondelete="CASCADE"), nullable=False
     )
+    # "factura" para todo lo emitido hasta el Milestone 4. Los snapshots que ya
+    # existen se quedan con ese valor y con su ruta en disco intacta.
+    doc_type: Mapped[str] = mapped_column(String(32), nullable=False, default="factura")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     folio: Mapped[str] = mapped_column(String(32), nullable=False)
     locale: Mapped[str] = mapped_column(String(8), nullable=False)

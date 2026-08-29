@@ -43,7 +43,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from . import documents
+from . import doctypes, documents
 from .config import settings
 from .models import Invoice, InvoiceSnapshot, utcnow
 
@@ -303,9 +303,19 @@ def _url_verificacion(invoice: Invoice) -> str:
     return base.rstrip("/") + "/" + (invoice.folio or "")
 
 
-def _siguiente_version(db: Session, invoice_id: int) -> int:
+def _siguiente_version(db: Session, invoice_id: int, doc: str = doctypes.FACTURA) -> int:
+    """Siguiente version DE ESE DOCUMENTO.
+
+    El tipo entra en el filtro a proposito. Sin el, generar el "Pago de apartado
+    confirmado" de una reserva haria que la siguiente pre-factura de la misma
+    reserva fuese la v3, y el historial los mezclaria: pareceria que un
+    documento sustituye al otro.
+    """
     actual = db.execute(
-        select(func.max(InvoiceSnapshot.version)).where(InvoiceSnapshot.invoice_id == invoice_id)
+        select(func.max(InvoiceSnapshot.version)).where(
+            InvoiceSnapshot.invoice_id == invoice_id,
+            InvoiceSnapshot.doc_type == doc,
+        )
     ).scalar()
     return (actual or 0) + 1
 
@@ -373,40 +383,145 @@ def _ajustar_imagenes(page, carpeta: Path, escala: float) -> list[str]:
     return tocadas
 
 
-def _calibrar(page) -> tuple[float, int, float]:
+# --- suelo de legibilidad ----------------------------------------------------
+#
+# El cliente pidio por escrito que si un documento no cabe en A4, el sistema
+# avise en lugar de encogerlo hasta que no se lea.
+#
+# El suelo no es un numero inventado: sale de MEDIR lo que el cliente ya aprobo
+# y tiene en produccion. Las tres pre-facturas vivas imprimen su letra mas
+# pequena (7 px de diseno) a:
+#
+#     en     escala 0,8044 -> 5,630 px = 4,223 pt
+#     es-MX  escala 0,8044 -> 5,630 px = 4,223 pt
+#     es-AR  escala 0,7966 -> 5,576 px = 4,182 pt   <- la peor de las tres
+#
+# El suelo se pone JUSTO POR DEBAJO de la peor: 5,5 px = 4,125 pt.
+#
+# Que quede por debajo y no clavado en 5,576 es a proposito. La escala se
+# recalcula para cada factura, asi que la letra impresa de la pre-factura se
+# mueve unas centesimas segun los datos. Un suelo clavado en el valor medido
+# haria fallar a la propia pre-factura la mitad de las veces -- que es
+# exactamente lo que paso al escribirlo como 7 x 0,8044 y lo cazaron las
+# baterias de las fases anteriores.
+#
+# Se compara en pixeles CSS y no en puntos para no arrastrar el redondeo de la
+# conversion en cada comprobacion.
+SUELO_LETRA_PX = 5.5
+
+
+class PdfIlegible(PdfError):
+    """El documento no cabe en A4 sin bajar del suelo de legibilidad."""
+
+
+def _fuente_minima(page, raiz: str) -> float:
+    """Tamano en px de la letra mas pequena que se pinta dentro del documento.
+
+    Solo cuenta los elementos que tienen texto propio: un contenedor vacio con
+    font-size heredado pequeno no se ve, y contarlo dispararia el aviso sin que
+    hubiera nada ilegible.
+    """
+    return page.evaluate(
+        """(raiz) => {
+            const nodos = [...document.querySelectorAll(raiz + ' *')].filter(e => {
+                if (!e.offsetParent && getComputedStyle(e).position !== 'fixed') return false;
+                return [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+            });
+            const medidas = nodos
+                .map(e => parseFloat(getComputedStyle(e).fontSize))
+                .filter(v => v > 0 && isFinite(v));
+            return medidas.length ? Math.min(...medidas) : 0;
+        }""",
+        raiz,
+    )
+
+
+def _calibrar(page, raiz: str = ".invoice", ancho_diseno: int = DESIGN_WIDTH) -> tuple[float, int, float]:
     """Escala y altura de impresion para el documento que hay cargado.
 
-    Se mide la caja real de .invoice y se busca la escala mas grande que quepa
+    Se mide la caja real del documento y se busca la escala mas grande que quepa
     en la hoja util, tanto de ancho como de alto.
+
+    raiz y ancho_diseno vienen del tipo de documento: la pre-factura envuelve el
+    suyo en .invoice y esta calibrada a 900 px, y los dos complementarios usan
+    .page a 1038 px. Con los valores de la factura, un complementario saldria
+    con las columnas estrechadas.
     """
-    altura = page.evaluate("document.querySelector('.invoice').getBoundingClientRect().height")
+    altura = page.evaluate("(r) => document.querySelector(r).getBoundingClientRect().height", raiz)
     # El marco de .page-shell se dibuja por fuera del alto y del ancho
     # calibrados, asi que la hoja util para el documento es la de la caja menos
     # ese marco por los dos lados.
     ancho_util = (210 - 2 * MARGIN_MM) * PX_PER_MM - 2 * MARCO_PX
     alto_util = (297 - 2 * MARGIN_MM) * PX_PER_MM - 2 * MARCO_PX
-    escala = min(ancho_util / DESIGN_WIDTH, alto_util / altura) * SAFETY
+    escala = min(ancho_util / ancho_diseno, alto_util / altura) * SAFETY
     return escala, math.ceil(altura * escala), altura
 
 
-def generar(db: Session, invoice: Invoice) -> Resultado:
-    """Congela la factura, imprime su PDF y deja anotado el snapshot.
+def _comprobar_legibilidad(page, raiz: str, escala: float) -> None:
+    """Levanta PdfIlegible si a esa escala la letra mas pequena baja del suelo.
+
+    Se mide la letra REAL del documento cargado, no la del CSS a ojo: un texto
+    puede heredar su tamano de tres sitios distintos y el unico numero que
+    importa es el que Chromium va a pintar.
+    """
+    minima = _fuente_minima(page, raiz)
+    if not minima:
+        return
+    impresa = minima * escala
+    if impresa >= SUELO_LETRA_PX:
+        return
+    falta = SUELO_LETRA_PX / impresa
+    raise PdfIlegible(
+        f"El documento no cabe en una hoja A4 con un tamaño de letra legible. "
+        f"Su texto más pequeño saldría a {impresa * 72 / 96:.2f} pt y el mínimo "
+        f"aceptado es {SUELO_LETRA_PX * 72 / 96:.2f} pt, el de la pre-factura. "
+        f"Hay que acortar el contenido en torno a un {(falta - 1) * 100:.0f} %. "
+        "No se ha generado ningún PDF."
+    )
+
+
+def generar(db: Session, invoice: Invoice, doc: str = doctypes.FACTURA) -> Resultado:
+    """Congela el documento, imprime su PDF y deja anotado el snapshot.
 
     Todo ocurre dentro del cerrojo, incluido el reparto del numero de version.
     Antes solo se protegia la parte de Chromium, y dos operadores que pulsaran
     a la vez calculaban los dos la misma version, escribian en la misma carpeta
     y uno borraba los archivos del otro a media copia. Se descubrio midiendo:
     de tres peticiones simultaneas, dos devolvian error 500.
+
+    doc dice de que documento es la copia. Cada tipo lleva su propia numeracion
+    de versiones y su propia carpeta, asi que generar uno no toca a los demas.
     """
     from playwright.sync_api import sync_playwright
 
     with _CERROJO:
-        return _generar_bajo_cerrojo(db, invoice, sync_playwright)
+        return _generar_bajo_cerrojo(db, invoice, sync_playwright, doc)
 
 
-def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Resultado:
-    version = _siguiente_version(db, invoice.id)
-    carpeta = settings.snapshots_dir / str(invoice.id) / f"v{version}"
+def carpeta_snapshot(invoice_id: int, doc: str, version: int) -> Path:
+    """Donde vive la copia congelada.
+
+    La pre-factura conserva EXACTAMENTE la ruta de siempre, sin el tipo por
+    medio: hay PDF ya emitidos apuntando ahi y esa ruta esta guardada en la base
+    de datos. Los documentos nuevos cuelgan de una subcarpeta con su tipo.
+    """
+    base = settings.snapshots_dir / str(invoice_id)
+    if doc == doctypes.FACTURA:
+        return base / f"v{version}"
+    return base / doc / f"v{version}"
+
+
+def _generar_bajo_cerrojo(
+    db: Session, invoice: Invoice, sync_playwright, doc: str = doctypes.FACTURA
+) -> Resultado:
+    tipo = doctypes.tipo(doc)
+    if not doctypes.existe_para(tipo.clave, invoice.locale):
+        raise PdfError(
+            f'El documento "{tipo.nombre}" no existe para el mercado '
+            f"{invoice.locale}. En esta fase sólo está preparado para es-MX."
+        )
+    version = _siguiente_version(db, invoice.id, tipo.clave)
+    carpeta = carpeta_snapshot(invoice.id, tipo.clave, version)
     if carpeta.exists():
         shutil.rmtree(carpeta)
     carpeta.mkdir(parents=True, exist_ok=True)
@@ -434,6 +549,7 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
         marca=marca,
         safe_icon=safe_icon,
         doc_title=doc_title,
+        doc=tipo.clave,
     )
     html_path = carpeta / "documento.html"
     html_path.write_text(documento.html, encoding="utf-8")
@@ -441,19 +557,19 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
     _escribir_codigos(invoice, carpeta / "assets", qr_manual)
     _congelar_fotos(invoice, carpeta / "assets")
 
-    pdf_path = carpeta / f"{invoice.folio}.pdf"
+    pdf_path = carpeta / f"{invoice.folio}{tipo.sufijo_pdf}.pdf"
 
     try:
         with sync_playwright() as p:
             navegador = p.chromium.launch(args=["--no-sandbox"])
-            pagina = navegador.new_page(viewport={"width": DESIGN_WIDTH + 40, "height": 1400})
+            pagina = navegador.new_page(viewport={"width": tipo.ancho + 40, "height": 1400})
             pagina.goto(html_path.resolve().as_uri())
             # Las tipografias se cargan aparte del HTML. Medir antes de que
             # esten listas da una altura equivocada y el PDF sale con una
             # escala que no es la que toca.
             pagina.wait_for_load_state("networkidle")
             pagina.evaluate("document.fonts ? document.fonts.ready : null")
-            escala, altura_impresion, altura = _calibrar(pagina)
+            escala, altura_impresion, altura = _calibrar(pagina, tipo.raiz, tipo.ancho)
 
             # Las fotografias se reducen a la resolucion que pide el papel
             # y se recarga la pagina para que Chromium imprima las copias
@@ -462,7 +578,17 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
             if _ajustar_imagenes(pagina, carpeta / "assets", escala):
                 pagina.reload()
                 pagina.wait_for_load_state("networkidle")
-                escala, altura_impresion, altura = _calibrar(pagina)
+                escala, altura_impresion, altura = _calibrar(pagina, tipo.raiz, tipo.ancho)
+
+            # El aviso va ANTES de imprimir. Encoger hasta que no se lea y
+            # entregar el PDF igualmente seria lo contrario de lo que el cliente
+            # pidio: prefiere un aviso a un documento ilegible.
+            #
+            # Solo para los documentos que lo tienen activado. Ver la nota de
+            # comprueba_legibilidad en doctypes: la pre-factura conserva el
+            # comportamiento que ya tenia.
+            if tipo.comprueba_legibilidad:
+                _comprobar_legibilidad(pagina, tipo.raiz, escala)
 
             pagina.evaluate(
                 "([e, h]) => {"
@@ -482,6 +608,12 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
                 },
             )
             navegador.close()
+    except PdfIlegible:
+        # El aviso de legibilidad ya explica que pasa y cuanto sobra. Envolverlo
+        # en "No se ha podido generar el PDF: ..." lo convertiria en un error
+        # tecnico y el operador perderia justo la parte util.
+        shutil.rmtree(carpeta, ignore_errors=True)
+        raise
     except Exception as exc:  # noqa: BLE001 - se le ensena al operador
         shutil.rmtree(carpeta, ignore_errors=True)
         raise PdfError(f"No se ha podido generar el PDF: {exc}") from exc
@@ -499,6 +631,7 @@ def _generar_bajo_cerrojo(db: Session, invoice: Invoice, sync_playwright) -> Res
 
     snapshot = InvoiceSnapshot(
         invoice_id=invoice.id,
+        doc_type=tipo.clave,
         version=version,
         folio=invoice.folio,
         locale=invoice.locale,
@@ -532,12 +665,23 @@ def contar_paginas(pdf: Path) -> int:
     return len(re.findall(rb"/Type\s*/Page[^s]", datos))
 
 
-def snapshots_de(db: Session, invoice_id: int) -> list[InvoiceSnapshot]:
+def snapshots_de(
+    db: Session, invoice_id: int, doc: str | None = doctypes.FACTURA
+) -> list[InvoiceSnapshot]:
+    """Historial de una reserva.
+
+    doc=None devuelve los tres historiales juntos; con un tipo, solo el de ese
+    documento. El valor por defecto es la pre-factura a proposito: todas las
+    pantallas que ya existian piden "el historial" queriendo decir el de la
+    pre-factura, y sin ese filtro empezarian a ensenar mezclados unos documentos
+    que hasta hoy no existian.
+    """
+    consulta = select(InvoiceSnapshot).where(InvoiceSnapshot.invoice_id == invoice_id)
+    if doc is not None:
+        consulta = consulta.where(InvoiceSnapshot.doc_type == doc)
     return list(
         db.execute(
-            select(InvoiceSnapshot)
-            .where(InvoiceSnapshot.invoice_id == invoice_id)
-            .order_by(InvoiceSnapshot.version.desc())
+            consulta.order_by(InvoiceSnapshot.doc_type, InvoiceSnapshot.version.desc())
         ).scalars()
     )
 

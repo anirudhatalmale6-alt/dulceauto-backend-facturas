@@ -104,10 +104,15 @@ with sync_playwright() as p:
     documento = marco.locator("article.invoice")
     check("hay un iframe con el documento", page.locator("iframe.preview-frame").count() == 1)
     check("y dentro esta la factura, no una imitacion", documento.count() == 1)
+    # Desde el Milestone 4 la URL lleva ademas el tipo de documento, porque la
+    # misma pantalla ensena la pre-factura y los dos complementarios. Se
+    # comprueban las dos cosas -- la ruta Y que el tipo sea la pre-factura --
+    # en lugar de comparar la cadena entera, que solo diria "ha cambiado".
     check(
         "el iframe apunta a la URL que se imprime",
         page.locator("iframe.preview-frame").get_attribute("src")
-        == f"/facturas/{factura_id}/documento",
+        in (f"/facturas/{factura_id}/documento",
+            f"/facturas/{factura_id}/documento?doc=factura"),
     )
 
     # El CSS aprobado tiene que estar cargado de verdad: si fallara, el

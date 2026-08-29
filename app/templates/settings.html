@@ -291,6 +291,41 @@
   </div>
 </div>
 
+<div class="settings-section-title">07 · Documentos automáticos por estado</div>
+<div class="card">
+  <p class="small muted" style="margin-top:0">
+    Qué documento complementario corresponde a cada estado de la factura. Cambiar
+    aquí la pareja no genera nada y no toca ningún PDF ya emitido: sólo decide
+    qué documento aparece seleccionado en la Vista previa cuando la factura está
+    en ese estado. El PDF se sigue generando únicamente con el botón
+    <b>Generar PDF</b>.
+  </p>
+  <p class="small muted">
+    La pre-factura no está en esta lista a propósito: se genera igual que
+    siempre, en cualquier estado, y estos dos no la sustituyen.
+  </p>
+  <form method="post" action="/configuracion/guardar">
+    <div class="grid">
+      {% for d in docs_por_estado %}
+        <label>
+          <span>{{ etiquetas.get(d.clave, d.nombre) }}</span>
+          <select name="ajuste:{{ d.clave }}">
+            <option value="" {{ 'selected' if not d.elegido }}>Ninguno</option>
+            {% for t in docs_complementarios %}
+              <option value="{{ t.clave }}" {{ 'selected' if d.elegido == t.clave }}>{{ t.nombre }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      {% endfor %}
+    </div>
+    <button class="btn blue" type="submit" style="margin-top:12px">Guardar</button>
+  </form>
+  <p class="small muted" style="margin-bottom:0">
+    Estos dos documentos están preparados para México. En las facturas en inglés
+    o de Argentina no aparecen, y todo sigue funcionando como hasta ahora.
+  </p>
+</div>
+
 <div class="devnote" style="margin-top:16px">
   Los ajustes se editan y se validan de verdad: una CLABE o un CBU
   con un dígito mal no se guardan, porque después se copiarían a cada factura

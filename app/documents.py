@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 
+from . import doctypes
 from .config import PROJECT_DIR
 from .fields import FIELD_MAP
 from .locales import (
@@ -49,6 +50,7 @@ from .locales import (
     format_date_long,
     format_date_numeric,
     format_date_short,
+    format_date_weekday,
     get_market,
     status_text,
 )
@@ -211,11 +213,24 @@ class _Anotador(HTMLParser):
 _CACHE: dict[str, Plantilla] = {}
 
 
-def cargar(locale: str) -> Plantilla:
+def ruta_plantilla(locale: str, doc: str = doctypes.FACTURA) -> Path:
+    """Archivo de la plantilla para ese mercado y ese tipo de documento.
+
+    La pre-factura tiene un nombre de archivo distinto en cada mercado y lo dice
+    locales.get_market(). Los documentos complementarios usan el mismo nombre en
+    todos los mercados en los que existen, colgando de la carpeta del mercado.
+    """
+    tipo = doctypes.tipo(doc)
+    if tipo.archivo is None:
+        return TEMPLATES_DIR / get_market(locale).template
+    return TEMPLATES_DIR / (locale or "es-MX") / tipo.archivo
+
+
+def cargar(locale: str, doc: str = doctypes.FACTURA) -> Plantilla:
     """Plantilla del mercado, leida y anotada. Se guarda en memoria y se vuelve
     a leer sola si el archivo cambia en disco, para no tener que reiniciar el
     servidor cada vez que se retoca una plantilla."""
-    ruta = TEMPLATES_DIR / get_market(locale).template
+    ruta = ruta_plantilla(locale, doc)
     est = ruta.stat()
     firma = (est.st_mtime_ns, est.st_size)
     cacheada = _CACHE.get(ruta.as_posix())
@@ -319,7 +334,7 @@ def iniciales(nombre: str | None) -> str:
     return (partes[0][0] + partes[-1][0]).upper()
 
 
-def construir_valores(invoice) -> dict[str, str]:
+def construir_valores(invoice, doc: str = doctypes.FACTURA) -> dict[str, str]:
     """Texto que va en cada hueco, ya formateado para el mercado de la factura."""
     locale = invoice.locale or "es-MX"
     market = get_market(locale)
@@ -377,7 +392,86 @@ def construir_valores(invoice) -> dict[str, str]:
     )
 
     valores["agente_iniciales"] = iniciales(invoice.representative_name)
+
+    # --- huecos de los documentos complementarios ---------------------------
+    #
+    # Los dos HTML del Milestone 4 vienen marcados con las CLAVES FIJAS de
+    # fields.py ("customer.name"), no con los nombres en espanol de los huecos
+    # de la pre-factura ("cliente_nombre"). Se admiten las dos formas: es el
+    # cliente quien marco sus archivos y renombrarle los huecos seria tocarle el
+    # diseno para nada.
+    valores.update(_valores_por_clave(invoice, locale, moneda, entrega, modo))
+    valores.update(doctypes.textos_de_estado(doc, invoice.status))
     return valores
+
+
+# Separador de linea permitido dentro de un hueco de texto. El motor escapa
+# SIEMPRE el valor y solo despues convierte este caracter en <br>, de modo que
+# nada que venga de la base de datos puede colar marcado. La lista de huecos que
+# lo admiten es explicita, nunca "todos".
+SALTO = "\n"
+HUECOS_CON_SALTO = frozenset({"delivery.estimated"})
+
+
+def importe_restante(invoice):
+    """Precio acordado menos apartado validado.
+
+    Cerrado por escrito con el cliente el 29-ago-2026. No entran aqui el
+    descuento, la cobertura ni el transporte, y no por olvido: en el modelo son
+    columnas de TEXTO (String(120)), etiquetas como "9% DE DESCUENTO APLICADO",
+    no importes. El precio del vehiculo ES el total final acordado, y el propio
+    documento lo dice: "El precio acordado ya incluye todos estos conceptos".
+    Asi que no hay nada que se pueda aplicar dos veces.
+
+    Devuelve None si falta cualquiera de los dos numeros. Un hueco vacio con
+    aviso en la vista previa es preferible a una cifra inventada en un documento
+    que recibe el comprador.
+    """
+    precio = invoice.pricing_vehicle_price
+    apartado = invoice.pricing_reservation_amount
+    if precio is None or apartado is None:
+        return None
+    return precio - apartado
+
+
+def _entrega_estimada(invoice, locale: str) -> str:
+    """'LUNES 25/08' o 'LUNES 25/08 / A MAS TARDAR / MIERCOLES 26/08'.
+
+    La segunda fecha es opcional, tal como lo pidio el cliente: con las dos se
+    ensena el rango, y con la segunda vacia solo la fecha de entrega que ya
+    existia, en una linea.
+    """
+    primera = format_date_weekday(invoice.delivery_date, locale)
+    if not primera:
+        return ""
+    segunda = format_date_weekday(getattr(invoice, "delivery_date_latest", None), locale)
+    if not segunda:
+        return primera
+    return f"{primera}{SALTO}{doc_text(locale, 'a_mas_tardar')}{SALTO}{segunda}"
+
+
+def _valores_por_clave(invoice, locale, moneda, entrega, modo) -> dict[str, str]:
+    """Los huecos marcados con la clave fija, tal como vienen en los dos HTML
+    aprobados por el cliente."""
+    restante = importe_restante(invoice)
+    return {
+        "customer.name": _texto(invoice.customer_name),
+        "transaction.folio": _texto(invoice.folio),
+        "transaction.authorization": _texto(invoice.authorization),
+        "vehicle.model": _texto(invoice.vehicle_title),
+        "vehicle.price": format_amount(invoice.pricing_vehicle_price, locale, currency=moneda),
+        "payment.deposit_amount": format_amount(
+            invoice.pricing_reservation_amount, locale, currency=moneda
+        ),
+        "payment.remaining_amount": (
+            "" if restante is None else format_amount(restante, locale, currency=moneda)
+        ),
+        "delivery.method": _texto(invoice.delivery_text) or entrega[modo]["principal"],
+        "delivery.estimated": _entrega_estimada(invoice, locale),
+        "protection.until": format_date_numeric(invoice.valid_until),
+        "representative.phone": _texto(invoice.representative_phone),
+        "representative.email": _texto(invoice.representative_email),
+    }
 
 
 def _url_verificacion(invoice) -> str:
@@ -500,6 +594,7 @@ class Documento:
     locale: str
     plantilla: Path
     vacios: list[str]
+    doc: str = doctypes.FACTURA
 
 
 def render(
@@ -512,6 +607,7 @@ def render(
     marca: str = "DulceAuto",
     safe_icon: str | None = None,
     doc_title: str | None = None,
+    doc: str = doctypes.FACTURA,
 ) -> Documento:
     """Documento de una factura, listo para enseñar o para imprimir.
 
@@ -528,8 +624,9 @@ def render(
     cosa distinta y se decide en main.py.
     """
     locale = invoice.locale or "es-MX"
-    plantilla = cargar(locale)
-    valores = construir_valores(invoice)
+    tipo = doctypes.tipo(doc)
+    plantilla = cargar(locale, doc)
+    valores = construir_valores(invoice, doc)
     atributos = construir_atributos(invoice, codigos, qr_src)
     vacios: list[str] = []
     # Un hueco que desaparece cuando esta vacio no es un dato que falte: el
@@ -564,7 +661,7 @@ def render(
                     (hueco.cont_ini, hueco.cont_fin,
                      f'<img class="brand-logo" src="{html_mod.escape(logo, quote=True)}" '
                      f'alt="{html_mod.escape(marca, quote=True)}" '
-                     'style="max-height:34px;max-width:220px">')
+                     f'style="{tipo.logo_estilo}">')
                 )
             continue
 
@@ -599,7 +696,13 @@ def render(
             # borrado sin querer.
             continue
         valor = _respeta_mayusculas(hueco.muestra, valor)
-        cambios.append((hueco.cont_ini, hueco.cont_fin, html_mod.escape(valor, quote=False)))
+        # Se escapa SIEMPRE y solo despues, y solo en los huecos de la lista, se
+        # convierte el separador en <br>. Al reves seria una puerta abierta:
+        # cualquier dato de la base podria traer marcado.
+        escapado = html_mod.escape(valor, quote=False)
+        if campo in HUECOS_CON_SALTO:
+            escapado = escapado.replace(SALTO, "<br>")
+        cambios.append((hueco.cont_ini, hueco.cont_fin, escapado))
 
     # Pasos de la barra de progreso: solo cambia la clase.
     for paso, ini, fin in _pasos(plantilla):
@@ -611,7 +714,10 @@ def render(
         salida = salida[:ini] + texto + salida[fin:]
 
     salida = salida.replace(ASSETS_ORIGEN, assets)
-    return Documento(html=salida, locale=locale, plantilla=plantilla.ruta, vacios=sorted(set(vacios)))
+    return Documento(
+        html=salida, locale=locale, plantilla=plantilla.ruta,
+        vacios=sorted(set(vacios)), doc=tipo.clave,
+    )
 
 
 def _ocultar(tag: str) -> str:
@@ -688,6 +794,28 @@ ETIQUETAS_HUECO = {
     LOGO: "Logotipo de la cabecera",
     SAFE_ICON: "Icono de Compra segura",
     DOC_TITLE: "Título del documento",
+    # Huecos de los dos documentos complementarios. Van con la clave fija tal
+    # como el cliente marco sus archivos.
+    "customer.name": "Nombre del cliente",
+    "transaction.folio": "Folio",
+    "transaction.authorization": "Autorización",
+    "vehicle.model": "Vehículo",
+    "vehicle.price": "Precio acordado",
+    "payment.deposit_amount": "Importe del apartado",
+    "payment.remaining_amount": "Pago restante",
+    "delivery.method": "Método de entrega",
+    "delivery.estimated": "Entrega estimada",
+    "protection.until": "Vigencia de la protección",
+    "representative.phone": "Teléfono del representante",
+    "representative.email": "Email del representante",
+    "doc_estado_frase": "Frase del estado",
+    "doc_proxima_titulo": "Próxima etapa (título)",
+    "doc_proxima_texto": "Próxima etapa (texto)",
+    "doc_registro_titulo": "Estado de la operación (título)",
+    "doc_registro_texto": "Estado de la operación (texto)",
+    "doc_restante_sub": "Nota bajo el pago restante",
+    "doc_entrega_sub": "Nota bajo la entrega estimada",
+    "doc_paso_pago": "Paso 2 del guion (pago restante)",
 }
 
 
@@ -695,10 +823,10 @@ def etiqueta(campo: str) -> str:
     return ETIQUETAS_HUECO.get(campo, campo)
 
 
-def huecos_de(locale: str) -> list[str]:
+def huecos_de(locale: str, doc: str = doctypes.FACTURA) -> list[str]:
     """Nombres de los huecos que tiene una plantilla. Lo usa la pantalla de
     Plantillas para enseñar lo que de verdad hay en el archivo."""
-    return sorted({h.campo for h in cargar(locale).huecos if h.campo})
+    return sorted({h.campo for h in cargar(locale, doc).huecos if h.campo})
 
 
 # Claves fijas que el motor sí usa aunque no sean una lectura directa: llevan

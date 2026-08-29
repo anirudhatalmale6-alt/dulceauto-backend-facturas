@@ -23,6 +23,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import activity as act
 from . import callcenter as cc
 from . import codes
+from . import doctypes
 from . import documents as doc_engine
 from . import invoices as inv_service
 from . import pdf as pdf_engine
@@ -843,7 +844,12 @@ def invoice_delete(request: Request, invoice_id: int, db: Session = Depends(get_
 
 
 @app.get("/facturas/{invoice_id}/documento", response_class=HTMLResponse)
-def invoice_document(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+def invoice_document(
+    request: Request,
+    invoice_id: int,
+    doc: str = doctypes.FACTURA,
+    db: Session = Depends(get_db),
+):
     user = require_login(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -851,8 +857,13 @@ def invoice_document(request: Request, invoice_id: int, db: Session = Depends(ge
     if invoice is None:
         flash(request, "Esa factura ya no existe.", "error")
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+    tipo = doctypes.tipo(doc)
+    if not doctypes.existe_para(tipo.clave, invoice.locale):
+        tipo = doctypes.tipo(doctypes.FACTURA)
     return HTMLResponse(
-        doc_engine.render(invoice, codigos="panel", **_marca_para_pantalla(db, invoice)).html
+        doc_engine.render(
+            invoice, codigos="panel", doc=tipo.clave, **_marca_para_pantalla(db, invoice)
+        ).html
     )
 
 
@@ -1005,7 +1016,11 @@ def invoice_barcode(request: Request, invoice_id: int, db: Session = Depends(get
 
 @app.get("/facturas/{invoice_id}/vista-previa", response_class=HTMLResponse)
 def invoice_preview(
-    request: Request, invoice_id: int, zoom: float = 0.75, db: Session = Depends(get_db)
+    request: Request,
+    invoice_id: int,
+    zoom: float = 0.75,
+    doc: str = doctypes.FACTURA,
+    db: Session = Depends(get_db),
 ):
     user = require_login(request)
     if isinstance(user, RedirectResponse):
@@ -1015,7 +1030,19 @@ def invoice_preview(
         flash(request, "Esa factura ya no existe.", "error")
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
 
-    documento = doc_engine.render(invoice, **_marca_para_pantalla(db, invoice))
+    tipo = doctypes.tipo(doc)
+    if not doctypes.existe_para(tipo.clave, invoice.locale):
+        # Un documento que no existe para ese mercado no da error: se ensena la
+        # pre-factura, que existe siempre, y se dice por que.
+        flash(
+            request,
+            f"«{tipo.nombre}» todavía no está preparado para {get_market(invoice.locale).label}. "
+            "Se muestra la pre-factura.",
+            "error",
+        )
+        tipo = doctypes.tipo(doctypes.FACTURA)
+
+    documento = doc_engine.render(invoice, doc=tipo.clave, **_marca_para_pantalla(db, invoice))
     market = get_market(invoice.locale)
     return render(
         request,
@@ -1023,14 +1050,17 @@ def invoice_preview(
         db,
         active_view="invoices",
         page_title="Vista previa",
-        page_sub=f"{invoice.folio} · plantilla {market.label} · {market.template}",
+        page_sub=f"{invoice.folio} · {tipo.nombre} · plantilla {market.label}",
         invoice=invoice,
         market=market,
         documento=documento,
-        snapshots=pdf_engine.snapshots_de(db, invoice.id),
+        snapshots=pdf_engine.snapshots_de(db, invoice.id, tipo.clave),
         zoom=zoom if zoom in ZOOMS else 0.75,
         zooms=ZOOMS,
         etiquetas=doc_engine.ETIQUETAS_HUECO,
+        tipo_doc=tipo,
+        tipos_doc=_tipos_disponibles(invoice),
+        doc_sugerido=_documento_del_estado(db, invoice.status),
     )
 
 
@@ -1038,7 +1068,12 @@ def invoice_preview(
 
 
 @app.post("/facturas/{invoice_id}/pdf")
-def invoice_pdf_create(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+def invoice_pdf_create(
+    request: Request,
+    invoice_id: int,
+    doc: str = doctypes.FACTURA,
+    db: Session = Depends(get_db),
+):
     """Genera el PDF y deja congelada la factura en una carpeta propia.
 
     La ruta es sincrona a proposito: FastAPI la ejecuta en un hilo aparte, que
@@ -1053,24 +1088,23 @@ def invoice_pdf_create(request: Request, invoice_id: int, db: Session = Depends(
         flash(request, "Esa factura ya no existe.", "error")
         return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
 
+    tipo = doctypes.tipo(doc)
+    vuelta = f"/facturas/{invoice_id}/vista-previa?doc={tipo.clave}"
+
     if invoice.status == STATUS_DRAFT:
         flash(
             request,
             "Un borrador no se imprime. Pásela a «Pago pendiente» cuando esté completa.",
             "error",
         )
-        return RedirectResponse(
-            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
-        )
+        return RedirectResponse(vuelta, status_code=status.HTTP_303_SEE_OTHER)
 
     try:
-        resultado = pdf_engine.generar(db, invoice)
+        resultado = pdf_engine.generar(db, invoice, tipo.clave)
     except pdf_engine.PdfError as exc:
         db.rollback()
         flash(request, str(exc), "error")
-        return RedirectResponse(
-            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
-        )
+        return RedirectResponse(vuelta, status_code=status.HTTP_303_SEE_OTHER)
 
     db.commit()
     act.log(
@@ -1080,35 +1114,40 @@ def invoice_pdf_create(request: Request, invoice_id: int, db: Session = Depends(
         entity_type="invoice",
         entity_id=invoice.id,
         folio=invoice.folio,
-        detail=f"versión {resultado.snapshot.version}",
+        detail=f"{tipo.nombre}, versión {resultado.snapshot.version}",
     )
     flash(
         request,
-        f"PDF generado (versión {resultado.snapshot.version}). "
+        f"{tipo.nombre}: PDF generado (versión {resultado.snapshot.version}). "
         "Queda guardada una copia congelada con sus imágenes: no cambiará aunque "
-        "mañana se cambie el logotipo o la cuenta bancaria.",
+        "mañana se cambie el logotipo o la cuenta bancaria. "
+        "Los demás documentos de esta reserva no se han tocado.",
         "ok",
     )
-    return RedirectResponse(
-        f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
-    )
+    return RedirectResponse(vuelta, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/facturas/{invoice_id}/pdf")
 def invoice_pdf_download(
-    request: Request, invoice_id: int, version: int = 0, db: Session = Depends(get_db)
+    request: Request,
+    invoice_id: int,
+    version: int = 0,
+    doc: str = doctypes.FACTURA,
+    db: Session = Depends(get_db),
 ):
-    """Descarga un PDF ya generado. Sin version, el ultimo."""
+    """Descarga un PDF ya generado. Sin version, el ultimo DE ESE documento."""
     user = require_login(request)
     if isinstance(user, RedirectResponse):
         return user
-    snapshots = pdf_engine.snapshots_de(db, invoice_id)
+    tipo = doctypes.tipo(doc)
+    snapshots = pdf_engine.snapshots_de(db, invoice_id, tipo.clave)
     if version:
         snapshots = [s for s in snapshots if s.version == version]
     if not snapshots:
-        flash(request, "Esa factura todavía no tiene ningún PDF generado.", "error")
+        flash(request, f"«{tipo.nombre}» todavía no tiene ningún PDF generado.", "error")
         return RedirectResponse(
-            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+            f"/facturas/{invoice_id}/vista-previa?doc={tipo.clave}",
+            status_code=status.HTTP_303_SEE_OTHER,
         )
 
     snapshot = snapshots[0]
@@ -1123,13 +1162,14 @@ def invoice_pdf_download(
             "error",
         )
         return RedirectResponse(
-            f"/facturas/{invoice_id}/vista-previa", status_code=status.HTTP_303_SEE_OTHER
+            f"/facturas/{invoice_id}/vista-previa?doc={tipo.clave}",
+            status_code=status.HTTP_303_SEE_OTHER,
         )
 
     return FileResponse(
         ruta,
         media_type="application/pdf",
-        filename=f"{snapshot.folio}-v{snapshot.version}.pdf",
+        filename=f"{snapshot.folio}{tipo.sufijo_pdf}-v{snapshot.version}.pdf",
     )
 
 
@@ -1165,6 +1205,44 @@ def template_document(request: Request, locale: str, db: Session = Depends(get_d
 #
 # Los perfiles no se borran, se desactivan. Borrar uno dejaria sin logotipo a
 # una factura todavia no emitida que lo estuviera usando.
+
+
+def _tipos_disponibles(invoice: Invoice) -> list:
+    """Documentos que se pueden ver y generar para esta factura.
+
+    La pre-factura esta siempre. Los complementarios, solo en los mercados en
+    los que existen: en esta fase, es-MX.
+    """
+    return [
+        doctypes.TIPOS[c]
+        for c in (doctypes.FACTURA, *doctypes.COMPLEMENTARIOS)
+        if doctypes.existe_para(c, invoice.locale)
+    ]
+
+
+def _documento_del_estado(db: Session, estado: str) -> str | None:
+    """Documento que corresponde a ese estado, segun Configuracion.
+
+    Devuelve solo una SUGERENCIA. El cliente pidio expresamente que mover el
+    desplegable de estado no genere nada: esto decide que documento se ensena
+    seleccionado, y el PDF sigue saliendo unicamente de Vista previa / Generar.
+    """
+    fila = db.execute(
+        select(Setting).where(
+            Setting.key == doctypes.clave_ajuste(estado), Setting.market.is_(None)
+        )
+    ).scalar_one_or_none()
+    if fila is None:
+        # No hay fila: es una base anterior a este ajuste. Se usa la pareja
+        # acordada por escrito, que es lo que el cliente espera ver.
+        return doctypes.PAREJA_POR_DEFECTO.get(estado)
+    guardado = (fila.value or "").strip()
+    # Cadena vacia = "ninguno", y es una eleccion valida: el cliente puede
+    # querer que un estado no proponga ningun documento complementario. Por eso
+    # se distingue de "no hay fila" y no se cae al valor por defecto.
+    if not guardado:
+        return None
+    return guardado if guardado in doctypes.TIPOS else None
 
 
 def _marca_para_pantalla(db: Session, invoice: Invoice) -> dict:
@@ -1481,6 +1559,8 @@ ETIQUETAS_AJUSTE = {
     "folio.next": "Siguiente folio",
     "callcenter.operator_name": "Nombre visible del Operador",
     "callcenter.logo_path": "Logotipo del Call Center",
+    "docs.por_estado.payment_validated": "Documento para «Pago validado»",
+    "docs.por_estado.delivery_scheduled": "Documento para «Entrega coordinada»",
 }
 
 # Ajustes que NO salen en la rejilla generica de Configuracion porque tienen su
@@ -1491,7 +1571,13 @@ AJUSTES_CON_TARJETA_PROPIA = (
     "qr.image_path",
     cc.AJUSTE_NOMBRE,
     cc.AJUSTE_LOGO,
+    *(doctypes.clave_ajuste(e) for e in doctypes.PAREJA_POR_DEFECTO),
 )
+
+# Estados que pueden llevar un documento complementario asociado, en el orden
+# del guion de la operacion. Es la pareja que el cliente cerro por escrito; la
+# tarjeta de Configuracion deja cambiarla sin tocar codigo.
+ESTADOS_CON_DOCUMENTO = (STATUS_VALIDATED, STATUS_SCHEDULED)
 
 
 @app.get("/configuracion", response_class=HTMLResponse)
@@ -1532,6 +1618,17 @@ def settings_view(request: Request, db: Session = Depends(get_db)):
         globales=globales,
         por_mercado=por_mercado,
         etiquetas=ETIQUETAS_AJUSTE,
+        # Pareja estado -> documento, para su tarjeta propia.
+        docs_por_estado=[
+            {
+                "estado": e,
+                "nombre": STATUS_LABELS.get(e, (e,))[0],
+                "clave": doctypes.clave_ajuste(e),
+                "elegido": _documento_del_estado(db, e) or "",
+            }
+            for e in ESTADOS_CON_DOCUMENTO
+        ],
+        docs_complementarios=[doctypes.TIPOS[c] for c in doctypes.COMPLEMENTARIOS],
         operador_usuario=(
             (db.get(Credential, CRED_OPERATOR).username or "operador")
             if db.get(Credential, CRED_OPERATOR)

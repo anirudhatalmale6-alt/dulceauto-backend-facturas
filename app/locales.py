@@ -135,6 +135,14 @@ MESES_CORTOS = {
     "en": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
 }
 
+# Dias de la semana, escritos aqui por la misma razon que los meses: strftime
+# depende del locale instalado en la maquina y devolveria "Monday" sin avisar.
+# El indice es el de date.weekday(): 0 = lunes.
+DIAS_SEMANA = {
+    "es": ("LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"),
+    "en": ("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"),
+}
+
 
 def _idioma(locale: str) -> str:
     return "en" if get_market(locale).code == "en" else "es"
@@ -166,6 +174,16 @@ def format_date_numeric(value) -> str:
     return f"{value.day:02d}/{value.month:02d}/{value.year}"
 
 
+def format_date_weekday(value, locale: str) -> str:
+    """'LUNES 25/08'. Es el formato de la entrega estimada en el documento de
+    Documentacion validada, copiado de la maqueta aprobada: dia de la semana en
+    mayusculas y la fecha sin ano."""
+    if not value:
+        return ""
+    dia = DIAS_SEMANA[_idioma(locale)][value.weekday()]
+    return f"{dia} {value.day:02d}/{value.month:02d}"
+
+
 # --- textos del documento ----------------------------------------------------
 #
 # Lo que el documento dice y depende del idioma. Las frases largas estan copiadas
@@ -175,18 +193,25 @@ def format_date_numeric(value) -> str:
 DOC_TEXTS = {
     "es-MX": {
         "incluido": "Incluido",
+        # Separador del rango de entrega estimada del documento de
+        # Documentacion validada, copiado de la maqueta aprobada.
+        "a_mas_tardar": "A MÁS TARDAR",
         "aria_verificar": "Verificar la reserva {folio}",
         "alt_barras": "Código de barras del folio {folio}",
         "alt_qr": "Código QR para verificar la reserva {folio}",
     },
     "en": {
         "incluido": "Included",
+        "a_mas_tardar": "NO LATER THAN",
         "aria_verificar": "Verify reservation {folio}",
         "alt_barras": "Barcode for reference {folio}",
         "alt_qr": "QR code to verify reservation {folio}",
     },
     "es-AR": {
         "incluido": "Incluido",
+        # Separador del rango de entrega estimada del documento de
+        # Documentacion validada, copiado de la maqueta aprobada.
+        "a_mas_tardar": "A MÁS TARDAR",
         "aria_verificar": "Verificar la reserva {folio}",
         "alt_barras": "Código de barras del folio {folio}",
         "alt_qr": "Código QR para verificar la reserva {folio}",

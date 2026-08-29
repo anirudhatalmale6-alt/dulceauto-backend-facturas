@@ -57,7 +57,7 @@ INHERITED_FROM_SETTINGS = (
 )
 
 # Campos que el formulario entrega como fecha y como importe. El resto son texto.
-DATE_FIELDS = ("issue_date", "valid_until", "delivery_date")
+DATE_FIELDS = ("issue_date", "valid_until", "delivery_date", "delivery_date_latest")
 AMOUNT_FIELDS = ("pricing_vehicle_price", "pricing_reservation_amount")
 
 # Obligatorios para dejar de ser borrador. En borrador no se exige nada: la
@@ -840,6 +840,16 @@ def validar_ajuste(clave: str, valor: str, market: str | None) -> str | None:
 
     if clave.endswith(".email") and valor and "@" not in valor:
         return f"{clave}: no parece un email."
+
+    if clave.startswith("docs.por_estado."):
+        # Vacio es valido y significa "ese estado no propone ningun documento".
+        # Cualquier otra cosa tiene que ser un documento que exista de verdad:
+        # una clave inventada dejaria el ajuste mudo sin decir nada, y el panel
+        # seguiria enseniando la pareja por defecto como si nada.
+        from . import doctypes
+
+        if valor and valor not in doctypes.COMPLEMENTARIOS:
+            return f"«{valor}» no es uno de los documentos complementarios."
 
     if clave == "callcenter.operator_name":
         # El import va aqui dentro y no arriba: callcenter.py importa este

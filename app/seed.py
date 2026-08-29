@@ -50,6 +50,13 @@ GLOBAL_SETTINGS: dict[str, tuple[str, bool]] = {
     # los ajustes con archivo no se editan escribiendo una ruta a mano.
     "callcenter.operator_name": ("", False),
     "callcenter.logo_path": ("", True),
+    # Milestone 4: que documento complementario corresponde a cada estado.
+    # Los valores de partida son la pareja que el cliente cerro por escrito el
+    # 29-ago-2026. Se siembran como ajuste, y no se dejan escritos en el codigo,
+    # porque el pidio poder cambiar la pareja sin tocar codigo. Cadena vacia
+    # significa "ese estado no propone ningun documento".
+    "docs.por_estado.payment_validated": ("pago_apartado", False),
+    "docs.por_estado.delivery_scheduled": ("documentacion", False),
 }
 
 # --- datos bancarios de muestra, por mercado ---------------------------------

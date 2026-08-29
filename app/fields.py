@@ -60,6 +60,7 @@ FIELD_MAP: dict[str, str] = {
     "banking.payment_reference": "banking_payment_reference",
     # delivery
     "delivery.date": "delivery_date",
+    "delivery.date_latest": "delivery_date_latest",
     "delivery.mode": "delivery_mode",
     "delivery.text": "delivery_text",
     "delivery.alt": "delivery_alt",
@@ -106,6 +107,7 @@ EDITABLE_FIELDS: tuple[str, ...] = (
     "pricing_transport",
     "pricing_currency",
     "delivery_date",
+    "delivery_date_latest",
     "delivery_mode",
     "delivery_text",
     "delivery_alt",
