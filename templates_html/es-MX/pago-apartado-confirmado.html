@@ -110,10 +110,12 @@ svg{fill:none;stroke-linecap:round;stroke-linejoin:round}
   opacity:.30;pointer-events:none
 }
 .handshake svg{width:100%;height:100%;display:block}
-/* Tono azul/gris integrado con el banner, no blanco puro: el blanco a esta
+/* La ilustracion que mando el cliente el 29-ago-2026, vectorizada.
+   Es dibujo de contornos RELLENOS, no de lineas, asi que va con fill y no con
+   stroke: puesto como stroke no se veria nada.
+   Tono azul/gris integrado con el banner y no blanco puro: el blanco a esta
    opacidad se lee como suciedad sobre el degradado. */
-.handshake .hs{stroke:#A8C0DE;stroke-width:1.5;fill:none;
-  stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.handshake .hs{fill:#A8C0DE;stroke:none}
 
 .info-grid{margin-top:13px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .list-card ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
@@ -283,7 +285,67 @@ svg[width="48"] .w{stroke-width:1.25}
     <div class="trust"><div class="trust-icon"><span class="safe-badge-image" data-safe-icon><svg viewBox="0 0 24 24" width="48" height="48" style="transform:translate(0.00px,2.00px)"><path class="w" d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z"></path><path class="w" d="M9 12l2 2 4-5"></path></svg></span></div><h3 data-field="doc_registro_titulo">Su operación ha quedado registrada</h3><p data-field="doc_registro_texto">Continuamos con la validación documental y los trámites correspondientes.</p></div>
   </section>
 
-  <section class="thanks"><div class="heart"><svg viewBox="0 0 24 24" width="38" height="38" style="transform:translate(0.00px,-1.84px)"><path class="w" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.3A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg></div><div><h2>Gracias por su confianza</h2><p>Agradecemos sinceramente su confianza y preferencia. Su pago de <strong data-field="payment.deposit_amount">$5,000 MXN</strong> correspondiente al apartado de la unidad <strong data-field="vehicle.model">Audi Q5 Sportback SLine Mild Hybrid</strong> ya quedó registrado correctamente en nuestro sistema.</p></div><div class="handshake" aria-hidden="true"><svg viewBox="0 0 64 40"><path class="hs" d="M3 14l13-9 12 8 8-5 11 8-18 18-8-4-8 3-10-10z"></path><path class="hs" d="M25 13l7 6c3 3 6 3 9 0l5-4"></path></svg></div></section>
+  <section class="thanks"><div class="heart"><svg viewBox="0 0 24 24" width="38" height="38" style="transform:translate(0.00px,-1.84px)"><path class="w" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.3A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"></path></svg></div><div><h2>Gracias por su confianza</h2><p>Agradecemos sinceramente su confianza y preferencia. Su pago de <strong data-field="payment.deposit_amount">$5,000 MXN</strong> correspondiente al apartado de la unidad <strong data-field="vehicle.model">Audi Q5 Sportback SLine Mild Hybrid</strong> ya quedó registrado correctamente en nuestro sistema.</p></div><div class="handshake" aria-hidden="true"><svg viewBox="0 0 900.000000 450.000000" preserveAspectRatio="xMidYMid meet"><g transform="translate(0.000000,450.000000) scale(0.100000,-0.100000)" class="hs"><path d="M407 3993 c-9 -16 -39 -114 -36 -117 4 -3 994 -312 1304 -406 94 -29
+173 -55 177 -59 6 -6 -13 -71 -115 -386 -110 -340 -407 -1269 -434 -1358 -16
+-56 18 -59 -283 30 -118 35 -298 88 -400 118 -102 29 -192 57 -201 60 -13 5
+-20 -4 -33 -41 -26 -77 -24 -81 52 -103 282 -84 649 -193 812 -242 553 -165
+586 -173 610 -144 7 9 33 77 58 153 24 75 47 141 51 145 13 13 407 -147 403
+-164 -54 -226 117 -429 349 -416 87 4 87 4 93 -40 25 -187 220 -319 397 -269
+34 9 63 15 64 14 1 -2 8 -25 14 -53 44 -182 231 -286 414 -231 43 13 47 13 47
+-3 0 -128 146 -255 295 -256 110 0 153 21 270 136 101 99 101 99 180 19 163
+-164 366 -187 524 -60 39 32 91 114 91 144 0 18 15 22 25 6 10 -17 135 -50
+189 -50 143 0 268 83 311 207 8 21 20 37 27 36 7 -1 43 -8 81 -15 180 -33 367
+86 393 251 4 23 7 41 8 41 0 0 19 -7 41 -15 227 -81 472 110 483 377 4 96 4
+96 46 102 51 8 141 50 254 118 46 27 85 48 87 47 1 -2 19 -57 38 -122 54 -182
+46 -179 274 -108 149 47 1218 376 1256 387 21 7 22 42 3 89 -17 40 -30 42
+-102 20 -413 -131 -790 -241 -795 -231 -4 6 -30 90 -58 186 -29 96 -70 234
+-91 305 -320 1072 -383 1286 -378 1289 1 2 91 33 198 69 231 78 1090 370 1173
+399 31 11 57 25 57 32 0 10 -29 106 -35 113 0 1 -194 -63 -431 -143 -236 -80
+-661 -225 -944 -321 -283 -96 -540 -183 -570 -194 -30 -11 -65 -23 -77 -26
+-17 -4 -172 69 -560 262 -810 403 -765 391 -1047 265 -456 -202 -390 -193
+-565 -76 -211 142 -231 150 -356 151 -115 0 -65 20 -645 -260 -315 -152 -562
+-266 -686 -315 -72 -29 -72 -29 -245 24 -96 30 -273 84 -394 121 -121 37 -413
+128 -650 202 -431 135 -554 173 -825 256 -80 24 -155 47 -167 51 -12 4 -23 3
+-26 -1z m3722 -218 c33 -11 238 -143 275 -176 5 -5 -38 -30 -97 -58 -137 -64
+-154 -77 -457 -361 -352 -329 -403 -382 -425 -449 -39 -120 -3 -254 93 -342
+207 -192 525 -104 956 264 103 87 84 81 353 112 228 27 228 27 318 -62 50 -49
+191 -181 315 -293 731 -666 1036 -953 1057 -993 80 -156 -56 -377 -232 -377
+-98 0 -99 1 -580 481 -493 491 -494 492 -539 427 -34 -48 -32 -51 400 -475
+440 -432 444 -436 444 -508 0 -135 -132 -222 -275 -180 -56 16 -69 27 -453
+406 -433 428 -426 423 -475 358 -30 -42 -26 -47 341 -410 379 -374 371 -366
+372 -425 1 -113 -132 -188 -264 -150 -56 17 -69 28 -383 334 -344 336 -358
+347 -404 306 -46 -42 -36 -57 241 -330 279 -276 290 -291 275 -370 -9 -52 -68
+-107 -128 -123 -110 -27 -158 -9 -273 101 -91 88 -91 88 -86 181 9 186 -100
+310 -284 324 -74 6 -74 6 -74 62 0 193 -200 335 -407 289 -32 -7 -32 -7 -44
+48 -34 150 -169 264 -314 264 -46 0 -155 -26 -170 -41 -18 -18 -33 -9 -39 24
+-28 144 -186 256 -347 245 -101 -8 -148 -35 -271 -159 -107 -108 -107 -108
+-250 -53 -173 66 -271 106 -280 113 -4 4 42 161 103 351 60 190 162 509 226
+710 63 201 119 369 124 374 4 5 44 -3 92 -18 84 -27 84 -27 138 -6 110 44 502
+222 769 350 474 228 495 238 515 243 41 10 104 7 144 -8z m1771 -293 c322
+-159 605 -296 630 -303 25 -7 46 -13 47 -14 2 -1 26 -78 179 -595 47 -157 98
+-328 114 -380 82 -273 142 -482 138 -485 -17 -16 -214 -133 -253 -151 -123
+-55 -101 -66 -397 209 -145 134 -281 260 -303 280 -40 36 -40 36 20 37 168 1
+247 42 202 104 -12 16 -32 19 -168 20 -237 3 -220 -5 -513 260 -349 316 -375
+342 -348 361 29 22 32 89 3 105 -30 15 -72 13 -401 -29 -345 -43 -334 -39
+-460 -146 -342 -289 -577 -386 -737 -304 -103 54 -144 186 -83 271 25 35 564
+547 644 612 49 40 126 79 374 190 103 46 273 123 377 171 286 130 210 147 935
+-213z m-3720 -168 c85 -25 156 -48 158 -49 2 -2 -24 -86 -57 -187 -33 -100
+-87 -271 -121 -378 -75 -237 -178 -562 -270 -850 -38 -118 -79 -248 -92 -289
+-28 -90 -25 -89 -145 -53 -54 17 -126 38 -161 48 -34 9 -65 20 -68 25 -4 8 44
+163 328 1049 66 206 144 452 174 545 30 94 56 176 59 183 3 7 13 11 22 8 10
+-2 88 -26 173 -52z m4894 9 c3 -10 32 -108 65 -218 33 -110 107 -362 166 -560
+59 -198 149 -501 201 -674 51 -173 92 -317 89 -319 -6 -7 -356 -114 -360 -110
+-3 3 -86 281 -326 1088 -61 206 -129 436 -151 510 -60 198 -73 173 127 240
+202 68 182 64 189 43z m-4156 -1588 c109 -46 156 -180 100 -283 -31 -56 -197
+-225 -244 -247 -87 -41 -208 1 -252 87 -52 106 -26 183 111 326 124 128 191
+156 285 117z m527 -234 c105 -49 151 -186 94 -280 -34 -56 -279 -309 -316
+-326 -143 -68 -311 63 -278 217 13 58 34 87 167 228 170 181 228 209 333 161z
+m435 -291 c105 -29 163 -176 111 -279 -27 -53 -256 -288 -304 -313 -158 -80
+-332 95 -257 259 22 50 258 296 310 324 39 20 88 24 140 9z m396 -369 c84 -38
+120 -151 76 -237 -36 -70 -220 -240 -268 -248 -154 -26 -266 147 -175 270 145
+195 261 263 367 215z M1543 3325 c-34 -24 -47 -76 -29 -118 40 -96 186 -67
+186 37 0 76 -95 125 -157 81z M7406 3311 c-60 -63 -18 -161 69 -161 48 0 78
+18 95 59 40 98 -90 179 -164 102z"/></g></svg></div></section>
 
   <section class="info-grid">
     <article class="card list-card"><div class="card-title"><div class="icon-orb"><svg viewBox="0 0 24 24" width="28" height="28"><path class="g" d="M3 6h7l2 2h9v11H3z"></path></svg></div>Documentos y datos que necesitamos para continuar</div><div class="underline"></div><ul><li><span class="check">✓</span><span>Copia de su INE o licencia de conducir vigente.</span></li><li><span class="check">✓</span><span>Dirección donde desea recibir el vehículo.</span></li><li><span class="check">✓</span><span>O, si lo prefiere, la concesionaria más cercana de su elección.</span></li><li><span class="check">✓</span><span>Horario más conveniente para la entrega.</span></li></ul></article>
