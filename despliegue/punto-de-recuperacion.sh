@@ -29,6 +29,14 @@ set -euo pipefail
 ETIQUETA="${1:-}"
 [ -n "$ETIQUETA" ] || { echo "Uso: $0 <etiqueta>   p.ej. release-m4-stable-2026-08-29" >&2; exit 1; }
 
+# Commit de la aplicacion que se PROBO en produccion. Puede no ser el mismo que
+# el del release si despues se anadieron cambios que no tocan la aplicacion
+# (instrucciones, scripts de copia). Se pasa aparte y queda escrito en el
+# inventario, para que dentro de unos meses se sepa exactamente que codigo de
+# aplicacion se valido y que commit solo anadio documentacion.
+#   COMMIT_APP=af0b243 ./despliegue/punto-de-recuperacion.sh <etiqueta>
+COMMIT_APP="${COMMIT_APP:-}"
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR"
 
@@ -117,8 +125,21 @@ COMMIT_CORTO="$(git rev-parse --short HEAD)"
   echo "fecha               $(date -Is)"
   echo "servidor            $(hostname)"
   echo
-  echo "commit final        $COMMIT"
-  echo "commit (corto)      $COMMIT_CORTO"
+  echo "commit del release  $COMMIT"
+  echo "  (corto)           $COMMIT_CORTO"
+  if [ -n "$COMMIT_APP" ]; then
+    echo "commit de aplicacion $COMMIT_APP   <- el que se probo en produccion"
+    echo "  diferencia entre ambos:"
+    git diff --stat "$COMMIT_APP" "$COMMIT_CORTO" | sed 's/^/    /'
+    # Se deja escrito que el contenido de la imagen es el mismo, no solo dicho.
+    A=$(git ls-tree -r "$COMMIT_APP" --format='%(objectname) %(path)' -- app alembic alembic.ini templates_html requirements.txt Dockerfile | sha256sum | cut -d" " -f1)
+    B=$(git ls-tree -r "$COMMIT_CORTO" --format='%(objectname) %(path)' -- app alembic alembic.ini templates_html requirements.txt Dockerfile | sha256sum | cut -d" " -f1)
+    echo "  huella del contenido de la imagen (app, alembic, plantillas, Dockerfile):"
+    echo "    $COMMIT_APP  $A"
+    echo "    $COMMIT_CORTO  $B"
+    [ "$A" = "$B" ] && echo "    IDENTICOS: el codigo que corre es el mismo en los dos" \
+                    || echo "    DISTINTOS: OJO, el release cambia el codigo de la aplicacion"
+  fi
   echo "rama                $(git rev-parse --abbrev-ref HEAD)"
   echo
   echo "$RECUENTOS"
@@ -131,13 +152,21 @@ COMMIT_CORTO="$(git rev-parse --short HEAD)"
     echo "  $(sudo sha256sum "$f" | cut -d' ' -f1)  $(basename "$f")  $(sudo du -h "$f" | cut -f1)"
   done
   echo
-  echo "PARA RESTAURAR"
+  echo "PARA RESTAURAR, EN ESTE ORDEN"
   echo "  1. git clone <repo> /opt/dulceauto && cd /opt/dulceauto && git checkout $ETIQUETA"
   echo "  2. tar xzf $(basename "$GENERAL") -C /opt/dulceauto"
-  echo "  3. tar xzf $(basename "$SECRETOS") -C /opt/dulceauto     # el .env"
-  echo "  4. tar xzf $(basename "$BASE").nginx.tar.gz -C /   # si hace falta nginx"
-  echo "  5. docker compose build && docker compose up -d"
-  echo "  6. comprobar que alembic current == $(echo "$RECUENTOS" | awk '/^alembic/{print $2}')"
+  echo "  3. tar xzf $(basename "$SECRETOS") -C /opt/dulceauto     # el .env, PRIMERO"
+  echo "     chmod 600 /opt/dulceauto/.env && ls -l /opt/dulceauto/.env"
+  echo "     Comprobar que esta y que solo lo lee su dueno antes de seguir."
+  echo "  4. Apuntar el dominio admin.mxenar.pro a la IP del servidor nuevo (registro A)"
+  echo "     y esperar a que resuelva. Sin esto, certbot no puede emitir."
+  echo "  5. tar xzf $(basename "$BASE").nginx.tar.gz -C /   # configuracion de nginx"
+  echo "  6. sudo certbot --nginx -d admin.mxenar.pro       # emitir el certificado"
+  echo "  7. sudo nginx -t && sudo systemctl reload nginx   # validar ANTES de recargar"
+  echo "  8. docker compose build --build-arg COMMIT=\$(git rev-parse --short HEAD)"
+  echo "     docker compose up -d"
+  echo "  9. comprobar que alembic current == $(echo "$RECUENTOS" | awk '/^alembic/{print $2}')"
+  echo " 10. comprobar los recuentos contra los de este inventario"
   echo
   echo "LO QUE NO VA EN LA COPIA, Y POR QUE"
   echo "  - Los certificados de /etc/letsencrypt NO se copian. Son secretos, caducan"
