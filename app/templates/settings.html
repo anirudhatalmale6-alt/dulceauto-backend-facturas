@@ -263,17 +263,24 @@
         </form>
       {% endif %}
     </div>
-    {# Sobre el mismo azul de la cabecera del Call Center: es el fondo real
-       sobre el que se va a ver. #}
+    {# La vista previa NO es una imagen suelta en una caja: es un trozo de la
+       cabecera de verdad, con su mismo azul y con el MISMO hueco reservado
+       (.brandLogoBox). Asi lo que se ve aqui es lo que se va a ver alli, sin
+       tener que subirlo para comprobarlo. Las dos reglas viven en una sola
+       hoja, operador.css, y esta pantalla la carga solo para esta tarjeta. #}
     <div class="logo-preview callcenter">
-      {% if callcenter_logo %}
-        <img src="{{ callcenter_logo }}" alt="Logotipo del Call Center en uso">
-      {% else %}
-        <span class="small muted">
-          Sin logotipo propio.<br>El Call Center usa la marca DulceAuto
-          predeterminada.
-        </span>
-      {% endif %}
+      <div class="cc-brand">
+        {% if callcenter_logo %}
+          <span class="brandLogoBox">
+            <img class="brandLogo" src="{{ callcenter_logo }}" alt="Logotipo del Call Center en uso">
+          </span>
+          <div><small>Panel de atención de reservas</small></div>
+        {% else %}
+          <div class="cc-brandMark">DA</div>
+          <div><strong>DulceAuto</strong><small>Panel de atención de reservas</small></div>
+        {% endif %}
+      </div>
+      <span class="cc-pie">Así se verá en la cabecera del Call Center</span>
     </div>
   </div>
 </div>

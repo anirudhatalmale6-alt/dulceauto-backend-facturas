@@ -184,14 +184,6 @@ body.theme-night .barcode{
    para que un archivo apaisado no empuje al buscador fuera de la barra.
    object-fit:contain es lo que impide que se deforme: sin eso, una imagen
    cuadrada se estiraria hasta los 170 px. */
-.brandLogo{height:38px;max-width:270px;width:auto;object-fit:contain;display:block}
-
-/* Con logotipo, la marca se apila: el archivo arriba y el subtitulo debajo.
-   Al lado no cabe -la columna de la marca mide 310 px- y "Panel de atencion de
-   reservas" se partia en dos lineas contra el borde del logotipo. Apilado hay
-   ancho de sobra para las dos cosas y el subtitulo no se parte. */
-.brand.conLogo{flex-direction:column;align-items:flex-start;gap:3px}
-.brand.conLogo small{display:block;color:#d8e2ed;font-size:11px;white-space:nowrap;margin:0}
 
 /* --- controles de formulario en los tres temas ------------------------------
  * El desplegable "Tipo de nota" salia con el fondo completamente blanco en

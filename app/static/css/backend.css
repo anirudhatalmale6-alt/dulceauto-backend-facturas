@@ -247,7 +247,12 @@ body.theme-soft .photo-slot { background: var(--cream2); }
   background: #fff;
   text-align: center;
 }
-.logo-preview img { max-width: 100%; max-height: 110px; }
+/* El :not() es necesario, no cosmetico. Esta regla es mas especifica que
+   .brandLogo, asi que le pisaba el max-height y en la vista previa el logotipo
+   se medía 170x80 mientras en la cabecera real medía 94x44. Se veía parecido
+   -la caja lo recorta- y era otra cosa: justo lo que la vista previa no puede
+   hacer. El del Call Center se rige SOLO por su hueco. */
+.logo-preview img:not(.brandLogo) { max-width: 100%; max-height: 110px; }
 body.theme-night .logo-preview { background: #0f1927; border-color: #2a3a50; }
 body.theme-soft .logo-preview { background: var(--cream2); }
 @media (max-width: 900px) { .logo-row { grid-template-columns: 1fr; } }
@@ -261,8 +266,27 @@ body.theme-night .logo-preview.callcenter,
 body.theme-soft .logo-preview.callcenter {
   background: linear-gradient(90deg, #062440, #0a3159 60%, #062440);
   border-color: #0a3159;
+  place-items: center start;
+  padding: 14px;
+  gap: 10px;
 }
 .logo-preview.callcenter .small.muted { color: #c3d3e6; }
+
+/* La vista previa reproduce el bloque de marca de la cabecera del Operador: el
+   mismo hueco reservado (.brandLogoBox, que vive en marca-callcenter.css y la
+   comparten las dos pantallas) y el mismo subtitulo al lado. El cuadro "DA" se
+   redibuja aqui porque es solo la ilustracion de lo que ya hay cuando no se ha
+   subido nada; el hueco, que es lo que tiene que coincidir de verdad, NO se
+   redibuja: es literalmente la misma regla. */
+.logo-preview.callcenter .cc-brand { display: flex; gap: 12px; align-items: center; color: #fff; }
+.logo-preview.callcenter .cc-brandMark {
+  width: 44px; height: 44px; border-radius: 11px; background: #e9aa22;
+  display: grid; place-items: center; color: #0a2a4d; font-weight: 900; font-size: 18px;
+  flex: 0 0 auto;
+}
+.logo-preview.callcenter .cc-brand strong { font-size: 20px; display: block; }
+.logo-preview.callcenter .cc-brand small { display: block; color: #d8e2ed; font-size: 11px; margin-top: 1px; }
+.logo-preview.callcenter .cc-pie { font-size: 10.5px; color: #93aac6; }
 
 /* --- marca de la barra lateral --- */
 /* La segunda linea cabe entera; sin esto "Panel administrativo" se parte en

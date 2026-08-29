@@ -1,0 +1,56 @@
+/*
+ * Marca del Call Center: el hueco reservado del logotipo.
+ *
+ * Vive en su propia hoja porque lo usan DOS pantallas que no comparten CSS: la
+ * cabecera del Operador (operador.css) y la vista previa de Configuracion
+ * (panel.css + backend.css). Esas dos hojas no pueden convivir -declaran .btn,
+ * .card y .chip con valores distintos-, asi que la regla compartida se saca
+ * aparte en lugar de copiarse en las dos.
+ *
+ * Que sea UNA sola definicion es justo lo que hace que la vista previa no pueda
+ * mentir: si algun dia se cambia el tamano del hueco, cambian las dos a la vez.
+ */
+
+/* --- hueco reservado del logotipo del Call Center ---------------------------
+ * El archivo que sube el cliente puede venir de cualquier tamano: el suyo era
+ * de 1920x900 px. Lo que manda no es el archivo, es este hueco.
+ *
+ * Alto FIJO de 44 px, el mismo que ocupa el cuadro "DA" al que sustituye: por
+ * eso la barra superior mide exactamente igual con logotipo y sin el, y un
+ * archivo enorme no puede empujarla. Ancho maximo de 170 px, no fijo, para que
+ * la caja se ajuste al logotipo y no deje un hueco muerto antes del subtitulo.
+ *
+ * La imagen lleva los DOS topes (max-width y max-height) con width y height en
+ * auto: con un solo tope, un archivo muy apaisado respeta el alto y se sale por
+ * el ancho, o al reves. Con los dos, el que primero llega manda y la proporcion
+ * no se toca nunca. object-fit:contain es el cinturon de seguridad por si algun
+ * dia alguien le pone medidas fijas a la caja.
+ *
+ * overflow:hidden cierra el caso extremo: aunque una regla futura se colara,
+ * lo que sobresalga se recorta contra el hueco en vez de invadir la cabecera.
+ */
+.brandLogoBox{
+  flex:0 0 auto;height:44px;max-width:170px;
+  display:flex;align-items:center;justify-content:flex-start;overflow:hidden
+}
+/*
+ * `height:100%` y no `height:auto`, y esto tiene un motivo concreto: un SVG
+ * puede venir SOLO con viewBox, sin atributos width y height. Es lo normal en
+ * lo que exportan Illustrator y Figma. Un SVG asi no tiene tamano propio, y con
+ * `height:auto` el navegador resuelve altura CERO: el logotipo no se ve, sin
+ * ningun error por ningun lado. Con una altura definida, el ancho sale de la
+ * proporcion del viewBox y se pinta igual que un PNG. Comprobado con los dos
+ * tipos de SVG.
+ *
+ * `object-fit:scale-down` en vez de `contain`: contain estira una imagen
+ * pequena hasta llenar el hueco y la deja borrosa. scale-down es "contain, pero
+ * sin agrandar nunca": un logotipo pequeno se queda a su tamano y uno enorme se
+ * reduce. La proporcion no se toca en ningun caso.
+ */
+.brandLogo{
+  height:100%;width:auto;max-width:170px;
+  object-fit:scale-down;object-position:left center;display:block
+}
+/* El subtitulo, al lado. Si el logotipo es ancho se parte en dos lineas, que
+   siguen cabiendo dentro de los 44 px del hueco y no mueven la barra. */
+.brand .brandLogoBox + div small{margin-top:0}

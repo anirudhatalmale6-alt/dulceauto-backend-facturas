@@ -10,6 +10,8 @@ La vista previa real y el PDF llegan en las fases C y D. Donde todavia no estan
 cableadas, la pantalla lo dice con una etiqueta en lugar de ofrecer un boton que
 no hace nada.
 """
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, Form, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -96,6 +98,51 @@ app.mount(
     name="plantillas_assets",
 )
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+
+def estatico(ruta: str) -> str:
+    """URL de un archivo estatico con su version detras: /static/x.css?v=...
+
+    Sin esto, el navegador se queda con la hoja de estilos que descargo la
+    primera vez. Es un problema real y no teorico: al desplegar el logotipo del
+    Call Center, el HTML nuevo llego con la etiqueta <img> y el CSS que la
+    encuadra seguia siendo el viejo en cache. Resultado: el logotipo pintado a
+    tamano natural, ocupando la pantalla entera, con el servidor sirviendo el
+    archivo correcto. Nada en el servidor lo delataba.
+
+    La version es la fecha del propio archivo, asi que cambia sola en cuanto se
+    toca y no hay que acordarse de subir ningun numero a mano. Si el archivo no
+    esta, se devuelve la ruta pelada en vez de reventar: una version que falta
+    no puede tumbar la pagina entera.
+    """
+    limpia = ruta.lstrip("/")
+    try:
+        marca = int((BASE_DIR / "static" / limpia).stat().st_mtime)
+    except OSError:
+        return f"/static/{limpia}"
+    return f"/static/{limpia}?v={marca}"
+
+
+# Disponible en todas las plantillas sin tener que pasarla en cada contexto.
+templates.env.globals["estatico"] = estatico
+
+
+def url_logo_callcenter(db: Session) -> str | None:
+    """URL del logotipo del Call Center, con version, o None si no hay ninguno.
+
+    La ruta es siempre la misma (/operador/logo.img), asi que sin version el
+    navegador se queda con la imagen que descargo la primera vez: quien
+    reemplace su logotipo seguiria viendo el anterior hasta vaciar la cache, y
+    diria -con razon- que el boton de reemplazar no funciona.
+
+    De version sirve el propio nombre del archivo guardado, que lo genera el
+    servidor al azar y por tanto es distinto en cada subida. No hace falta
+    inventar nada aparte ni tocar la base de datos.
+    """
+    ruta = cc.ajuste(db, cc.AJUSTE_LOGO)
+    if not ruta:
+        return None
+    return f"/operador/logo.img?v={Path(ruta).stem}"
 
 NAV_ITEMS = [
     {"key": "dashboard", "label": "Dashboard", "icon": "⌂", "url": "/"},
@@ -1465,7 +1512,7 @@ def settings_view(request: Request, db: Session = Depends(get_db)):
         # nombre de la cuenta", y rellenarla sola con "operador" haria creer
         # que hay un nombre puesto cuando no lo hay.
         callcenter_nombre=cc.ajuste(db, cc.AJUSTE_NOMBRE),
-        callcenter_logo="/operador/logo.img" if cc.ajuste(db, cc.AJUSTE_LOGO) else None,
+        callcenter_logo=url_logo_callcenter(db),
         qr_modo=codes.ajuste(db, "qr.mode") or codes.MODO_DINAMICO,
         qr_url="/configuracion/qr.img" if codes.ajuste(db, "qr.image_path") else None,
         # Modo manual con el archivo desaparecido: el sistema vuelve solo al QR
@@ -1971,9 +2018,7 @@ def render_operador(
         # modulo, la cabecera tiene que decir quien es el de verdad y no
         # ponerle el nombre de otra persona.
         "operador_nombre": usuario if es_admin else cc.nombre_visible(db, usuario),
-        "callcenter_logo": (
-            "/operador/logo.img" if cc.ajuste(db, cc.AJUSTE_LOGO) else None
-        ),
+        "callcenter_logo": url_logo_callcenter(db),
         "role": current_role(request),
         "es_admin": es_admin,
         "flashes": pop_flashes(request),

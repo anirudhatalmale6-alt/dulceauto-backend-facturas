@@ -320,19 +320,34 @@ def main() -> int:
     check("se sube el logotipo del Call Center", "Logotipo del Call Center actualizado" in r.text)
 
     cab = cabecera(op.get("/operador").text)
-    check("la cabecera pasa a pintar el logotipo",
-          'class="brandLogo" src="/operador/logo.img"' in cab)
+    m_logo = re.search(r'class="brandLogo" src="/operador/logo\.img\?v=(\w+)"', cab)
+    check("la cabecera pasa a pintar el logotipo", bool(m_logo),
+          m_logo.group(0) if m_logo else cab[:0])
     check("y deja de pintar el distintivo DA", '<div class="brandMark">DA</div>' not in cab)
+    # El hueco reservado tiene que envolverlo SIEMPRE: es lo unico que impide
+    # que un archivo de 1920x900 se pinte a tamano natural y se coma la barra.
+    check("el logotipo va dentro del hueco reservado",
+          '<span class="brandLogoBox">' in cab)
+    check("y la vista previa de Configuración usa ESE MISMO hueco",
+          '<span class="brandLogoBox">' in admin.get("/configuracion").text)
 
     servido = op.get("/operador/logo.img")
     check("el Operador puede descargar la imagen", servido.status_code == 200)
     check("y es exactamente el archivo que se subió", servido.raw == ROJO,
           f"{len(servido.raw)} bytes")
 
+    version_antes = m_logo.group(1) if m_logo else ""
     r = admin.subir("/configuracion/callcenter/logo", "logo", "marca2.png", VERDE)
     check("se reemplaza por otro", "Logotipo del Call Center actualizado" in r.text)
     check("y lo que se sirve es el nuevo, no el viejo",
           op.get("/operador/logo.img").raw == VERDE)
+    # La ruta de la imagen es siempre la misma, asi que sin cambiar la version
+    # el navegador seguiria ensenando la anterior y "reemplazar" pareceria roto.
+    m2 = re.search(r'/operador/logo\.img\?v=(\w+)',
+                   cabecera(op.get("/operador").text))
+    check("al reemplazarlo cambia la versión de la URL",
+          bool(m2) and m2.group(1) != version_antes,
+          f"{version_antes} -> {m2.group(1) if m2 else 'SIN ?v='}")
 
     r = admin.subir("/configuracion/callcenter/logo", "logo", "trampa.png", b"esto no es una imagen")
     check("un archivo que no es una imagen se rechaza",
@@ -366,7 +381,35 @@ def main() -> int:
 
     print("\n=== 3. Campos legibles en los tres temas ===")
 
+    # --- las hojas llegan con version, o el navegador se queda con la vieja ---
+    #
+    # Esto no es teoria: al desplegar el logotipo, el HTML nuevo llego con la
+    # etiqueta <img> y el navegador del cliente seguia usando el CSS de antes,
+    # que no tenia la regla que la encuadra. El logotipo se pinto a tamano
+    # natural y ocupo la pantalla. En el servidor estaba todo bien.
+    for pagina, hoja in (("/operador/acceso", "operador.css"), ("/acceso", "panel.css")):
+        html = Cliente(BASE).get(pagina).text
+        m = re.search(rf"/static/css/{re.escape(hoja)}\?v=(\d+)", html)
+        check(f"{pagina} pide {hoja} con version", bool(m), m.group(1) if m else "SIN ?v=")
+    html = Cliente(BASE).get("/operador/acceso").text
+    check("ninguna hoja se pide sin version",
+          "css/operador.css\"" not in html and "css/operador.css'" not in html)
+
     css = Cliente(BASE).get("/static/css/operador.css").text
+    marca = Cliente(BASE).get("/static/css/marca-callcenter.css").text
+    check("el hueco reservado tiene alto fijo", "height:44px" in plano(marca))
+    check("y tope de ancho", "max-width:170px" in plano(marca))
+    # La imagen se ata al alto del hueco (100%) y deja el ancho en auto, para
+    # que la proporcion la ponga el archivo. El alto NO puede ir en auto: un SVG
+    # que venga solo con viewBox se quedaria en cero y no se veria.
+    check("la imagen se ata al alto del hueco", "height:100%" in plano(marca))
+    check("y deja el ancho a la proporción del archivo", "width:auto" in plano(marca))
+    check("con tope de ancho", "max-width:170px" in plano(marca))
+    check("y object-fit:scale-down, que nunca agranda",
+          "object-fit:scale-down" in plano(marca))
+    check("alineada a la izquierda dentro del hueco",
+          "object-position:left center" in plano(marca))
+    check("la hoja del hueco NO viene vacía", len(marca) > 500, f"{len(marca)} caracteres")
     check("el módulo de Operador declara el esquema oscuro en Noche",
           "body.theme-night{color-scheme:dark}" in plano(css))
     check("y fija a mano el color de las opciones del desplegable",

@@ -15,7 +15,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Operador · Call Center · DulceAuto</title>
-<link rel="stylesheet" href="{{ url_for('static', path='/css/operador.css') }}">
+<link rel="stylesheet" href="{{ estatico('css/operador.css') }}">
+<link rel="stylesheet" href="{{ estatico('css/marca-callcenter.css') }}">
 </head>
 <body class="{{ theme_class }}">
 {% import 'operator_steps.html' as ui with context %}
@@ -25,11 +26,19 @@
   {# La marca de la cabecera. Con logotipo propio se sustituye el distintivo y
      el nombre, porque un logotipo ya lleva dentro el nombre de la empresa y
      ponerlo dos veces queda a la vista. Sin logotipo queda exactamente como
-     estaba: el cuadro "DA" y el titulo. #}
-  <div class="brand{% if callcenter_logo %} conLogo{% endif %}">
+     estaba: el cuadro "DA" y el titulo.
+
+     El logotipo va SIEMPRE dentro de .brandLogoBox, que es el hueco reservado
+     de la cabecera. Ese hueco ocupa lo mismo que el cuadro "DA" al que
+     sustituye, asi que la barra mide igual con logotipo y sin el, suba lo que
+     suba. La misma caja se usa en la vista previa de Configuracion: si fueran
+     dos reglas distintas, la vista previa acabaria ensenando otra cosa. #}
+  <div class="brand">
     {% if callcenter_logo %}
-      <img class="brandLogo" src="{{ callcenter_logo }}" alt="Logotipo del Call Center">
-      <small>Panel de atención de reservas</small>
+      <span class="brandLogoBox">
+        <img class="brandLogo" src="{{ callcenter_logo }}" alt="Logotipo del Call Center">
+      </span>
+      <div><small>Panel de atención de reservas</small></div>
     {% else %}
       <div class="brandMark">DA</div>
       <div><strong>DulceAuto</strong><small>Panel de atención de reservas</small></div>
@@ -248,6 +257,6 @@
 </div>
 </div>
 
-<script src="{{ url_for('static', path='/js/panel.js') }}"></script>
+<script src="{{ estatico('js/panel.js') }}"></script>
 </body>
 </html>
