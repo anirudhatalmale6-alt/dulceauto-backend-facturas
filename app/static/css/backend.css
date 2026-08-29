@@ -252,6 +252,18 @@ body.theme-night .logo-preview { background: #0f1927; border-color: #2a3a50; }
 body.theme-soft .logo-preview { background: var(--cream2); }
 @media (max-width: 900px) { .logo-row { grid-template-columns: 1fr; } }
 
+/* La vista previa del logotipo del Call Center va sobre el mismo azul que su
+   cabecera, en los tres temas. Sobre fondo blanco, un logotipo pensado para
+   cabecera oscura -que es el que hay que subir- se veria en blanco sobre
+   blanco: la vista previa diria "no hay nada" con el archivo ya subido. */
+.logo-preview.callcenter,
+body.theme-night .logo-preview.callcenter,
+body.theme-soft .logo-preview.callcenter {
+  background: linear-gradient(90deg, #062440, #0a3159 60%, #062440);
+  border-color: #0a3159;
+}
+.logo-preview.callcenter .small.muted { color: #c3d3e6; }
+
 /* --- marca de la barra lateral --- */
 /* La segunda linea cabe entera; sin esto "Panel administrativo" se parte en
    dos y el bloque de la marca queda descuadrado. panel.css es el CSS del
@@ -280,3 +292,22 @@ a.btn { text-decoration: none; }
 /* La columna de orden de la guia lleva dos botones minusculos; sin esto el
    segundo cae debajo del primero y la fila crece al doble. */
 td.actions .btn { white-space: nowrap; }
+
+/* --- desplegables nativos en Modo Noche --------------------------------------
+   Mismo arreglo que en el modulo de Operador, donde salio el fallo: la lista de
+   opciones de un <select> no la pinta esta hoja, la dibuja el navegador, y para
+   elegir sus colores mira `color-scheme` y no el `background` del elemento. Sin
+   declararlo, en Noche abre la lista con el fondo claro del sistema y encima
+   cae el color de texto casi blanco del select: opciones ilegibles.
+
+   El panel tiene desplegables en el editor de facturas, en el duplicado y en
+   los filtros de notas, con el mismo defecto aunque nadie lo hubiera reportado
+   todavia. Se arregla aqui a la vez para no dejar la mitad hecha. */
+body.theme-night { color-scheme: dark; }
+body.theme-night option,
+body.theme-night optgroup { background: #121d2c; color: #eaf1fb; }
+
+/* La factura de la vista previa se queda blanca tambien en Noche -es la regla
+   que ya estaba en panel.css-, asi que su trozo vuelve al esquema claro. */
+body.theme-night .invoice-mini,
+body.theme-night .modal-invoice { color-scheme: light; }

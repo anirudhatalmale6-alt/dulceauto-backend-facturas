@@ -22,9 +22,18 @@
 
 <div class="app">
 <header class="topbar">
-  <div class="brand">
-    <div class="brandMark">DA</div>
-    <div><strong>DulceAuto</strong><small>Panel de atención de reservas</small></div>
+  {# La marca de la cabecera. Con logotipo propio se sustituye el distintivo y
+     el nombre, porque un logotipo ya lleva dentro el nombre de la empresa y
+     ponerlo dos veces queda a la vista. Sin logotipo queda exactamente como
+     estaba: el cuadro "DA" y el titulo. #}
+  <div class="brand{% if callcenter_logo %} conLogo{% endif %}">
+    {% if callcenter_logo %}
+      <img class="brandLogo" src="{{ callcenter_logo }}" alt="Logotipo del Call Center">
+      <small>Panel de atención de reservas</small>
+    {% else %}
+      <div class="brandMark">DA</div>
+      <div><strong>DulceAuto</strong><small>Panel de atención de reservas</small></div>
+    {% endif %}
   </div>
 
   <form class="search" method="get" action="/operador">
@@ -38,7 +47,7 @@
       <div class="chip">Folio: <b>{{ invoice.folio }}</b></div>
       <div class="chip">Estado: <b>{{ status_labels.get(invoice.status, (invoice.status, ''))[0] }}</b></div>
     {% endif %}
-    <div class="chip">Operador: <b>{{ user }}</b></div>
+    <div class="chip">Operador: <b>{{ operador_nombre }}</b></div>
     <div class="themeSwitch">
       <button type="button" data-theme-btn="light"{% if theme == 'light' %} class="active"{% endif %} onclick="setTheme('light')">Claro</button>
       <button type="button" data-theme-btn="soft"{% if theme == 'soft' %} class="active"{% endif %} onclick="setTheme('soft')">Suave</button>

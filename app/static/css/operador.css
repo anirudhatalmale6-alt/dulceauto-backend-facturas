@@ -178,3 +178,45 @@ body.theme-night .barcode{
 /* El boton de buscar parte "Buscar reserva" en dos lineas y descuadra la barra
    superior; el texto es fijo, asi que no hay motivo para dejar que se parta. */
 .search button{white-space:nowrap}
+
+/* Logotipo propio del Call Center, cuando se ha subido uno desde Configuracion.
+   Ocupa el sitio del cuadro "DA", con la misma altura, y se limita el ancho
+   para que un archivo apaisado no empuje al buscador fuera de la barra.
+   object-fit:contain es lo que impide que se deforme: sin eso, una imagen
+   cuadrada se estiraria hasta los 170 px. */
+.brandLogo{height:38px;max-width:270px;width:auto;object-fit:contain;display:block}
+
+/* Con logotipo, la marca se apila: el archivo arriba y el subtitulo debajo.
+   Al lado no cabe -la columna de la marca mide 310 px- y "Panel de atencion de
+   reservas" se partia en dos lineas contra el borde del logotipo. Apilado hay
+   ancho de sobra para las dos cosas y el subtitulo no se parte. */
+.brand.conLogo{flex-direction:column;align-items:flex-start;gap:3px}
+.brand.conLogo small{display:block;color:#d8e2ed;font-size:11px;white-space:nowrap;margin:0}
+
+/* --- controles de formulario en los tres temas ------------------------------
+ * El desplegable "Tipo de nota" salia con el fondo completamente blanco en
+ * Noche, con lo que sus opciones quedaban en blanco sobre blanco.
+ *
+ * La lista de opciones de un <select> no la pinta esta hoja: la dibuja el
+ * navegador, y para elegir colores mira `color-scheme`, no el `background` del
+ * elemento. Sin declararlo, el navegador da por hecho que la pagina es clara y
+ * abre el desplegable con el fondo claro del sistema; encima cae el `color`
+ * heredado del select, que en Noche es casi blanco. De ahi el recuadro vacio.
+ *
+ * Se declara el esquema por tema, que es lo que arregla de verdad el
+ * desplegable, y ademas se fijan a mano los colores de <option> para los
+ * navegadores que no lo tienen en cuenta.
+ */
+body.theme-night{color-scheme:dark}
+body.theme-night option,body.theme-night optgroup{background:#102033;color:#eef5ff}
+
+/* La tarjeta de acceso es blanca en los tres temas, porque va sobre un fondo
+   azul fijo. Sus campos no declaran fondo, asi que con color-scheme:dark el
+   navegador los pintaria oscuros dentro de una tarjeta blanca: hay que
+   devolverle el esquema claro a ese trozo. */
+.loginCard{color-scheme:light}
+
+/* El buscador de la barra superior es blanco con texto oscuro en los tres
+   temas -la barra es azul oscura siempre-, asi que su desplegable y su
+   marcador de texto tienen que seguir siendo claros. */
+.search input{color-scheme:light}

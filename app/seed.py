@@ -41,6 +41,15 @@ GLOBAL_SETTINGS: dict[str, tuple[str, bool]] = {
     "pdf.single_page": ("1", False),
     "folio.prefix": ("RES-", False),
     "folio.next": ("87242", False),
+    # Call Center: nombre visible del Operador y logotipo propio del modulo.
+    # Los dos arrancan vacios, y ese vacio significa "lo de siempre": el nombre
+    # de la cuenta y la marca DulceAuto. Sin tocar nada, el Call Center se ve
+    # exactamente igual que antes de existir estos dos ajustes.
+    #
+    # El logotipo va marcado como sensible por coherencia con brand.logo_path:
+    # los ajustes con archivo no se editan escribiendo una ruta a mano.
+    "callcenter.operator_name": ("", False),
+    "callcenter.logo_path": ("", True),
 }
 
 # --- datos bancarios de muestra, por mercado ---------------------------------

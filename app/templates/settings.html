@@ -115,7 +115,7 @@
         {# El logotipo y el QR tienen su propia tarjeta, con archivo y vista
            previa. Aqui saldrian como una casilla de texto donde escribir una
            ruta a mano, que no es forma de elegir una imagen. #}
-        {% if s.key not in ('brand.logo_path', 'qr.mode', 'qr.image_path') %}
+        {% if s.key not in ajustes_con_tarjeta %}
           <label class="{{ 'full' if s.key.endswith('url') else '' }}">
             {{ etiquetas.get(s.key, s.key) }}
             <input name="ajuste:{{ s.key }}" value="{{ s.value or '' }}">
@@ -207,6 +207,71 @@
         <span class="small muted">
           QR <b>automático</b>: se genera por folio.
           {% if qr_url %}<br>Hay una imagen guardada sin usar.{% endif %}
+        </span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="settings-section-title">06 · Call Center</div>
+<div class="card">
+  <div class="lock">
+    <b>🔒 Super-admin</b>
+    <span>Lo de esta tarjeta afecta <b>solo</b> a la pantalla del Call Center
+    (<code>/operador</code>). No toca las facturas, ni sus PDF, ni el logotipo
+    de ninguna marca.</span>
+  </div>
+
+  <form method="post" action="/configuracion/guardar" style="margin-top:12px">
+    <div class="form-grid">
+      <label class="full">
+        Nombre visible del Operador
+        <input name="ajuste:callcenter.operator_name" value="{{ callcenter_nombre }}"
+               maxlength="60" placeholder="Ej. María López">
+      </label>
+    </div>
+    {# La explicacion va fuera del <label>: dentro hereda el peso de la
+       etiqueta y sale en negrita, como si fuera parte del nombre del campo. #}
+    <p class="small muted" style="margin-top:8px">
+      Es lo que aparece arriba en el Call Center («Operador: María López») y con
+      lo que se firman las notas nuevas. No es el usuario de acceso: ese se
+      sigue cambiando en la tarjeta «Cuenta Operador» y no cambia aquí. Si se
+      deja en blanco, vuelve a aparecer el nombre de la cuenta
+      (<b>{{ operador_usuario }}</b>).
+    </p>
+    <button class="btn gold" type="submit" style="margin-top:12px">Guardar nombre visible</button>
+  </form>
+
+  <div class="logo-row" style="margin-top:18px">
+    <div>
+      <p class="small muted">
+        <b>Logotipo del Call Center.</b> Sustituye la marca DulceAuto de la
+        cabecera del panel de atención. La cabecera es azul oscura en los tres
+        temas, así que conviene un PNG o un SVG con fondo transparente y trazo
+        claro. Se ve mejor apaisado: se ajusta a 38 px de alto y hasta 270 px de
+        ancho, sin deformarse.
+      </p>
+      <form method="post" action="/configuracion/callcenter/logo" enctype="multipart/form-data">
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" required>
+        <button class="btn gold" type="submit" style="margin-top:10px">
+          {{ 'Reemplazar el logotipo del Call Center' if callcenter_logo else 'Subir logotipo del Call Center' }}
+        </button>
+      </form>
+      {% if callcenter_logo %}
+        <form method="post" action="/configuracion/callcenter/logo/quitar" style="margin-top:10px">
+          <button class="btn ghost" type="submit">Quitar y volver al logotipo DulceAuto predeterminado</button>
+        </form>
+      {% endif %}
+    </div>
+    {# Sobre el mismo azul de la cabecera del Call Center: es el fondo real
+       sobre el que se va a ver. #}
+    <div class="logo-preview callcenter">
+      {% if callcenter_logo %}
+        <img src="{{ callcenter_logo }}" alt="Logotipo del Call Center en uso">
+      {% else %}
+        <span class="small muted">
+          Sin logotipo propio.<br>El Call Center usa la marca DulceAuto
+          predeterminada.
         </span>
       {% endif %}
     </div>

@@ -841,4 +841,15 @@ def validar_ajuste(clave: str, valor: str, market: str | None) -> str | None:
     if clave.endswith(".email") and valor and "@" not in valor:
         return f"{clave}: no parece un email."
 
+    if clave == "callcenter.operator_name":
+        # El import va aqui dentro y no arriba: callcenter.py importa este
+        # modulo al cargarse, y hacerlo al reves en la cabecera montaria un
+        # ciclo. El limite se lee de alli para que exista en un solo sitio; si
+        # se cambiara, no habria una segunda copia que se quedara vieja.
+        from .callcenter import validar_nombre
+
+        problema = validar_nombre(valor)
+        if problema:
+            return problema
+
     return None

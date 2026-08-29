@@ -340,7 +340,10 @@
         </div>
         <div class="field">
           <label>Operador</label>
-          <input value="{{ user }}" readonly>
+          {# El mismo nombre con el que se va a firmar la nota. Si aqui saliera
+             el usuario de acceso y en la nota guardada el nombre visible, la
+             pantalla estaria ensenando una cosa y guardando otra. #}
+          <input value="{{ operador_nombre }}" readonly>
         </div>
       </div>
       <div class="field" style="margin-top:8px">

@@ -28,6 +28,7 @@ from .models import (
     Invoice,
     OperatorFaq,
     OperatorNote,
+    Setting,
     utcnow,
 )
 
@@ -168,6 +169,51 @@ NECESIDADES = [
 
 class NotaInvalida(ValueError):
     """La nota no se puede guardar. El mensaje es para el Operador."""
+
+
+# --- identidad visible del Call Center ---------------------------------------
+#
+# Dos ajustes de Configuracion que solo afectan a las pantallas del Operador: el
+# nombre con el que se presenta y el logotipo de la cabecera. Ninguno de los dos
+# toca la factura, ni el PDF, ni las marcas: son la ropa del modulo, no un dato
+# del documento.
+
+AJUSTE_NOMBRE = "callcenter.operator_name"
+AJUSTE_LOGO = "callcenter.logo_path"
+
+MAX_NOMBRE = 60
+
+
+def ajuste(db: Session, clave: str) -> str:
+    """Valor de un ajuste global, ya limpio. "" si no existe la fila."""
+    fila = db.execute(
+        select(Setting).where(Setting.key == clave, Setting.market.is_(None))
+    ).scalar_one_or_none()
+    return (fila.value or "").strip() if fila else ""
+
+
+def nombre_visible(db: Session, cuenta: str | None) -> str:
+    """Con que nombre se presenta el Operador en pantalla.
+
+    Vacio no significa "sin nombre", significa "usa el de la cuenta". Es
+    deliberado: el ajuste puede quedarse en blanco -al instalarlo, o al borrarlo
+    a proposito- y en ese caso la cabecera tiene que seguir diciendo algo, no
+    quedarse con un "Operador:" suelto.
+
+    El nombre visible es independiente del usuario de acceso a proposito: se
+    escribe "Maria Lopez" sin tocar la credencial con la que se entra, que sigue
+    siendo la misma y sigue estando hasheada.
+    """
+    return ajuste(db, AJUSTE_NOMBRE) or (cuenta or "Operador")
+
+
+def validar_nombre(valor: str) -> str:
+    """Comprueba el nombre visible antes de guardarlo. Devuelve el motivo o ""."""
+    limpio = (valor or "").strip()
+    if len(limpio) > MAX_NOMBRE:
+        return f"El nombre visible no puede pasar de {MAX_NOMBRE} caracteres."
+    # Se admite el vacio: es la forma de volver al nombre de la cuenta.
+    return ""
 
 
 # --- busqueda por folio ------------------------------------------------------

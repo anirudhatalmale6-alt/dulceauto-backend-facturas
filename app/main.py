@@ -1400,7 +1400,19 @@ ETIQUETAS_AJUSTE = {
     "pdf.single_page": "Forzar una sola página",
     "folio.prefix": "Prefijo del folio",
     "folio.next": "Siguiente folio",
+    "callcenter.operator_name": "Nombre visible del Operador",
+    "callcenter.logo_path": "Logotipo del Call Center",
 }
+
+# Ajustes que NO salen en la rejilla generica de Configuracion porque tienen su
+# propia tarjeta: los que se editan con un archivo y los del Call Center.
+AJUSTES_CON_TARJETA_PROPIA = (
+    "brand.logo_path",
+    "qr.mode",
+    "qr.image_path",
+    cc.AJUSTE_NOMBRE,
+    cc.AJUSTE_LOGO,
+)
 
 
 @app.get("/configuracion", response_class=HTMLResponse)
@@ -1447,6 +1459,13 @@ def settings_view(request: Request, db: Session = Depends(get_db)):
             else "operador"
         ),
         logo_url="/configuracion/logo.img" if _logo_actual(db) else None,
+        ajustes_con_tarjeta=AJUSTES_CON_TARJETA_PROPIA,
+        # Call Center. El nombre visible se pinta vacio si no se ha puesto
+        # ninguno: la casilla en blanco es justo lo que significa "usa el
+        # nombre de la cuenta", y rellenarla sola con "operador" haria creer
+        # que hay un nombre puesto cuando no lo hay.
+        callcenter_nombre=cc.ajuste(db, cc.AJUSTE_NOMBRE),
+        callcenter_logo="/operador/logo.img" if cc.ajuste(db, cc.AJUSTE_LOGO) else None,
         qr_modo=codes.ajuste(db, "qr.mode") or codes.MODO_DINAMICO,
         qr_url="/configuracion/qr.img" if codes.ajuste(db, "qr.image_path") else None,
         # Modo manual con el archivo desaparecido: el sistema vuelve solo al QR
@@ -1612,6 +1631,121 @@ def settings_logo_file(request: Request, db: Session = Depends(get_db)):
         select(Setting).where(Setting.key == "brand.logo_path", Setting.market.is_(None))
     ).scalar_one_or_none()
     ruta = uploads.ruta_absoluta(fila.value if fila else None)
+    if ruta is None:
+        return Response(status_code=404)
+    return FileResponse(ruta)
+
+
+# --- logotipo del Call Center -------------------------------------------------
+#
+# Es un archivo distinto del de la factura, guardado en su propia carpeta y en
+# su propio ajuste. Que sean dos y no uno es justo lo que pidio el cliente:
+# cambiar la cabecera del panel de atencion no puede tocar el logotipo de las
+# facturas ni el de ninguna marca.
+#
+# Quitarlo no deja el modulo sin nada: vuelve a la marca DulceAuto del diseno
+# aprobado, que es la que se ve hoy.
+
+
+@app.post("/configuracion/callcenter/logo")
+async def settings_callcenter_logo(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not master_unlocked(request):
+        flash(request, "La Configuración está bloqueada.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    touch_master(request)
+    form = await request.form()
+    archivo = form.get("logo")
+    if archivo is None or not getattr(archivo, "filename", ""):
+        flash(request, "No se ha elegido ningún archivo.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        guardado = uploads.guardar_imagen(
+            await archivo.read(), archivo.filename, "callcenter"
+        )
+    except uploads.SubidaInvalida as exc:
+        flash(request, str(exc), "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    fila = _fila_ajuste(db, cc.AJUSTE_LOGO)
+    anterior = fila.value
+    fila.value = guardado.relativa
+    db.commit()
+
+    # Igual que con el logotipo de la factura: el anterior se borra despues de
+    # haber guardado el nuevo, nunca antes.
+    if anterior and anterior != guardado.relativa:
+        uploads.borrar(anterior)
+
+    act.log(
+        request=request,
+        db=db,
+        action=act.SETTINGS_UPDATED,
+        detail="logotipo del Call Center actualizado",
+    )
+    medida = f"{guardado.ancho}×{guardado.alto} px" if guardado.ancho else guardado.formato
+    flash(
+        request,
+        f"Logotipo del Call Center actualizado ({guardado.formato}, {medida}). "
+        "Solo cambia la cabecera del panel de atención: las facturas, sus PDF y "
+        "los logotipos de las marcas no se tocan.",
+        "ok",
+    )
+    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/configuracion/callcenter/logo/quitar")
+def settings_callcenter_logo_remove(request: Request, db: Session = Depends(get_db)):
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not master_unlocked(request):
+        flash(request, "La Configuración está bloqueada.", "error")
+        return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+    touch_master(request)
+    fila = _fila_ajuste(db, cc.AJUSTE_LOGO)
+    if fila.value:
+        uploads.borrar(fila.value)
+        fila.value = ""
+        db.commit()
+        act.log(
+            request=request,
+            db=db,
+            action=act.SETTINGS_UPDATED,
+            detail="logotipo del Call Center retirado",
+        )
+        flash(
+            request,
+            "Logotipo del Call Center retirado. La cabecera vuelve a la marca "
+            "DulceAuto predeterminada.",
+            "ok",
+        )
+    else:
+        flash(request, "El Call Center ya estaba con la marca predeterminada.", "ok")
+    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/operador/logo.img")
+def callcenter_logo_file(request: Request, db: Session = Depends(get_db)):
+    """Sirve el logotipo del Call Center.
+
+    Cuelga de /operador y pasa por require_operator, no por require_login: lo
+    tiene que ver el Operador en su cabecera, y con require_login su sesion
+    acabaria redirigida y la imagen no cargaria nunca. Es la misma puerta que
+    ya protege el resto del modulo, no una excepcion nueva.
+
+    Vale tambien para la vista previa de Configuracion, porque require_operator
+    admite al Admin: un solo sitio lee el archivo, no dos.
+    """
+    user = require_operator(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    ruta = uploads.ruta_absoluta(cc.ajuste(db, cc.AJUSTE_LOGO))
     if ruta is None:
         return Response(status_code=404)
     return FileResponse(ruta)
@@ -1824,13 +1958,24 @@ def render_operador(
     una pantalla que ve el Operador.
     """
     theme = theme_from(request)
+    usuario = current_user(request)
+    es_admin = current_role(request) == ROLE_ADMIN
     base = {
         "app_version": settings.app_version,
         "theme": theme,
         "theme_class": {"light": "", "soft": "theme-soft", "night": "theme-night"}[theme],
-        "user": current_user(request),
+        "user": usuario,
+        # Como se presenta quien esta atendiendo. El nombre visible es de la
+        # cuenta de Operador, asi que solo se usa cuando la sesion es de
+        # Operador: si el propietario entra con su sesion de Admin a revisar el
+        # modulo, la cabecera tiene que decir quien es el de verdad y no
+        # ponerle el nombre de otra persona.
+        "operador_nombre": usuario if es_admin else cc.nombre_visible(db, usuario),
+        "callcenter_logo": (
+            "/operador/logo.img" if cc.ajuste(db, cc.AJUSTE_LOGO) else None
+        ),
         "role": current_role(request),
-        "es_admin": current_role(request) == ROLE_ADMIN,
+        "es_admin": es_admin,
         "flashes": pop_flashes(request),
         "status_labels": STATUS_LABELS,
         "money": format_amount,
@@ -1843,6 +1988,11 @@ def render_operador(
 
 @app.get("/operador/acceso", response_class=HTMLResponse)
 def operator_login_form(request: Request):
+    # La pantalla de acceso se queda con la marca DulceAuto aunque haya un
+    # logotipo propio del Call Center, y es a proposito: se sirve sin sesion, y
+    # pintar ahi el archivo subido obligaria a abrir una ruta publica a la
+    # carpeta de subidas. Hoy no hay ninguna, y no merece la pena estrenar una
+    # por una imagen en la pantalla de login.
     if current_role(request) == ROLE_OPERATOR:
         return RedirectResponse("/operador", status_code=status.HTTP_303_SEE_OTHER)
     theme = theme_from(request)
@@ -2009,8 +2159,15 @@ def operator_note_create(
         flash(request, "No se encontró la reserva de esa nota.", "error")
         return RedirectResponse("/operador", status_code=status.HTTP_303_SEE_OTHER)
 
+    # La nota queda firmada con el nombre visible que hubiera puesto en el
+    # momento de escribirla, no con el que haya manana. Es lo mismo que ya se
+    # hace con los datos bancarios de la factura: cambiar el ajuste no puede
+    # reescribir lo que ya paso. Si quien escribe es el Admin revisando el
+    # modulo, firma con su propio usuario.
+    firma = user if current_role(request) == ROLE_ADMIN else cc.nombre_visible(db, user)
+
     try:
-        guardada = cc.guardar_nota(db, invoice, tipo, nota, actor=user)
+        guardada = cc.guardar_nota(db, invoice, tipo, nota, actor=firma)
     except cc.NotaInvalida as e:
         flash(request, str(e), "error")
     else:
