@@ -18,6 +18,7 @@
 #   1. copia de seguridad, y se ABRE para comprobar que sirve
 #   2. git pull
 #   3. RECONSTRUIR la imagen            <- antes de migrar, siempre
+#   3b. comprobar que la imagen ES la de este commit
 #   4. migrar
 #   5. COMPROBAR que alembic current == head   <- si no coincide, se para
 #   6. levantar y esperar a healthy
@@ -59,7 +60,17 @@ echo "   $ANTES -> $DESPUES"
 paso "3 · Reconstruir la imagen"
 echo "   Va antes de la migracion a proposito: 'compose run' usa la imagen que"
 echo "   ya existe, y sin reconstruir la migracion nueva ni siquiera esta dentro."
-docker compose build
+docker compose build --build-arg COMMIT="$DESPUES"
+
+# --- 3b · la imagen es la del codigo -----------------------------------------
+paso "3b · Comprobar que la imagen corresponde al codigo"
+EN_IMAGEN=$(docker compose run --rm "$SERVICIO" printenv DULCEAUTO_COMMIT 2>/dev/null | tr -d '\r' | tail -1 || true)
+echo "   commit en disco : $DESPUES"
+echo "   commit en imagen: ${EN_IMAGEN:-vacio}"
+[ "$EN_IMAGEN" = "$DESPUES" ] || malo "la imagen NO es la de este commit.
+   Ejecutar migraciones o scripts asi corre codigo viejo sin avisar: paso el
+   29-ago-2026 dos veces. Reconstruye antes de seguir."
+echo "   coinciden"
 
 # --- 4 · migrar --------------------------------------------------------------
 paso "4 · Migrar la base de datos"

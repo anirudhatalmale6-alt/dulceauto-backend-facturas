@@ -194,6 +194,12 @@ El orden importa y no es opcional:
       migración nueva**. Alembic termina diciendo que ha ido bien y no migra
       nada. Pasó el 29-ago-2026 desplegando el Milestone 4 y no dio ningún
       error: la única señal era que faltaba la línea `Running upgrade`.
+- [ ] El paso 3b comprueba que la imagen **es la de ese commit**, leyendo la
+      variable `DULCEAUTO_COMMIT` que se graba dentro al construirla. El mismo
+      error se repitió dos veces el 29-ago-2026: una migración que dijo que
+      había terminado sin migrar nada, y un script que se cortó a medias porque
+      una constante nueva no existía dentro del contenedor. Con esta
+      comprobación deja de depender de que alguien se acuerde.
 - [ ] El paso 5 no se salta nunca, y **no mira la salida de la migración**: le
       pregunta a la base. Era esa salida la que decía "terminado" cuando no
       había migrado nada. Si `current` y `head` no coinciden, el script **no

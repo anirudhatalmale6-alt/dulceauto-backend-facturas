@@ -25,6 +25,17 @@ COPY alembic ./alembic
 COPY alembic.ini .
 COPY templates_html ./templates_html
 
+# Commit del que se construyo esta imagen. Lo pone el script de despliegue con
+# --build-arg. Sirve para poder comprobar, ANTES de ejecutar nada, que la imagen
+# es la del codigo que hay en disco.
+#
+# Nace de dos errores del 29-ago-2026, el mismo los dos: ejecutar codigo nuevo
+# dentro de la imagen anterior. La primera vez alembic dijo que habia migrado y
+# no migro nada; la segunda, un script se corto a medias porque una constante
+# nueva no existia dentro del contenedor.
+ARG COMMIT=desconocido
+ENV DULCEAUTO_COMMIT=$COMMIT
+
 # La base de datos y los archivos subidos viven aqui. Es el unico directorio
 # que hay que montar como volumen: sin eso, un redespliegue se lleva por
 # delante las facturas.
