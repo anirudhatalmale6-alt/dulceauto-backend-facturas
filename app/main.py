@@ -87,6 +87,38 @@ app.add_middleware(
     max_age=settings.session_minutes * 60,
 )
 
+@app.middleware("http")
+async def paginas_siempre_frescas(request: Request, call_next):
+    """Las PAGINAS se revalidan siempre; los archivos con version, no.
+
+    Poner la version detras del CSS no basta por si solo: si el navegador se
+    queda tambien con la PAGINA de ayer, esa pagina sigue pidiendo la version de
+    ayer y el arreglo no llega igualmente. Hay que cerrar los dos lados.
+
+    Ninguna respuesta del panel lleva cabeceras de cache, y sin ellas el
+    navegador aplica una caducidad que se inventa a partir de la antiguedad del
+    archivo. Con `no-cache` se le obliga a preguntar antes de reutilizar nada.
+    No es `no-store`: se puede seguir guardando, pero no servir sin confirmar.
+
+    Para los estaticos es al reves: como la URL cambia sola cuando cambia el
+    archivo (ver `estatico`), se pueden guardar mucho tiempo sin riesgo.
+
+    Ademas ninguna pantalla del panel deberia quedarse en el disco de un equipo
+    compartido: llevan datos de facturas y de clientes.
+    """
+    respuesta = await call_next(request)
+    ruta = request.url.path
+    # La lista de rutas cacheables es explicita, no un "lleva ?v= en la URL":
+    # con esa regla, escribir a mano /operador?v=... convertiria una pantalla
+    # con datos de un cliente en algo que el navegador guarda un ano.
+    cacheable = ruta.startswith("/static/") or ruta == "/operador/logo.img"
+    if cacheable and "v" in request.query_params:
+        respuesta.headers.setdefault("Cache-Control", "public, max-age=31536000")
+    elif "text/html" in respuesta.headers.get("content-type", ""):
+        respuesta.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return respuesta
+
+
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 # Archivos de las plantillas aprobadas (CSS, tipografias e imagenes). Se montan
 # aparte de los del panel: son de las facturas y no deben mezclarse con los del

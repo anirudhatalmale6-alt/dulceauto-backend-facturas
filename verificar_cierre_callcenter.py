@@ -395,6 +395,24 @@ def main() -> int:
     check("ninguna hoja se pide sin version",
           "css/operador.css\"" not in html and "css/operador.css'" not in html)
 
+    # Poner version en el CSS no sirve de nada si el navegador se queda con la
+    # PAGINA de ayer: esa pagina pide la version de ayer. Los dos lados.
+    sin_sesion = Cliente(BASE)
+    r = sin_sesion.get("/operador/acceso")
+    check("la página se revalida siempre",
+          "no-cache" in r.headers.get("cache-control", ""),
+          r.headers.get("cache-control", "SIN cabecera"))
+    r = sin_sesion.get("/static/css/operador.css?v=1")
+    check("el CSS con versión sí se puede guardar",
+          "max-age=31536000" in r.headers.get("cache-control", ""),
+          r.headers.get("cache-control", "SIN cabecera"))
+    # Control: una pantalla con datos NO puede acabar cacheada un ano por
+    # llevar una v en la URL.
+    r = op.get("/operador?v=name,folio")
+    check("una pantalla del panel NUNCA se cachea, lleve lo que lleve en la URL",
+          "no-cache" in r.headers.get("cache-control", ""),
+          r.headers.get("cache-control", "SIN cabecera"))
+
     css = Cliente(BASE).get("/static/css/operador.css").text
     marca = Cliente(BASE).get("/static/css/marca-callcenter.css").text
     check("el hueco reservado tiene alto fijo", "height:44px" in plano(marca))
