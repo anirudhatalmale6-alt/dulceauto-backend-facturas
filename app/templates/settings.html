@@ -246,10 +246,10 @@
     <div>
       <p class="small muted">
         <b>Logotipo del Call Center.</b> Sustituye la marca DulceAuto de la
-        cabecera del panel de atención. La cabecera es azul oscura en los tres
-        temas, así que conviene un PNG o un SVG con fondo transparente y trazo
-        claro. Se ve mejor apaisado: se ajusta a 38 px de alto y hasta 270 px de
-        ancho, sin deformarse.
+        cabecera del panel de atención. Sirve cualquier tamaño de archivo: se
+        encaja solo en un hueco de 44 px de alto y hasta 170 px de ancho,
+        conservando su proporción, sin recortarlo y sin cambiar la altura de la
+        cabecera. Vale igual PNG y SVG.
       </p>
       <form method="post" action="/configuracion/callcenter/logo" enctype="multipart/form-data">
         <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" required>
@@ -280,7 +280,13 @@
           <div><strong>DulceAuto</strong><small>Panel de atención de reservas</small></div>
         {% endif %}
       </div>
-      <span class="cc-pie">Así se verá en la cabecera del Call Center</span>
+      <span class="cc-pie">
+        Así se verá en la cabecera del Call Center, al mismo tamaño.
+        {% if callcenter_logo %}
+          Si su logotipo lleva partes en azul oscuro, sobre este fondo se verán
+          poco: use la versión clara o en negativo si la tiene.
+        {% endif %}
+      </span>
     </div>
   </div>
 </div>
