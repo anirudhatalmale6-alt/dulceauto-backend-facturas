@@ -25,7 +25,7 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app import doctypes, documents
@@ -33,6 +33,7 @@ from app import pdf as pdf_engine
 from app.config import settings
 from app.db import Base
 from app.models import (
+    STATUS_DRAFT,
     STATUS_CANCELLED,
     STATUS_DELIVERED,
     STATUS_PENDING,
@@ -127,6 +128,21 @@ def sin_marcar(fuente: str, literal: str) -> int:
         for m in re.finditer(re.escape(literal), fuente)
         if not any(a <= m.start() < b for a, b in marcados)
     )
+
+
+# Desde que un complementario solo se emite en su estado (regla acordada el
+# 29-ago-2026), las pruebas que generan un documento tienen que poner antes la
+# factura en el estado que le corresponde. Se deduce de la pareja, no se escribe
+# a mano, para que siga valiendo si la pareja cambia.
+ESTADO_DE = {v: k for k, v in doctypes.PAREJA_POR_DEFECTO.items()}
+
+
+def en_su_estado(db, factura, clave):
+    """Deja la factura en el estado en el que ese documento se emite."""
+    if clave != doctypes.FACTURA:
+        factura.status = ESTADO_DE[clave]
+        db.commit()
+    return factura
 
 
 print("\n1 · Las plantillas no llevan ni un dato del cliente de la maqueta")
@@ -323,6 +339,7 @@ with Session() as db:
     db.commit()
     versiones = {}
     for clave in (doctypes.FACTURA, *NUEVOS):
+        en_su_estado(db, factura, clave)
         r = pdf_engine.generar(db, factura, clave)
         db.commit()
         versiones[clave] = r
@@ -353,6 +370,7 @@ with Session() as db:
 
     # Regenerar UNO no puede mover el numero de los otros dos.
     antes = {c: len(pdf_engine.snapshots_de(db, factura.id, c)) for c in (doctypes.FACTURA, *NUEVOS)}
+    en_su_estado(db, factura, doctypes.PAGO_APARTADO)
     r2 = pdf_engine.generar(db, factura, doctypes.PAGO_APARTADO)
     db.commit()
     despues = {c: len(pdf_engine.snapshots_de(db, factura.id, c)) for c in (doctypes.FACTURA, *NUEVOS)}
@@ -416,9 +434,8 @@ with Session() as db:
         "registrado en la Ciudad de México, con seguro a todo riesgo durante el trayecto "
         "y confirmación telefónica previa de fecha y horario con el titular."
     )
-    factura.status = STATUS_SCHEDULED
-    db.commit()
     for clave in NUEVOS:
+        en_su_estado(db, factura, clave)
         r = pdf_engine.generar(db, factura, clave)
         db.commit()
         check(f"{clave}: con datos largos y dos fechas, una hoja", r.paginas == 1, f"escala {r.escala:.4f}")
@@ -428,6 +445,7 @@ with Session() as db:
     factura.delivery_text = "Traslado asegurado hasta el domicilio registrado. " * 200
     db.commit()
     for clave in NUEVOS:
+        en_su_estado(db, factura, clave)
         antes_n = len(pdf_engine.snapshots_de(db, factura.id, clave))
         carpetas_antes = sorted(p.name for p in versiones[clave].pdf.parent.parent.iterdir())
         try:
@@ -467,6 +485,7 @@ with Session() as db:
     db.commit()
     for clave in NUEVOS:
         check(f"{clave}: no existe para 'en'", not doctypes.existe_para(clave, "en"))
+        en_su_estado(db, otra, clave)
         try:
             pdf_engine.generar(db, otra, clave)
             check(f"{clave}: se niega a generarlo en 'en'", False, "lo ha generado")
@@ -508,6 +527,78 @@ with Session() as db:
     check('y el texto alternativo pasa a ser el vehiculo de la factura',
           'alt="2021 Kia Sportage"' in html)
     check("con foto propia sigue siendo una hoja", r.paginas == 1)
+
+
+    print("\n15 · Un documento solo se emite en el estado que le corresponde")
+    # Lo encontro el cliente el 29-ago-2026: se podia emitir "Pago de apartado
+    # confirmado" sobre un folio en PAGO PENDIENTE, y el documento salia
+    # diciendo a la vez que el pago estaba confirmado y que se seguia esperando.
+    from app.models import Setting
+
+    for estado, clave in doctypes.PAREJA_POR_DEFECTO.items():
+        db.add(Setting(key=doctypes.clave_ajuste(estado), market=None,
+                       value=clave, is_sensitive=False))
+    db.commit()
+
+    ESPERADO = {
+        STATUS_DRAFT:     {doctypes.FACTURA: True,  doctypes.PAGO_APARTADO: False, doctypes.DOCUMENTACION: False},
+        STATUS_PENDING:   {doctypes.FACTURA: True,  doctypes.PAGO_APARTADO: False, doctypes.DOCUMENTACION: False},
+        STATUS_VALIDATED: {doctypes.FACTURA: True,  doctypes.PAGO_APARTADO: True,  doctypes.DOCUMENTACION: False},
+        STATUS_SCHEDULED: {doctypes.FACTURA: True,  doctypes.PAGO_APARTADO: False, doctypes.DOCUMENTACION: True},
+        STATUS_DELIVERED: {doctypes.FACTURA: True,  doctypes.PAGO_APARTADO: False, doctypes.DOCUMENTACION: False},
+        STATUS_CANCELLED: {doctypes.FACTURA: True,  doctypes.PAGO_APARTADO: False, doctypes.DOCUMENTACION: False},
+    }
+    for estado, esperado in ESPERADO.items():
+        real = {c: doctypes.puede_generarse(db, c, estado)[0] for c in esperado}
+        check(f"estado {estado}: la regla es la acordada", real == esperado,
+              ", ".join(f"{c.split('_')[0]}={'si' if v else 'no'}" for c, v in real.items()))
+
+    # Y sobre todo: que el MOTOR lo rechace de verdad, no solo la funcion.
+    # Es el punto por el que pasa cualquier via, asi que tocar la URL no lo salta.
+    prueba = Invoice(folio="RES-99040", **{**DATOS, "status": STATUS_PENDING})
+    db.add(prueba)
+    db.commit()
+    carpeta_base = temporal / "snapshots" / str(prueba.id)
+    filas_antes = len(pdf_engine.snapshots_de(db, prueba.id, None))
+    try:
+        pdf_engine.generar(db, prueba, doctypes.PAGO_APARTADO)
+        db.commit()
+        check("el motor rechaza el documento que no toca", False, "lo ha generado")
+    except pdf_engine.PdfEstadoNoCorresponde as exc:
+        db.rollback()
+        check("el motor rechaza el documento que no toca", True, str(exc)[:58] + "...")
+        check("y el aviso dice cual es el que si corresponde",
+              "Configuración" in str(exc) or "complementario" in str(exc))
+        check("sin crear ninguna version",
+              len(pdf_engine.snapshots_de(db, prueba.id, None)) == filas_antes)
+        check("ni ninguna carpeta en el disco", not carpeta_base.exists())
+
+    # La pre-factura no cambia: se genera en cualquier estado, como siempre.
+    for estado in (STATUS_PENDING, STATUS_CANCELLED, STATUS_DELIVERED):
+        prueba.status = estado
+        db.commit()
+        r = pdf_engine.generar(db, prueba, doctypes.FACTURA)
+        db.commit()
+        check(f"la pre-factura se sigue generando en {estado}", r.paginas == 1)
+
+    # Y en el estado bueno, el complementario sale.
+    prueba.status = STATUS_VALIDATED
+    db.commit()
+    r = pdf_engine.generar(db, prueba, doctypes.PAGO_APARTADO)
+    db.commit()
+    check("en Pago validado, el complementario si se emite", r.paginas == 1, f"v{r.snapshot.version}")
+
+    # Si el cliente pone "Ninguno" para un estado, no se emite nada ahi.
+    fila = db.execute(
+        select(Setting).where(Setting.key == doctypes.clave_ajuste(STATUS_VALIDATED),
+                              Setting.market.is_(None))
+    ).scalar_one()
+    fila.value = ""
+    db.commit()
+    check("con «Ninguno» en Configuracion, ese estado deja de emitir",
+          not doctypes.puede_generarse(db, doctypes.PAGO_APARTADO, STATUS_VALIDATED)[0])
+    fila.value = doctypes.PAGO_APARTADO
+    db.commit()
 
 
 print("\n" + "=" * 62)

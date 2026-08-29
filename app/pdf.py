@@ -414,6 +414,14 @@ class PdfIlegible(PdfError):
     """El documento no cabe en A4 sin bajar del suelo de legibilidad."""
 
 
+class PdfEstadoNoCorresponde(PdfError):
+    """Ese documento no se emite con la factura en el estado que tiene.
+
+    Se levanta antes de crear nada: sin version, sin fila en el historico y sin
+    carpeta en el disco.
+    """
+
+
 def _fuente_minima(page, raiz: str) -> float:
     """Tamano en px de la letra mas pequena que se pinta dentro del documento.
 
@@ -520,6 +528,18 @@ def _generar_bajo_cerrojo(
             f'El documento "{tipo.nombre}" no existe para el mercado '
             f"{invoice.locale}. En esta fase sólo está preparado para es-MX."
         )
+
+    # La regla de estado se comprueba AQUI, en el motor, y no en la ruta del
+    # panel. Es el punto por el que pasa cualquier via de generacion, asi que
+    # tocar la URL o el formulario no la esquiva.
+    #
+    # Y va ANTES de repartir version y de crear la carpeta, a proposito: si se
+    # comprobara despues habria que borrar lo ya creado, y un borrado que falle
+    # deja una carpeta a medias en el historico.
+    permitido, motivo = doctypes.puede_generarse(db, tipo.clave, invoice.status)
+    if not permitido:
+        raise PdfEstadoNoCorresponde(motivo)
+
     version = _siguiente_version(db, invoice.id, tipo.clave)
     carpeta = carpeta_snapshot(invoice.id, tipo.clave, version)
     if carpeta.exists():

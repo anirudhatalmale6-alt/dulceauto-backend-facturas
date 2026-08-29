@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import select
+
 from .models import (
     STATUS_CANCELLED,
     STATUS_DELIVERED,
@@ -142,6 +144,66 @@ AJUSTE_PAREJA = "docs.por_estado."
 
 def clave_ajuste(estado: str) -> str:
     return AJUSTE_PAREJA + estado
+
+
+def documento_de_estado(db, estado: str) -> str | None:
+    """Documento complementario que corresponde a ese estado, o None.
+
+    Es la UNICA fuente de verdad de la pareja, y vive aqui para que la use tanto
+    el panel (que decide que pestana ensena marcada) como pdf.py (que decide si
+    deja generar). Con una copia en cada sitio, un dia dirian cosas distintas y
+    el boton ensenaria una cosa y el servidor haria otra.
+
+    Cadena vacia guardada = "ese estado no propone ningun documento", y es una
+    eleccion valida del cliente, distinta de "no hay ajuste todavia".
+    """
+    from .models import Setting
+
+    fila = db.execute(
+        select(Setting).where(Setting.key == clave_ajuste(estado), Setting.market.is_(None))
+    ).scalar_one_or_none()
+    if fila is None:
+        # Base anterior a este ajuste: la pareja acordada por escrito.
+        return PAREJA_POR_DEFECTO.get(estado)
+    guardado = (fila.value or "").strip()
+    if not guardado:
+        return None
+    return guardado if guardado in TIPOS else None
+
+
+def puede_generarse(db, clave: str, estado: str) -> tuple[bool, str]:
+    """Si ese documento se puede EMITIR con la factura en ese estado.
+
+    Acordado con el cliente el 29-ago-2026, despues de que encontrara que se
+    podia emitir "Pago de apartado confirmado" sobre un folio en PAGO PENDIENTE:
+    el documento salia diciendo a la vez que el pago estaba confirmado y que se
+    seguia esperando. Los textos se adaptan al estado, pero un documento que se
+    llama "Pago de apartado confirmado" no deberia existir sin pago validado.
+
+      - La pre-factura se genera SIEMPRE, en cualquier estado. Es la de siempre
+        y su comportamiento no se toca.
+      - Un complementario solo si es el que Configuracion asigna a ese estado.
+      - En los demas estados, ningun complementario.
+
+    Devuelve (permitido, motivo). El motivo se le ensena al operador tal cual.
+    """
+    if clave == FACTURA:
+        return True, ""
+    corresponde = documento_de_estado(db, estado)
+    if corresponde == clave:
+        return True, ""
+    nombre = tipo(clave).nombre
+    if corresponde is None:
+        return False, (
+            f"«{nombre}» no se puede generar con la factura en este estado. "
+            "Este estado no tiene ningún documento complementario asignado en "
+            "Configuración."
+        )
+    return False, (
+        f"«{nombre}» no corresponde al estado actual de la factura. "
+        f"En este estado el documento que se emite es «{tipo(corresponde).nombre}». "
+        "La pareja se cambia en Configuración → Documentos automáticos por estado."
+    )
 
 
 # --- textos que dependen del estado ------------------------------------------

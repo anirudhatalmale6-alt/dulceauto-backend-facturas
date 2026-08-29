@@ -1061,6 +1061,10 @@ def invoice_preview(
         tipo_doc=tipo,
         tipos_doc=_tipos_disponibles(invoice),
         doc_sugerido=_documento_del_estado(db, invoice.status),
+        # La MISMA funcion que usa el motor para decidir si deja generar, para
+        # que el boton no ofrezca algo que el servidor va a rechazar.
+        puede_generar=doctypes.puede_generarse(db, tipo.clave, invoice.status),
+        estado_legible=STATUS_LABELS.get(invoice.status, (invoice.status,))[0],
     )
 
 
@@ -1101,6 +1105,12 @@ def invoice_pdf_create(
 
     try:
         resultado = pdf_engine.generar(db, invoice, tipo.clave)
+    except pdf_engine.PdfEstadoNoCorresponde as exc:
+        # No se ha creado nada: la comprobacion va antes de repartir version y
+        # de crear la carpeta. No hay nada que deshacer.
+        db.rollback()
+        flash(request, str(exc), "error")
+        return RedirectResponse(vuelta, status_code=status.HTTP_303_SEE_OTHER)
     except pdf_engine.PdfError as exc:
         db.rollback()
         flash(request, str(exc), "error")
@@ -1221,28 +1231,13 @@ def _tipos_disponibles(invoice: Invoice) -> list:
 
 
 def _documento_del_estado(db: Session, estado: str) -> str | None:
-    """Documento que corresponde a ese estado, segun Configuracion.
+    """Documento complementario que corresponde a ese estado.
 
-    Devuelve solo una SUGERENCIA. El cliente pidio expresamente que mover el
-    desplegable de estado no genere nada: esto decide que documento se ensena
-    seleccionado, y el PDF sigue saliendo unicamente de Vista previa / Generar.
+    Delega en doctypes, que es donde vive la regla. El panel y el motor tienen
+    que decir lo mismo: si el boton dijera una cosa y el servidor hiciera otra,
+    el operador veria un boton que al pulsarlo le da un error.
     """
-    fila = db.execute(
-        select(Setting).where(
-            Setting.key == doctypes.clave_ajuste(estado), Setting.market.is_(None)
-        )
-    ).scalar_one_or_none()
-    if fila is None:
-        # No hay fila: es una base anterior a este ajuste. Se usa la pareja
-        # acordada por escrito, que es lo que el cliente espera ver.
-        return doctypes.PAREJA_POR_DEFECTO.get(estado)
-    guardado = (fila.value or "").strip()
-    # Cadena vacia = "ninguno", y es una eleccion valida: el cliente puede
-    # querer que un estado no proponga ningun documento complementario. Por eso
-    # se distingue de "no hay fila" y no se cae al valor por defecto.
-    if not guardado:
-        return None
-    return guardado if guardado in doctypes.TIPOS else None
+    return doctypes.documento_de_estado(db, estado)
 
 
 def _marca_para_pantalla(db: Session, invoice: Invoice) -> dict:

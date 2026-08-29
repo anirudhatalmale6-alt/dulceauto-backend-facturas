@@ -33,11 +33,17 @@
       {% if snapshots %}
         <a class="btn ghost" href="/facturas/{{ invoice.id }}/pdf?doc={{ tipo_doc.clave }}">Descargar PDF</a>
       {% endif %}
-      <form method="post" action="/facturas/{{ invoice.id }}/pdf?doc={{ tipo_doc.clave }}" style="display:inline">
-        <button class="btn gold" type="submit">
-          {{ 'Volver a generar el PDF' if snapshots else 'Generar PDF' }}
-        </button>
-      </form>
+      {# El botón sólo aparece si el documento corresponde al estado. La regla
+         de verdad está en el servidor (doctypes.puede_generarse, comprobada
+         dentro del motor): esto es sólo para no ofrecer un botón que iba a dar
+         error al pulsarlo. #}
+      {% if puede_generar[0] %}
+        <form method="post" action="/facturas/{{ invoice.id }}/pdf?doc={{ tipo_doc.clave }}" style="display:inline">
+          <button class="btn gold" type="submit">
+            {{ 'Volver a generar el PDF' if snapshots else 'Generar PDF' }}
+          </button>
+        </form>
+      {% endif %}
     </div>
   </div>
 
@@ -50,6 +56,10 @@
       <a class="btn ghost {{ 'is-on' if t.clave == tipo_doc.clave }}"
          href="/facturas/{{ invoice.id }}/vista-previa?doc={{ t.clave }}&zoom={{ zoom }}">{{ t.nombre }}</a>
     {% endfor %}
+    {% if not puede_generar[0] %}
+      <span class="info-chip" style="border-color:#e0aa35">
+        Sólo lectura · con la factura en <b>{{ estado_legible }}</b> este documento no se emite</span>
+    {% endif %}
     {% if doc_sugerido and doc_sugerido != tipo_doc.clave %}
       <span class="info-chip">Para este estado corresponde
         <b>{{ tipos_doc | selectattr('clave', 'equalto', doc_sugerido) | map(attribute='nombre') | first }}</b></span>
@@ -68,6 +78,14 @@
     <span class="info-chip">{{ market.account_label }}</span>
     <span class="info-chip">Documento <b>{{ market.document_label }}</b></span>
   </div>
+
+  {% if not puede_generar[0] %}
+    <div class="warning-box" style="margin-top:12px">
+      <b>Este documento no se puede emitir ahora.</b> {{ puede_generar[1] }}
+      Puede verlo aquí, pero no generarlo: la comprobación está en el servidor,
+      así que tampoco se salta cambiando la dirección.
+    </div>
+  {% endif %}
 
   {% if documento.vacios %}
     <div class="warning-box" style="margin-top:12px">
