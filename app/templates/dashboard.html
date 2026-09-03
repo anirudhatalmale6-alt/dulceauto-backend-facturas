@@ -87,6 +87,16 @@
     <div><h2>Actividad reciente</h2></div>
     <a class="btn ghost" href="/actividad">Ver registro</a>
   </div>
+  {% if not actividad_visible %}
+    <div class="small muted" style="display:flex;gap:8px;align-items:center">
+      <span>🔒</span>
+      <span>
+        Contenido protegido con la Master Password. Ábrelo desde
+        <a href="/actividad">Ver registro</a>. El resto del Dashboard funciona
+        con normalidad.
+      </span>
+    </div>
+  {% else %}
   <div class="activity-list">
     {% for e in acciones %}
       <div class="event">
@@ -101,6 +111,7 @@
       <div class="small muted">Sin actividad registrada todavía.</div>
     {% endfor %}
   </div>
+  {% endif %}
 </div>
 
 {% endblock %}

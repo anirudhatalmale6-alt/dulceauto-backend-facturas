@@ -171,9 +171,18 @@ with sync_playwright() as p:
 
     print("\n7 · Registro de actividad")
     page.goto(f"{BASE}/actividad")
+    # Desde el Hito A, Actividad llega bloqueada. Se comprueba el candado y
+    # luego se abre con la misma Master Password de Configuracion, desde el
+    # formulario de la propia pantalla.
+    bloqueada = page.locator(".locked-panel").count() == 1
+    check("Actividad llega bloqueada", bloqueada)
+    if bloqueada:
+        page.fill('input[name="master_password"]', MASTER)
+        page.click('button[type="submit"]')
+        page.wait_for_load_state()
     texto = page.locator("table").inner_text()
     for evento in ["Inicio de sesión", "Intento de acceso fallido", "Master Password incorrecta",
-                   "Configuración desbloqueada", "Configuración bloqueada", "Cierre de sesión"]:
+                   "Área protegida desbloqueada", "Área protegida bloqueada", "Cierre de sesión"]:
         check(f"queda registrado: {evento}", evento in texto)
     page.screenshot(path=f"{SHOTS}/05-actividad.png")
 

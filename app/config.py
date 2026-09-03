@@ -84,6 +84,14 @@ class Settings(BaseSettings):
         return self.data_dir / "snapshots"
 
     @property
+    def exports_dir(self) -> Path:
+        """Copias que el panel saca antes de borrar algo. Vive dentro de
+        data_dir a proposito: es el directorio que el contenedor monta como
+        volumen, asi que la copia sobrevive a un redespliegue igual que la
+        base."""
+        return self.data_dir / "exportes"
+
+    @property
     def sqlalchemy_url(self) -> str:
         if self.database_url:
             return self.database_url
@@ -93,7 +101,7 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    for d in (s.data_dir, s.uploads_dir, s.snapshots_dir):
+    for d in (s.data_dir, s.uploads_dir, s.snapshots_dir, s.exports_dir):
         d.mkdir(parents=True, exist_ok=True)
     return s
 

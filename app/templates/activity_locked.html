@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="locked-panel">
+  <div class="lock-icon">🔒</div>
+  <h2>Actividad bloqueada</h2>
+  <p>
+    El registro de actividad exige la misma Master Password que Configuración.
+    No es una contraseña nueva ni una segunda pantalla de acceso: si ya
+    desbloqueaste Configuración en esta sesión, esta pantalla se abre sola.
+  </p>
+
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/configuracion/desbloquear" autocomplete="off">
+    <input type="hidden" name="destino" value="/actividad">
+    <input name="master_password" type="password" placeholder="Master Password" required autofocus autocomplete="off">
+    <button class="btn gold" type="submit">Desbloquear</button>
+  </form>
+
+  <p class="small muted" style="margin-top:20px">
+    Se vuelve a bloquear sola tras {{ minutes }} minutos sin actividad, y también
+    al cerrar sesión. Con el candado cerrado el servidor ni siquiera consulta el
+    registro: no viaja escondido dentro de esta página.
+  </p>
+</div>
+
+{% endblock %}

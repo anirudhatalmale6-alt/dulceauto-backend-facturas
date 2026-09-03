@@ -8,6 +8,7 @@ generarlo no mueva el estado de la operacion.
 
     python verificar_fase_d.py [http://127.0.0.1:8731] [/tmp/fase-d]
 """
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -19,10 +20,17 @@ SHOTS = sys.argv[2] if len(sys.argv) > 2 else "/tmp/fase-d"
 Path(SHOTS).mkdir(parents=True, exist_ok=True)
 
 USER, PASSWORD = "admin", "DulceAuto2026"
+MASTER = "Master2026"
 VIN = "5FNRL38209B006842"
 CLIENTE = "Cliente de la Fase D"
-DB = Path(__file__).parent / "data" / "dulceauto.db"
-SNAPSHOTS = Path(__file__).parent / "data" / "snapshots"
+# Los datos que mira el guion tienen que ser los MISMOS que escribe el servidor
+# al que apunta. Si el servidor arranca con DATA_DIR en otro sitio -que es como
+# se prueba sobre una copia, sin tocar la base de trabajo- y aqui se mirara
+# siempre data/, el guion leeria una carpeta que el servidor no ha escrito y
+# fallaria con un archivo inexistente en vez de con una comprobacion.
+DATOS = Path(os.environ.get("DATA_DIR") or (Path(__file__).parent / "data"))
+DB = DATOS / "dulceauto.db"
+SNAPSHOTS = DATOS / "snapshots"
 
 ok, fallos = [], []
 
@@ -178,15 +186,25 @@ with sync_playwright() as p:
     # -------------------------------------------------------------------------
     print("\n7 · Queda registrado en Actividad")
     page.goto(f"{BASE}/actividad")
+    # Desde el Hito A, Actividad va detras de la Master Password.
+    if page.locator(".locked-panel").count() == 1:
+        page.fill('input[name="master_password"]', MASTER)
+        page.click('button[type="submit"]')
+        page.wait_for_load_state()
     texto = page.locator("table").inner_text()
     check("se anota la generacion del PDF", "PDF generado" in texto)
     check("y con el folio de la factura", "RES-" in texto)
 
     # -------------------------------------------------------------------------
     print("\n7bis · Configuracion se edita y se valida")
+    # Desde el Hito A la Master Password abre Configuracion Y Actividad a la
+    # vez: es la misma sesion, como se acordo. Al haberla abierto en el punto 7
+    # para leer el registro, aqui hay que cerrarla antes para poder comprobar
+    # que Configuracion arranca bloqueada de verdad.
+    page.request.post(f"{BASE}/configuracion/bloquear", form={"destino": "/configuracion"})
     page.goto(f"{BASE}/configuracion")
     check("arranca bloqueada", page.locator(".locked-panel").count() == 1)
-    page.fill('[name="master_password"]', "Master2026")
+    page.fill('[name="master_password"]', MASTER)
     page.click('button[type="submit"]')
     check("con la Master Password se abre", page.locator(".settings-hero").count() == 1)
 

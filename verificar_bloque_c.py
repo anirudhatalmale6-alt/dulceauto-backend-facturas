@@ -471,6 +471,12 @@ def main() -> int:
     # --- 9 · registro de actividad -------------------------------------------
     print("\n9 · Queda registrado")
 
+    # Desde el Hito A, Actividad va detras de la Master Password: hay que
+    # abrirla aunque la sesion de Admin ya este dentro del panel.
+    admin.post(
+        "/configuracion/desbloquear",
+        data={"master_password": MASTER, "destino": "/actividad"},
+    )
     r = admin.get("/actividad")
     for etiqueta in ["Entrada añadida a la guía", "Entrada de la guía modificada",
                      "Entrada de la guía eliminada", "Nota revisada"]:

@@ -1,13 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
 
+<div class="settings-hero">
+  <div>
+    <span class="security-badge">🔓 Área protegida · Master Password</span>
+    <h2>Actividad</h2>
+    <p>Registro básico: quién, qué, sobre qué factura y cuándo.</p>
+  </div>
+  <form method="post" action="/configuracion/bloquear">
+    <input type="hidden" name="destino" value="/actividad">
+    <button class="btn ghost" type="submit">Bloquear actividad</button>
+  </form>
+</div>
+
+<div class="master-note">
+  <span>🛡️</span>
+  <div>
+    <b>Sesión protegida abierta.</b> Se cierra sola tras {{ minutes }} minutos
+    sin actividad y al cerrar sesión. Es la misma sesión que Configuración: al
+    bloquear una se bloquean las dos.
+  </div>
+</div>
+
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2>Actividad</h2>
+      <h2>Movimientos</h2>
       <div class="small muted">
-        Últimos {{ entries|length }} movimientos. La cuenta del panel es única y
-        compartida, así que el actor es siempre Admin.
+        {% if total > entries|length %}
+          Los {{ entries|length }} más recientes de {{ total }} registrados.
+        {% else %}
+          {{ total }} movimiento{{ '' if total == 1 else 's' }} registrado{{ '' if total == 1 else 's' }}.
+        {% endif %}
+        La cuenta del panel es única y compartida, así que el actor es siempre
+        Admin.
       </div>
     </div>
   </div>
@@ -33,12 +59,47 @@
   </table>
 </div>
 
+<div class="card" style="margin-top:16px;border-color:#ffd4d9">
+  <div class="toolbar">
+    <div>
+      <h2>Limpiar historial</h2>
+      <div class="small muted">
+        Vacía el registro de actividad. Antes de borrar, el sistema guarda una
+        copia completa en CSV dentro del servidor, y después deja una única
+        entrada indicando quién limpió, cuándo y cuántas entradas había.
+      </div>
+    </div>
+  </div>
+
+  <p class="small">
+    <b>Sólo se borra el registro de actividad.</b> No toca facturas, notas del
+    Call&nbsp;Center, documentos del histórico, fotografías, folios ni
+    Configuración. La acción no se puede deshacer desde el panel: la copia en
+    el servidor es la única forma de recuperar lo borrado.
+  </p>
+
+  <form method="post" action="/actividad/limpiar" autocomplete="off"
+        onsubmit="return confirm('Se van a borrar {{ total }} entradas del registro de actividad. Se guardará antes una copia en el servidor. ¿Continuar?');">
+    <div class="form-grid">
+      <label>Escribe LIMPIAR para confirmar
+        <input name="confirmacion" type="text" autocomplete="off" required>
+      </label>
+    </div>
+    <button class="btn danger" type="submit" style="margin-top:12px">Limpiar historial</button>
+  </form>
+</div>
+
 <div class="devnote" style="margin-top:16px">
   <b>Qué queda registrado.</b> Los accesos y los intentos fallidos, el bloqueo y
-  desbloqueo de Configuración, los cambios de contraseña y de ajustes, y la
+  desbloqueo del área protegida, los cambios de contraseña y de ajustes, y la
   creación, edición, guardado de borrador, duplicado y generación de PDF de cada
-  factura. Esta pantalla enseña los 200 más recientes; el panel no tiene ninguna
-  forma de borrar ni de modificar el historial.
+  factura. Esta pantalla enseña los 200 más recientes.
+  <br><br>
+  <b>Qué se puede borrar.</b> Sólo el historial completo, y sólo desde
+  «Limpiar historial», con la Master Password abierta y escribiendo la
+  confirmación. No hay forma de borrar ni de modificar una entrada suelta: eso
+  seguiría permitiendo maquillar el registro, que es justo lo que un registro
+  no debe permitir.
 </div>
 
 {% endblock %}

@@ -10,6 +10,7 @@ tienen que hacer, y sobre todo las dos reglas que serian graves si fallaran:
 
     python verificar_fase_b.py [http://127.0.0.1:8731] [/tmp/fase-b]
 """
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -20,12 +21,19 @@ BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8731").rstrip("/
 SHOTS = sys.argv[2] if len(sys.argv) > 2 else "/tmp/fase-b"
 
 USER, PASSWORD = "admin", "DulceAuto2026"
+MASTER = "Master2026"
+
+# La base que toca el guion tiene que ser la MISMA que sirve el servidor al que
+# apunta. Si el servidor arranca con DATA_DIR en otro sitio -que es como se
+# prueba sobre una copia, sin tocar la base de trabajo- y aqui se escribiera
+# siempre en data/, el cambio de CLABE se guardaria en una base que el servidor
+# no lee, y la comprobacion fallaria por el entorno, no por el programa.
+DB = Path(os.environ.get("DATA_DIR") or (Path(__file__).parent / "data")) / "dulceauto.db"
 
 # Para comprobar que una copia coge la cuenta vigente hay que cambiarla en
 # Configuracion, y esa pantalla todavia no permite editarla (es de la Fase D).
 # Se toca la base de datos directamente. Las dos CLABE son validas: si no lo
 # fueran, la propia validacion las rechazaria y la prueba mentiria.
-DB = Path(__file__).parent / "data" / "dulceauto.db"
 CLABE_VIEJA = "012180001234567899"
 CLABE_NUEVA = "002180001234567896"
 
@@ -341,6 +349,11 @@ with sync_playwright() as p:
     # -------------------------------------------------------------------------
     print("\n11 · Registro de actividad")
     page.goto(f"{BASE}/actividad")
+    # Desde el Hito A, Actividad va detras de la Master Password.
+    if page.locator(".locked-panel").count() == 1:
+        page.fill('input[name="master_password"]', MASTER)
+        page.click('button[type="submit"]')
+        page.wait_for_load_state()
     texto = page.locator("table").inner_text()
     for evento in ["Borrador guardado", "Factura editada", "Factura duplicada"]:
         check(f"queda registrado: {evento}", evento in texto)

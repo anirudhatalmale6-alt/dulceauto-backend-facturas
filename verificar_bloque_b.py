@@ -234,6 +234,19 @@ def main() -> int:
 
     # El bloqueo queda anotado en Actividad, que es lo que permite al
     # propietario enterarse de que alguien lo intento.
+    #
+    # Desde el Hito A, Actividad exige la Master Password aunque la sesion de
+    # Admin ya este abierta. Se comprueban las dos cosas: que el candado cerrado
+    # no deja leer el registro, y que abriendolo el registro sigue estando ahi.
+    r = admin.get("/actividad")
+    check(
+        "sin la Master Password, ni el Admin lee el registro",
+        "Actividad bloqueada" in r.text and "Acceso a Administración bloqueado" not in r.text,
+    )
+    admin.post(
+        "/configuracion/desbloquear",
+        data={"master_password": MASTER, "destino": "/actividad"},
+    )
     r = admin.get("/actividad")
     check(
         "los intentos bloqueados quedan en el registro de Actividad",

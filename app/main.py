@@ -402,9 +402,20 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     recientes = db.execute(
         select(Invoice).order_by(Invoice.updated_at.desc()).limit(5)
     ).scalars().all()
-    ultimas_acciones = db.execute(
-        select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(6)
-    ).scalars().all()
+    # Las seis ultimas acciones son Actividad, y la Actividad esta protegida.
+    # Si la consulta se hiciera igual y solo se escondiera la tarjeta, el
+    # registro viajaria dentro del HTML del Dashboard y bastaria con mirar el
+    # codigo fuente de la pagina. Con la Master Password cerrada no se consulta.
+    # El resto del Dashboard -totales, estados, mercados, facturas recientes-
+    # se calcula y se pinta igual que siempre.
+    actividad_visible = master_unlocked(request)
+    ultimas_acciones = (
+        db.execute(
+            select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(6)
+        ).scalars().all()
+        if actividad_visible
+        else []
+    )
 
     return render(
         request,
@@ -419,6 +430,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         compartidos=compartidos,
         recientes=recientes,
         acciones=ultimas_acciones,
+        actividad_visible=actividad_visible,
         action_labels=act.LABELS,
     )
 
@@ -1512,9 +1524,28 @@ def activity_view(request: Request, db: Session = Depends(get_db)):
     user = require_login(request)
     if isinstance(user, RedirectResponse):
         return user
+
+    if not master_unlocked(request):
+        # La comprobacion esta aqui, en el servidor, y antes de la consulta: la
+        # pantalla bloqueada no es una pantalla con el contenido escondido, es
+        # una peticion que nunca llega a leer activity_log. Escribir /actividad
+        # a mano en la barra de direcciones cae exactamente en esta rama.
+        return render(
+            request,
+            "activity_locked.html",
+            db,
+            active_view="activity",
+            page_title="Actividad",
+            page_sub="Área protegida · Master Password",
+            error=request.session.pop("_master_error", None),
+            minutes=settings.master_session_minutes,
+        )
+
+    touch_master(request)
     entradas = db.execute(
         select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(200)
     ).scalars().all()
+    total = db.execute(select(func.count(ActivityLog.id))).scalar_one()
     return render(
         request,
         "activity.html",
@@ -1523,8 +1554,48 @@ def activity_view(request: Request, db: Session = Depends(get_db)):
         page_title="Actividad",
         page_sub="Registro básico: quién, qué y cuándo.",
         entries=entradas,
+        total=total,
         action_labels=act.LABELS,
+        minutes=settings.master_session_minutes,
     )
+
+
+@app.post("/actividad/limpiar")
+def activity_clear(
+    request: Request, confirmacion: str = Form(""), db: Session = Depends(get_db)
+):
+    """Vacia el historial. Es la unica accion del panel que borra Actividad."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    # Mismo muro que la vista, repetido en el POST: que la pantalla anterior
+    # estuviera desbloqueada no autoriza este envio si la sesion ya caduco.
+    if not master_unlocked(request):
+        return RedirectResponse("/actividad", status_code=status.HTTP_303_SEE_OTHER)
+    touch_master(request)
+
+    # La confirmacion se comprueba en el servidor. El confirm() del navegador
+    # es comodidad; esto es lo que de verdad impide un borrado por un clic
+    # suelto o por un formulario enviado desde fuera.
+    if confirmacion.strip().upper() != "LIMPIAR":
+        flash(request, "Escribe LIMPIAR para confirmar el vaciado.", "error")
+        return RedirectResponse("/actividad", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        ruta, filas = act.limpiar_historial(db, request=request)
+    except act.CopiaIncompleta as e:
+        db.rollback()
+        flash(request, f"No se ha borrado nada: {e} Vuelve a intentarlo.", "error")
+        return RedirectResponse("/actividad", status_code=status.HTTP_303_SEE_OTHER)
+
+    flash(
+        request,
+        f"Historial limpiado: {filas} entradas. Copia guardada en el servidor "
+        f"como {ruta.name}.",
+        "ok",
+    )
+    return RedirectResponse("/actividad", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # --- configuracion -----------------------------------------------------------
@@ -2028,32 +2099,55 @@ def settings_qr_file(request: Request, db: Session = Depends(get_db)):
     return FileResponse(ruta)
 
 
+# Las dos unicas pantallas que la Master Password abre. La lista es cerrada a
+# proposito: 'destino' llega en un formulario, y devolver al navegador la
+# direccion que venga en un formulario es como se construye un redirector
+# abierto. Cualquier otro valor cae en Configuracion.
+DESTINOS_MASTER = ("/configuracion", "/actividad")
+
+
+def _destino_master(valor: str) -> str:
+    return valor if valor in DESTINOS_MASTER else "/configuracion"
+
+
 @app.post("/configuracion/desbloquear")
 def settings_unlock(
-    request: Request, master_password: str = Form(...), db: Session = Depends(get_db)
+    request: Request,
+    master_password: str = Form(...),
+    destino: str = Form("/configuracion"),
+    db: Session = Depends(get_db),
+):
+    """Desbloqueo unico para Configuracion y Actividad. Es la misma contrasena y
+    la misma sesion que pidio el cliente: abrir una abre la otra, y el tiempo de
+    inactividad las vuelve a cerrar a las dos a la vez."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    vuelta = _destino_master(destino)
+    if check_master(db, master_password):
+        unlock_master(request)
+        act.log(db, act.MASTER_UNLOCK, request=request, detail=f"Desde {vuelta}")
+    else:
+        act.log(db, act.MASTER_FAILED, request=request, detail=f"Desde {vuelta}")
+        request.session["_master_error"] = "Master Password incorrecta."
+    return RedirectResponse(vuelta, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/configuracion/bloquear")
+def settings_lock(
+    request: Request,
+    destino: str = Form("/configuracion"),
+    db: Session = Depends(get_db),
 ):
     user = require_login(request)
     if isinstance(user, RedirectResponse):
         return user
-
-    if check_master(db, master_password):
-        unlock_master(request)
-        act.log(db, act.MASTER_UNLOCK, request=request)
-    else:
-        act.log(db, act.MASTER_FAILED, request=request)
-        request.session["_master_error"] = "Master Password incorrecta."
-    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@app.post("/configuracion/bloquear")
-def settings_lock(request: Request, db: Session = Depends(get_db)):
-    user = require_login(request)
-    if isinstance(user, RedirectResponse):
-        return user
+    vuelta = _destino_master(destino)
     lock_master(request)
     act.log(db, act.MASTER_LOCK, request=request)
-    flash(request, "Configuración bloqueada.", "ok")
-    return RedirectResponse("/configuracion", status_code=status.HTTP_303_SEE_OTHER)
+    flash(request, "Área protegida bloqueada.", "ok")
+    return RedirectResponse(vuelta, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/configuracion/contrasenas")
