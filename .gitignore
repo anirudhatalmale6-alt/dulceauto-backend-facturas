@@ -6,3 +6,8 @@ data/
 *.db
 *.db-wal
 *.db-shm
+
+# Salidas y fotografias de ejemplo del album (se regeneran; las fotos son
+# del cliente y no van al repositorio publico)
+hoja-contactos/
+fotos-album/
