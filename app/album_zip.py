@@ -70,7 +70,6 @@ class ZipInvalido(ValueError):
 class Resultado:
     imagenes: list[tuple[str, bytes]] = field(default_factory=list)
     descartadas: list[str] = field(default_factory=list)
-    sobrantes: int = 0          # cuantas se dejaron fuera por pasar de MAX_FOTOS
 
     @property
     def cuantas(self) -> int:
@@ -178,11 +177,20 @@ def leer(datos: bytes) -> Resultado:
         # dentro de una carpeta ordenaria por la carpeta y no por la foto.
         candidatas.sort(key=lambda i: clave_natural(i.filename.replace("\\", "/").split("/")[-1]))
 
-        # Las que pasen de MAX_FOTOS ni se leen: no tiene sentido descomprimir
-        # lo que se va a tirar.
+        # Pasarse del tope rechaza la carga ENTERA, no se recortan las
+        # primeras veinte.
+        #
+        # Es lo que pidio el cliente y tiene su razon: quedarse con las veinte
+        # primeras deja un album que parece correcto -veinte fotografias bien
+        # puestas- y en el que faltan unidades que el vendedor creyo haber
+        # subido. El aviso se lee una vez y se olvida; el album incompleto se
+        # queda. Rechazar no se puede pasar por alto.
         if len(candidatas) > MAX_FOTOS:
-            resultado.sobrantes = len(candidatas) - MAX_FOTOS
-            candidatas = candidatas[:MAX_FOTOS]
+            raise ZipInvalido(
+                f"El álbum admite un máximo de {MAX_FOTOS} fotografías y el ZIP "
+                f"trae {len(candidatas)}. No se ha cambiado nada: quite "
+                f"{len(candidatas) - MAX_FOTOS} y vuelva a subirlo."
+            )
 
         disponible = MAX_TOTAL_BYTES
         for info in candidatas:

@@ -1067,11 +1067,6 @@ async def invoice_album(request: Request, invoice_id: int, db: Session = Depends
         f"Álbum sustituido: {len(validas)} fotografía"
         f"{'' if len(validas) == 1 else 's'}, en orden por nombre de archivo."
     )
-    if lote.sobrantes:
-        aviso += (
-            f" El ZIP traía {lote.sobrantes} de más y se han dejado fuera las últimas: "
-            f"el álbum admite {album.MAX_FOTOS}."
-        )
     if lote.descartadas:
         aviso += f" Se han ignorado {len(lote.descartadas)} archivos que no son imágenes."
     flash(request, aviso, "ok")

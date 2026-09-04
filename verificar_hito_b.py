@@ -165,19 +165,33 @@ def main() -> None:
             [p for p, _n, _r in filas] == list(range(1, len(filas) + 1)),
         )
 
-        # Tope de 20.
+        # Tope de 20. Pasarse RECHAZA la carga entera y deja el album como
+        # estaba: no se recortan las veinte primeras. Se comprueba contra el
+        # album que habia antes, fila a fila, porque contar 12 no probaria que
+        # son LAS MISMAS 12.
+        antes_del_tope = fotos_en_bd(fid)
         respuesta = subir(zip_de_fotos([f"f{i:02d}.jpg" for i in range(1, 26)]))
-        filas = fotos_en_bd(fid)
         check(
-            f"un ZIP de 25 deja el álbum en {album.MAX_FOTOS}",
-            len(filas) == album.MAX_FOTOS,
-            str(len(filas)),
+            "un ZIP de 25 se rechaza entero",
+            fotos_en_bd(fid) == antes_del_tope,
+            f"{len(fotos_en_bd(fid))} fotos, antes {len(antes_del_tope)}",
         )
         # El aviso se busca en el cuerpo que devuelve el POST, no navegando
         # despues al editor: el POST ya sigue el 303 hasta el editor, y al
         # hacerlo se lleva el aviso por delante. Mirarlo despues da vacio
         # siempre, tenga razon el codigo o no.
-        check("y avisa de las que ha dejado fuera", "de más" in respuesta.text())
+        check(
+            "y lo dice con el máximo",
+            f"máximo de {album.MAX_FOTOS} fotografías" in respuesta.text(),
+        )
+        # Control: justo 20 SI entran. Sin esto, un tope mal puesto que
+        # rechazara tambien las de 20 pasaria desapercibido.
+        subir(zip_de_fotos([f"t{i:02d}.jpg" for i in range(1, album.MAX_FOTOS + 1)]))
+        check(
+            f"y justo {album.MAX_FOTOS} sí entran",
+            len(fotos_en_bd(fid)) == album.MAX_FOTOS,
+            str(len(fotos_en_bd(fid))),
+        )
 
         # Sustitucion completa. Se pasa de 20 a 5: si mezclara, quedarian 20.
         subir(zip_de_fotos([f"nueva{i}.jpg" for i in range(1, 6)]))

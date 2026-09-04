@@ -379,7 +379,9 @@
         <p class="small muted">
           Hasta {{ max_fotos }} fotografías, en un solo ZIP. Se ordenan por el nombre
           del archivo, con orden natural: foto2 va antes que foto10. La primera es
-          la destacada del álbum.
+          la destacada del álbum. Si el ZIP trae más de {{ max_fotos }}, se rechaza
+          entero y el álbum anterior se queda como estaba: así no puede pasar
+          desapercibido que algunas fotografías quedaron fuera.
         </p>
         <p class="small muted">
           Subir un ZIP <strong>sustituye el álbum entero</strong>, incluidas las cuatro
