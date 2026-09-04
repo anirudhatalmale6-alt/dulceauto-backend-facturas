@@ -21,6 +21,8 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import activity as act
+from . import album
+from . import album_zip
 from . import callcenter as cc
 from . import codes
 from . import doctypes
@@ -28,6 +30,7 @@ from . import documents as doc_engine
 from . import invoices as inv_service
 from . import pdf as pdf_engine
 from . import uploads
+from . import verificaciones
 from .config import BASE_DIR, settings
 from .db import Base, engine, get_db
 from .fields import EDITABLE_FIELDS
@@ -530,7 +533,16 @@ def editor_page(
         errors=errors or [],
         form=form,
         historial=historial,
-        fotos={f.position: f for f in invoice.photos} if invoice else {},
+        fotos=(
+            {f.position: f for f in sorted(invoice.photos, key=lambda p: p.position)}
+            if invoice
+            else {}
+        ),
+        max_fotos=album.MAX_FOTOS,
+        verificaciones=verificaciones.VERIFICACIONES,
+        verificaciones_marcadas=(
+            verificaciones.leer(invoice.verifications) if invoice else []
+        ),
         comprometidas=[i for i in historial if i.status in inv_service.COMMITTED_STATUSES],
         marcas=inv_service.perfiles_activos(db),
         folio_ejemplo=inv_service.folio_previsto(db),
@@ -762,6 +774,10 @@ async def invoice_duplicate(request: Request, invoice_id: int, db: Session = Dep
 # trozo de HTML incrustado dentro del panel, se estaria comprobando algo que no
 # es lo que se entrega.
 
+# Alto de la pagina 2 en pixeles de CSS: los 297mm de un A4 a 96 puntos por
+# pulgada, mas la holgura que el marco de la vista previa deja alrededor.
+ALTO_PAGINA2_PX = round(297 / 25.4 * 96) + 24
+
 ZOOMS = (0.5, 0.75, 1.0)
 
 
@@ -946,6 +962,204 @@ async def invoice_photos(request: Request, invoice_id: int, db: Session = Depend
     )
 
 
+@app.post("/facturas/{invoice_id}/album")
+async def invoice_album(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    """Carga el album de la pagina 2 desde un ZIP.
+
+    Sustituye el album ENTERO. Es lo que pidio el cliente y es lo unico
+    coherente: si se mezclaran dos cargas, el album quedaria con la fotografia 1
+    de una y la 7 de otra y nadie sabria por que.
+
+    El orden de las operaciones importa y no es el obvio:
+
+      1. se comprueban TODAS las imagenes del ZIP;
+      2. si alguna no vale, no se toca nada y se acaba aqui;
+      3. se escriben los archivos nuevos, que llevan nombres nuevos y no pisan
+         a los viejos;
+      4. se cambia la base de datos y se confirma;
+      5. y SOLO entonces se borran los archivos viejos del disco.
+
+    Al reves -borrar primero- un fallo en el paso 4 dejaria la factura con las
+    filas apuntando a archivos que ya no existen.
+    """
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    destino = RedirectResponse(
+        f"/facturas/{invoice_id}/editar", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+    form = await request.form()
+    archivo = form.get("album_zip")
+    if archivo is None or not getattr(archivo, "filename", ""):
+        flash(request, "No se ha elegido ningún archivo ZIP.", "error")
+        return destino
+
+    try:
+        lote = album_zip.leer(await archivo.read())
+    except album_zip.ZipInvalido as exc:
+        flash(request, str(exc), "error")
+        return destino
+
+    validas, errores = album_zip.revisar(lote)
+    if errores:
+        flash(
+            request,
+            "No se ha cambiado nada del álbum. "
+            + " · ".join(errores[:3])
+            + (f" (y {len(errores) - 3} más)" if len(errores) > 3 else ""),
+            "error",
+        )
+        return destino
+
+    antiguas = [f.file_path for f in invoice.photos]
+    guardados = []
+    try:
+        for nombre, contenido in validas:
+            guardados.append(
+                uploads.guardar_imagen(contenido, nombre, f"facturas/{invoice.id}")
+            )
+
+        for foto in list(invoice.photos):
+            db.delete(foto)
+        # El flush suelta las filas viejas ANTES de insertar las nuevas: la
+        # posicion 1 no puede existir dos veces en la misma factura.
+        db.flush()
+        for posicion, (guardado, (nombre, _)) in enumerate(zip(guardados, validas), start=1):
+            db.add(
+                InvoicePhoto(
+                    invoice_id=invoice.id,
+                    position=posicion,
+                    file_path=guardado.relativa,
+                    original_name=nombre[:255],
+                )
+            )
+        db.commit()
+    except Exception:
+        # Se deshace TODO: la transaccion y los archivos que ya se habian
+        # escrito. Los viejos siguen intactos porque todavia no se han tocado,
+        # asi que la factura se queda exactamente como estaba.
+        db.rollback()
+        for guardado in guardados:
+            uploads.borrar(guardado.relativa)
+        raise
+
+    # Ahora si: las filas nuevas estan confirmadas y las viejas ya no las
+    # apunta nadie.
+    for vieja in antiguas:
+        uploads.borrar(vieja)
+
+    act.log(
+        db,
+        act.INVOICE_UPDATED,
+        request=request,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        folio=invoice.folio,
+        detail=f"álbum sustituido · {len(validas)} fotografías desde {archivo.filename}",
+    )
+    aviso = (
+        f"Álbum sustituido: {len(validas)} fotografía"
+        f"{'' if len(validas) == 1 else 's'}, en orden por nombre de archivo."
+    )
+    if lote.sobrantes:
+        aviso += (
+            f" El ZIP traía {lote.sobrantes} de más y se han dejado fuera las últimas: "
+            f"el álbum admite {album.MAX_FOTOS}."
+        )
+    if lote.descartadas:
+        aviso += f" Se han ignorado {len(lote.descartadas)} archivos que no son imágenes."
+    flash(request, aviso, "ok")
+    return destino
+
+
+@app.post("/facturas/{invoice_id}/album/vaciar")
+def invoice_album_clear(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    """Quita todas las fotografias. Sin album no hay pagina 2."""
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is not None and invoice.photos:
+        cuantas = len(invoice.photos)
+        rutas = [f.file_path for f in invoice.photos]
+        for foto in list(invoice.photos):
+            db.delete(foto)
+        db.commit()
+        for ruta in rutas:
+            uploads.borrar(ruta)
+        act.log(
+            db,
+            act.INVOICE_UPDATED,
+            request=request,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            folio=invoice.folio,
+            detail=f"álbum vaciado · {cuantas} fotografías retiradas",
+        )
+        flash(
+            request,
+            f"Álbum vaciado: {cuantas} fotografías retiradas. El documento vuelve a ser de una hoja.",
+            "ok",
+        )
+    return RedirectResponse(
+        f"/facturas/{invoice_id}/editar", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@app.post("/facturas/{invoice_id}/verificaciones")
+async def invoice_verifications(
+    request: Request, invoice_id: int, db: Session = Depends(get_db)
+):
+    """Guarda que verificaciones ha marcado el administrador para esta unidad.
+
+    Lo que no llega marcado, se desmarca. Un formulario de casillas manda el
+    estado COMPLETO: si solo se anadieran las que llegan, no habria forma de
+    quitar una vez puesta.
+    """
+    user = require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    invoice = db.get(Invoice, invoice_id)
+    if invoice is None:
+        flash(request, "Esa factura ya no existe.", "error")
+        return RedirectResponse("/facturas", status_code=status.HTTP_303_SEE_OTHER)
+
+    form = await request.form()
+    antes = verificaciones.leer(invoice.verifications)
+    invoice.verifications = verificaciones.guardar(form.getlist("verificacion"))
+    db.commit()
+    ahora = verificaciones.leer(invoice.verifications)
+
+    act.log(
+        db,
+        act.INVOICE_UPDATED,
+        request=request,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        folio=invoice.folio,
+        detail=(
+            f"verificaciones: {len(ahora)} marcada{'' if len(ahora) == 1 else 's'}"
+            f" (antes {len(antes)})"
+        ),
+    )
+    flash(
+        request,
+        f"{len(ahora)} verificación{'' if len(ahora) == 1 else 'es'} marcada"
+        f"{'' if len(ahora) == 1 else 's'}."
+        + ("" if ahora else " Sin ninguna marcada, el panel no sale impreso."),
+        "ok",
+    )
+    return RedirectResponse(
+        f"/facturas/{invoice_id}/editar", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
 @app.post("/facturas/{invoice_id}/fotos/{posicion}/quitar")
 def invoice_photo_remove(
     request: Request, invoice_id: int, posicion: int, db: Session = Depends(get_db)
@@ -1056,6 +1270,14 @@ def invoice_preview(
 
     documento = doc_engine.render(invoice, doc=tipo.clave, **_marca_para_pantalla(db, invoice))
     market = get_market(invoice.locale)
+
+    # Alto del iframe de la vista previa. Era fijo -1360px la pre-factura- y con
+    # el album la pre-factura pasa a tener una segunda hoja de 297mm: con el
+    # numero de antes, la pagina 2 salia cortada por abajo y parecia un fallo
+    # del diseno. Se suma solo cuando esa hoja existe de verdad.
+    alto_documento = 1360 if tipo.clave == doctypes.FACTURA else 1760
+    if tipo.clave == doctypes.FACTURA and doc_engine.paginas(invoice) == 2:
+        alto_documento += ALTO_PAGINA2_PX
     return render(
         request,
         "preview.html",
@@ -1069,6 +1291,7 @@ def invoice_preview(
         snapshots=pdf_engine.snapshots_de(db, invoice.id, tipo.clave),
         zoom=zoom if zoom in ZOOMS else 0.75,
         zooms=ZOOMS,
+        alto_documento=alto_documento,
         etiquetas=doc_engine.ETIQUETAS_HUECO,
         tipo_doc=tipo,
         tipos_doc=_tipos_disponibles(invoice),

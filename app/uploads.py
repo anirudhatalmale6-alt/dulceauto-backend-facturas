@@ -65,43 +65,60 @@ def _validar_svg(datos: bytes) -> None:
         )
 
 
-def guardar_imagen(datos: bytes, nombre_original: str, sub: str) -> Guardado:
-    """Comprueba la imagen y la guarda. Devuelve donde ha quedado."""
+def comprobar_imagen(datos: bytes) -> tuple[str, int, int]:
+    """Abre la imagen y devuelve (formato, ancho, alto). No guarda nada.
+
+    Se saco de guardar_imagen para poder comprobar un lote entero -las veinte
+    fotografias de un ZIP- ANTES de escribir la primera. Comprobar y guardar a
+    la vez deja el album a medias cuando falla la ultima.
+
+    No admite SVG: esto es para fotografias, y un SVG no lo es. El logotipo, que
+    si puede serlo, sigue pasando por guardar_imagen.
+    """
     if not datos:
         raise SubidaInvalida("El archivo está vacío.")
     if len(datos) > MAX_BYTES:
         raise SubidaInvalida(
-            f"El archivo pesa {len(datos) / 1024 / 1024:.1f} MB y el máximo es "
+            f"La imagen pesa {len(datos) / 1024 / 1024:.1f} MB y el máximo es "
             f"{MAX_BYTES // 1024 // 1024} MB."
         )
 
-    es_svg = nombre_original.lower().endswith(".svg") or datos.lstrip()[:5].lower() in (
-        b"<?xml",
-        b"<svg",
+    from PIL import Image, UnidentifiedImageError
+    import io
+
+    try:
+        with Image.open(io.BytesIO(datos)) as imagen:
+            imagen.verify()          # detecta archivos corruptos
+        with Image.open(io.BytesIO(datos)) as imagen:
+            formato = (imagen.format or "").upper()
+            ancho, alto = imagen.size
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise SubidaInvalida("Ese archivo no es una imagen que se pueda abrir.") from exc
+
+    if formato not in FORMATOS:
+        raise SubidaInvalida(
+            f"El formato {formato or 'desconocido'} no se admite. Use JPG, PNG o WEBP."
+        )
+    return formato, ancho, alto
+
+
+def guardar_imagen(datos: bytes, nombre_original: str, sub: str) -> Guardado:
+    """Comprueba la imagen y la guarda. Devuelve donde ha quedado."""
+    es_svg = bool(datos) and (
+        nombre_original.lower().endswith(".svg")
+        or datos.lstrip()[:5].lower() in (b"<?xml", b"<svg")
     )
 
     if es_svg:
+        if len(datos) > MAX_BYTES:
+            raise SubidaInvalida(
+                f"El archivo pesa {len(datos) / 1024 / 1024:.1f} MB y el máximo es "
+                f"{MAX_BYTES // 1024 // 1024} MB."
+            )
         _validar_svg(datos)
         formato, extension, ancho, alto = "SVG", ".svg", 0, 0
     else:
-        from PIL import Image, UnidentifiedImageError
-        import io
-
-        try:
-            with Image.open(io.BytesIO(datos)) as imagen:
-                imagen.verify()          # detecta archivos corruptos
-            with Image.open(io.BytesIO(datos)) as imagen:
-                formato = (imagen.format or "").upper()
-                ancho, alto = imagen.size
-        except (UnidentifiedImageError, OSError) as exc:
-            raise SubidaInvalida(
-                "Ese archivo no es una imagen que se pueda abrir."
-            ) from exc
-
-        if formato not in FORMATOS:
-            raise SubidaInvalida(
-                f"El formato {formato or 'desconocido'} no se admite. Use JPG, PNG, WEBP o SVG."
-            )
+        formato, ancho, alto = comprobar_imagen(datos)
         extension = FORMATOS[formato]
 
     # Nombre generado aqui: el que traiga el archivo no se usa nunca.

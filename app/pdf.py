@@ -277,21 +277,41 @@ def _congelar_fotos(invoice: Invoice, destino: Path) -> list[int]:
     from . import documents, uploads
 
     puestas = []
-    for foto in getattr(invoice, "photos", []):
-        campo = f"foto_{foto.position}"
-        nombre = documents.ARCHIVO_FOTO.get(campo)
+    fotos = sorted(getattr(invoice, "photos", []), key=lambda f: f.position)
+    for orden, foto in enumerate(fotos, start=1):
         origen = uploads.ruta_absoluta(foto.file_path)
-        if not nombre or origen is None:
+        if origen is None:
             continue
-        final = destino / "img" / nombre
-        if not final.parent.exists():
-            continue
-        # Se guarda siempre como JPEG con el nombre que espera la plantilla:
-        # el operador puede subir un PNG y el archivo se llama .jpg. Como JPEG
-        # no tiene transparencia, se aplana sobre blanco -nunca con un
-        # convert("RGB") a secas, que la dejaria negra. Ver sobre_blanco().
+
+        # Cada fotografia se copia con DOS nombres, porque el documento la pide
+        # de dos sitios distintos:
+        #
+        #   · los cuatro nombres del diseno (vehicle-front.jpg y compania), que
+        #     son los que usa la pagina 1;
+        #   · album/foto-NN.jpg, que es el nombre que usa el album de la
+        #     pagina 2 y que decide documents.archivo_album().
+        #
+        # Sin la segunda copia el PDF sale con la pagina 2 llena de imagenes
+        # rotas, y ademas no se nota hasta abrirlo: el HTML es correcto, lo que
+        # falta es el archivo.
+        nombres = []
+        de_diseno = documents.ARCHIVO_FOTO.get(f"foto_{foto.position}")
+        if de_diseno:
+            nombres.append(de_diseno)
+        nombres.append(documents.archivo_album(orden))
+
+        # Se abre y se aplana una sola vez aunque se guarde dos veces.
         with Image.open(origen) as imagen:
-            sobre_blanco(imagen).save(final, "JPEG", quality=92, optimize=True)
+            plana = sobre_blanco(imagen)
+            for nombre in nombres:
+                final = destino / "img" / nombre
+                final.parent.mkdir(parents=True, exist_ok=True)
+                # Se guarda siempre como JPEG con el nombre que espera la
+                # plantilla: el operador puede subir un PNG y el archivo se
+                # llama .jpg. Como JPEG no tiene transparencia, se aplana sobre
+                # blanco -nunca con un convert("RGB") a secas, que la dejaria
+                # negra. Ver sobre_blanco().
+                plana.save(final, "JPEG", quality=92, optimize=True)
         puestas.append(foto.position)
     return puestas
 
@@ -639,13 +659,21 @@ def _generar_bajo_cerrojo(
         raise PdfError(f"No se ha podido generar el PDF: {exc}") from exc
 
     paginas = contar_paginas(pdf_path)
-    if paginas != 1:
-        # El documento aprobado es de una sola pagina. Si salen dos, algo ha
-        # cambiado de alto y hay que saberlo ahora, no cuando el cliente lo
-        # reciba.
+    esperadas = documents.paginas(invoice) if tipo.clave == doctypes.FACTURA else 1
+    if paginas != esperadas:
+        # Cuantas hojas debe tener este documento no es una constante desde que
+        # existe el album: la pre-factura son dos hojas cuando hay fotografias y
+        # una cuando no. Lo que sigue siendo un error es que salgan MAS de las
+        # que toca, porque significa que algo se ha alargado y se ha partido; y
+        # que salgan menos, porque significa que algo no ha entrado.
+        #
+        # Se compara contra el mismo documents.paginas() que escribe el pie de
+        # la pagina 2. Si cada uno lo dedujera por su cuenta, podria salir un
+        # PDF de una hoja con un pie que dice "Pagina 2 de 2".
         shutil.rmtree(carpeta, ignore_errors=True)
         raise PdfError(
-            f"El PDF ha salido con {paginas} páginas y la factura es de una sola. "
+            f"El PDF ha salido con {paginas} página{'' if paginas == 1 else 's'} "
+            f"y este documento es de {esperadas}. "
             "Revise si algún texto se ha alargado mucho."
         )
 

@@ -327,6 +327,13 @@ class Invoice(Base):
     # defecto para una cancelada que ya llego a emitir documento.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Las verificaciones de la pagina 2 que el administrador ha marcado para
+    # ESTA unidad, separadas por comas. Nulo o vacio significa "ninguna", que
+    # es lo que vale para todas las facturas anteriores a esta columna: nadie
+    # las marco, asi que el documento no afirma nada sobre ellas. El catalogo
+    # y el porque del valor por defecto estan en verificaciones.py.
+    verifications: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
@@ -343,7 +350,13 @@ class Invoice(Base):
 
 
 class InvoicePhoto(Base):
-    """Las cuatro fotografias del vehiculo. position va de 1 a 4."""
+    """Las fotografias del vehiculo. position va de 1 a album.MAX_FOTOS.
+
+    Eran cuatro hasta el album de la pagina 2. Subir el tope a veinte no toca
+    el esquema: la unica regla que habia sobre position es que no se repita
+    dentro de una factura, y esa sigue igual. El limite vive en el codigo que
+    escribe, no en la tabla.
+    """
 
     __tablename__ = "invoice_photo"
     __table_args__ = (UniqueConstraint("invoice_id", "position", name="uq_photo_invoice_pos"),)

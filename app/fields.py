@@ -148,6 +148,11 @@ DUPLICATE_CARRY_FIELDS: tuple[str, ...] = (
     "delivery_mode",
     "delivery_text",
     "delivery_alt",
+    # Las verificaciones son de la UNIDAD, y duplicar arrastra la unidad entera
+    # -VIN incluido-, asi que viajan con ella. Si no viajaran, la copia saldria
+    # sin ninguna marcada y quien duplicara para un segundo interesado tendria
+    # que volver a marcar seis casillas sobre el mismo coche.
+    "verifications",
 )
 
 

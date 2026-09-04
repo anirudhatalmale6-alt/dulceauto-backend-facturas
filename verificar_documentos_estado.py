@@ -191,11 +191,19 @@ print("\n2 · Ningun hueco MUDO (marcado pero imposible de rellenar)")
 # cambia el contenido nunca. Es una regla a proposito -- mejor un hueco sin
 # rellenar que tragarse marcado -- pero convierte un <br> de mas en la maqueta
 # en un dato que se queda para siempre en el del cliente de ejemplo.
-NO_SON_DE_TEXTO = set(documents.SOLO_ATRIBUTOS) | set(documents.FOTOS) | {
-    documents.LOGO,
-    documents.SAFE_ICON,
-    documents.DOC_TITLE,
-}
+NO_SON_DE_TEXTO = (
+    set(documents.SOLO_ATRIBUTOS)
+    | set(documents.FOTOS)
+    # Los huecos de la pagina 2 cuyo CONTENIDO lo escribe el servidor. Tienen
+    # hijos en la plantilla, asi que el motor los trataria como de atributos si
+    # no fuera porque los resuelve antes, en la rama de marcado generado.
+    | set(documents.MARCADO)
+    | {
+        documents.LOGO,
+        documents.SAFE_ICON,
+        documents.DOC_TITLE,
+    }
+)
 for clave in (doctypes.FACTURA, *NUEVOS):
     plantilla = documents.cargar("es-MX", clave)
     mudos = [

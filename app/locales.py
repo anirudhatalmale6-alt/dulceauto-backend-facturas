@@ -199,6 +199,7 @@ DOC_TEXTS = {
         "aria_verificar": "Verificar la reserva {folio}",
         "alt_barras": "Código de barras del folio {folio}",
         "alt_qr": "Código QR para verificar la reserva {folio}",
+        "pagina_de": "Página {pagina} de {total}",
     },
     "en": {
         "incluido": "Included",
@@ -206,6 +207,7 @@ DOC_TEXTS = {
         "aria_verificar": "Verify reservation {folio}",
         "alt_barras": "Barcode for reference {folio}",
         "alt_qr": "QR code to verify reservation {folio}",
+        "pagina_de": "Page {pagina} of {total}",
     },
     "es-AR": {
         "incluido": "Incluido",
@@ -215,6 +217,7 @@ DOC_TEXTS = {
         "aria_verificar": "Verificar la reserva {folio}",
         "alt_barras": "Código de barras del folio {folio}",
         "alt_qr": "Código QR para verificar la reserva {folio}",
+        "pagina_de": "Página {pagina} de {total}",
     },
 }
 

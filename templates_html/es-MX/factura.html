@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-doc-title>DulceAuto — Pre-factura de reserva</title>
   <link rel="stylesheet" href="../assets/css/factura.css">
+  <link rel="stylesheet" href="../assets/css/pagina2.css">
   <style>
     /* Ajuste de impresión propio de esta versión de idioma.
        --print-scale   : ancho útil del A4 (194mm, menos el marco) entre 900px de diseño.
@@ -286,5 +287,125 @@
       </main>
     </article>
   </div>
+  <!-- =====================================================================
+       Pagina 2: album fotografico y verificacion del vehiculo.
+
+       Sale del diseno DulceAuto_Pagina2_Album_Verificacion_Premium_POLISH.
+       Cambia solo lo que no podia quedarse fijo:
+
+         · el album, que ahora lo arma app/album.py para el numero de
+           fotografias que haya (hueco "album");
+         · las tarjetas de verificacion, que son las que el administrador
+           haya marcado (hueco "verificaciones");
+         · los tres contadores, que eran texto escrito a mano;
+         · la pastilla "Foto 09" del VIN, que ya no esta: decia en que
+           numero de fotografia salia el VIN y ese numero deja de ser fijo.
+
+       La hoja entera se esconde cuando la factura no tiene fotografias.
+       ===================================================================== -->
+  <div class="page-shell page-shell-2" data-field="pagina2">
+    <!-- La rejilla del album la escribe app/album.py y entra por aqui, no
+         por pagina2.css: asi la hoja de contactos que se aprobo y lo que se
+         imprime salen del mismo sitio y no pueden separarse.
+
+         Va aqui dentro y no en el <head> porque el <head> es de la pagina 1,
+         y la comprobacion que exige que la pagina 1 salga identica byte a
+         byte al diseno aprobado tiene que poder seguir exigiendolo. -->
+    <style data-field="album_estilos"></style>
+    <article class="pagina2">
+
+      <header class="p2-header">
+        <div class="p2-brand">
+          <div class="p2-brand-mark">DA</div>
+          <div class="p2-brand-name">DulceAuto</div>
+        </div>
+        <div class="p2-title">
+          <small>Pre-factura de reserva &mdash; P&aacute;gina 2</small>
+          <h2>&Aacute;lbum y verificaci&oacute;n del veh&iacute;culo</h2>
+          <div class="p2-meta">Folio: <strong data-field="folio">RES-87241</strong> &nbsp;&nbsp;|&nbsp;&nbsp; Fecha: <strong data-field="fecha_emision">22 Jul 2026</strong></div>
+        </div>
+      </header>
+
+      <section class="p2-intro">
+        <span>Reunimos la evidencia fotogr&aacute;fica y los indicadores clave de verificaci&oacute;n de la unidad que est&aacute;s reservando.</span>
+        <span class="p2-intro-note"><span class="dot"></span>Soporte visual de la reserva</span>
+      </section>
+
+      <section class="p2-main">
+
+        <section class="album-shell">
+          <div class="album-head">
+            <div class="album-head-left">
+              <div class="album-head-icon"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M4 7h4l2-2h4l2 2h4v12H4V7Zm8 9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path></svg></div>
+              <div>
+                <strong>&Aacute;lbum fotogr&aacute;fico del veh&iacute;culo</strong>
+                <span>Exterior &middot; Interior &middot; VIN fotografiado</span>
+              </div>
+            </div>
+            <div class="album-badge" data-field="album_cuenta">14 fotograf&iacute;as</div>
+          </div>
+          <div data-field="album"><!-- lo arma app/album.py --></div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="panel">
+            <div class="panel-head"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M5 17h14l-1.2-5.2a2 2 0 0 0-2-1.6H8.2a2 2 0 0 0-2 1.6L5 17Zm2.2-6.8L8.5 7h7l1.3 3.2M7 17v2m10-2v2M6 14h.01M18 14h.01"></path></svg><span>Ficha r&aacute;pida del veh&iacute;culo</span></div>
+            <div class="model-block">
+              <div class="model-label">Modelo</div>
+              <div class="model-name" data-field="vehiculo">Audi A3 Sportback 1.5 TFSI</div>
+            </div>
+            <div class="mini-facts">
+              <div class="mini-fact"><small>A&ntilde;o</small><strong data-field="anio">2015</strong></div>
+              <div class="mini-fact"><small>Tipo</small><strong data-field="tipo">SUV</strong></div>
+              <div class="mini-fact"><small>Kilometraje</small><strong data-field="kilometraje">76,345 km</strong></div>
+              <div class="mini-fact"><small>Combustible</small><strong data-field="combustible">Gasolina</strong></div>
+              <div class="mini-fact"><small>Transmisi&oacute;n</small><strong data-field="transmision">Autom&aacute;tica</strong></div>
+              <div class="mini-fact"><small>Ubicaci&oacute;n</small><strong data-field="vehiculo_ubicacion">Veracruz</strong></div>
+            </div>
+            <div class="vin">
+              <small>VIN asociado a la unidad</small>
+              <strong data-field="vin">WP1AF2950FLB91244</strong>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3Zm-3 9 2 2 4-5"></path></svg><span>Datos de la reserva</span></div>
+            <div class="reservation">
+              <div class="p2-row"><span>Folio</span><strong data-field="folio">RES-87241</strong></div>
+              <div class="p2-row"><span>Fecha de reserva</span><strong data-field="fecha_emision">22 Jul 2026</strong></div>
+              <div class="p2-row"><span>Cliente</span><strong data-field="cliente_nombre">Juan P&eacute;rez Garc&iacute;a</strong></div>
+              <div class="p2-row"><span>Entrega programada</span><strong data-field="fecha_entrega">27 de julio de 2026</strong></div>
+              <div class="p2-status" data-field="estado">Pago pendiente</div>
+            </div>
+          </section>
+        </aside>
+
+      </section>
+
+      <section class="verify-wrap" data-field="verificaciones_panel">
+        <div class="verify-top">
+          <div class="verify-title">
+            <div class="shield"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3Zm-3 9 2 2 4-5"></path></svg></div>
+            <div>
+              <strong>Verificaci&oacute;n y tranquilidad para tu compra</strong>
+              <span>Resumen de indicadores relevantes asociados a la unidad.</span>
+            </div>
+          </div>
+          <div class="verify-proof" data-field="verificaciones_cuenta">6 verificaciones clave</div>
+        </div>
+        <div class="verify-grid" data-field="verificaciones"><!-- las marcadas por el administrador --></div>
+      </section>
+
+      <footer class="p2-footer">
+        <div class="footer-left">
+          <svg class="p2-icon" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v10H3V6Z"></path></svg>
+          <div class="footer-text">El &aacute;lbum fotogr&aacute;fico y este resumen forman parte del soporte visual de la reserva.<br><strong>Informaci&oacute;n con fines informativos y de respaldo para tu toma de decisi&oacute;n.</strong></div>
+        </div>
+        <div class="page-pill" data-field="pagina_pie">P&aacute;gina 2 de 2</div>
+      </footer>
+
+    </article>
+  </div>
+
 </body>
 </html>

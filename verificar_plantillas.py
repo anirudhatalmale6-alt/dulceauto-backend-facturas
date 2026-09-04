@@ -144,19 +144,76 @@ def aprobado(locale) -> str:
 # --- 1 · el documento generado es el aprobado ---------------------------------
 
 print("\n1 · Con los datos de la version aprobada sale el archivo aprobado")
+
+# La pagina 2 de la pre-factura es-MX no puede entrar en esta comparacion, y
+# conviene decir por que en vez de bajar el liston sin mas.
+#
+# La pagina 1 es una maqueta con datos de ejemplo escritos dentro: se rellenan
+# los huecos con esos mismos datos y tiene que volver a salir el archivo, byte a
+# byte. La pagina 2 no tiene datos de ejemplo escritos: su album y sus tarjetas
+# de verificacion son huecos VACIOS que rellena el servidor. Exigir igualdad
+# byte a byte alli seria exigir que el servidor no rellene nada.
+#
+# Asi que la afirmacion se parte en dos, y la primera -que es la que protege el
+# diseno aprobado del Milestone 1- se queda exactamente igual de fuerte:
+#
+#   1a. la pagina 1 sigue saliendo identica byte a byte;
+#   1b. en la pagina 2, toda linea que NO lleve un hueco tiene que salir
+#       identica. Es decir: el motor puede rellenar los huecos y no puede tocar
+#       nada mas.
+MARCA_PAGINA_2 = "  <!-- ====================================================================="
+
 for locale in MUESTRAS:
     generado = sin_rutas(documents.render(factura(locale)).html)
     esperado = aprobado(locale)
-    igual = generado == esperado
+
+    corte_e = esperado.find(MARCA_PAGINA_2)
+    corte_g = generado.find(MARCA_PAGINA_2)
+    tiene_pagina_2 = corte_e > 0
+
+    pagina1_e = esperado[:corte_e] if tiene_pagina_2 else esperado
+    pagina1_g = generado[:corte_g] if tiene_pagina_2 else generado
+
+    igual = pagina1_g == pagina1_e
     extra = ""
     if not igual:
         distintas = [
             (a, b)
-            for a, b in zip(esperado.splitlines(), generado.splitlines())
+            for a, b in zip(pagina1_e.splitlines(), pagina1_g.splitlines())
             if a != b
         ]
         extra = f"{len(distintas)} lineas distintas; primera: {distintas[0][1][:90] if distintas else '?'}"
-    check(f"{locale}: identico byte a byte al archivo aprobado", igual, extra)
+    check(f"{locale}: la página 1 sale idéntica byte a byte al archivo aprobado", igual, extra)
+
+    if not tiene_pagina_2:
+        continue
+
+    # Pagina 2: linea a linea, saltando las que llevan hueco.
+    lineas_e = esperado[corte_e:].splitlines()
+    lineas_g = generado[corte_g:].splitlines()
+    check(
+        f"{locale}: la página 2 tiene el mismo número de líneas que el diseño",
+        len(lineas_e) == len(lineas_g),
+        f"{len(lineas_e)} aprobadas vs {len(lineas_g)} generadas",
+    )
+    intocables = [
+        (i, a, b)
+        for i, (a, b) in enumerate(zip(lineas_e, lineas_g))
+        if "data-field" not in a and a != b
+    ]
+    check(
+        f"{locale}: en la página 2, el motor no ha tocado nada fuera de los huecos",
+        not intocables,
+        f"{len(intocables)} líneas cambiadas; primera: {intocables[0][2][:90] if intocables else '?'}",
+    )
+    # Y el control de que lo anterior no pasa por no mirar nada: tiene que haber
+    # lineas sin hueco que comparar.
+    sin_hueco = sum(1 for a in lineas_e if "data-field" not in a)
+    check(
+        f"{locale}: y esa comprobación mira líneas de verdad",
+        sin_hueco > 50,
+        f"{sin_hueco} líneas sin hueco",
+    )
 
 
 # --- 2 · las plantillas solo llevan atributos anadidos ------------------------
@@ -452,9 +509,22 @@ check("las particulas no cuentan para las iniciales",
       documents.iniciales("Yoselina de la Cruz") == "YC", documents.iniciales("Yoselina de la Cruz"))
 check("un solo nombre da dos letras", documents.iniciales("Madonna") == "MA")
 check("sin representante, sin iniciales", documents.iniciales(None) == "")
-check("los tres archivos tienen los mismos huecos",
-      documents.huecos_de("es-MX") == documents.huecos_de("en") == documents.huecos_de("es-AR"),
-      f"{len(documents.huecos_de('es-MX'))} huecos")
+# La pagina 2 es de momento solo es-MX, asi que los tres archivos ya no tienen
+# los mismos huecos. Lo que si tiene que seguir siendo cierto -y es lo que de
+# verdad importa- es que los otros dos mercados no hayan PERDIDO ninguno: si
+# faltara uno, ese dato dejaria de salir en su documento sin que nadie avisara.
+DE_LA_PAGINA_2 = set(documents.MARCADO) | {
+    "album_cuenta", "verificaciones_cuenta", "verificaciones_panel",
+    "pagina2", "pagina_pie",
+}
+comunes = set(documents.huecos_de("es-MX")) - DE_LA_PAGINA_2
+check("en y es-AR no han perdido ningún hueco de la página 1",
+      set(documents.huecos_de("en")) == set(documents.huecos_de("es-AR")) == comunes,
+      f"es-MX {len(documents.huecos_de('es-MX'))} · en {len(documents.huecos_de('en'))}"
+      f" · es-AR {len(documents.huecos_de('es-AR'))}")
+check("y los huecos de la página 2 están todos en es-MX",
+      DE_LA_PAGINA_2 <= set(documents.huecos_de("es-MX")),
+      ", ".join(sorted(DE_LA_PAGINA_2 - set(documents.huecos_de("es-MX")))))
 check("y hay una etiqueta legible para cada uno",
       all(h in documents.ETIQUETAS_HUECO for h in documents.huecos_de("es-MX")),
       ", ".join(h for h in documents.huecos_de("es-MX") if h not in documents.ETIQUETAS_HUECO))

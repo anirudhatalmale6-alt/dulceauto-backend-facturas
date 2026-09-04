@@ -32,6 +32,7 @@ entiende; recortado a lo ancho se ve entero.
 """
 
 import math
+from html import escape
 
 # Medidas reales del hueco del album dentro de la hoja A4, en milimetros. Salen
 # de la hoja: 210mm de ancho menos 6.8mm de margen a cada lado son 196.4mm de
@@ -364,7 +365,7 @@ def _buscar(n: int, *, laterales_fijas: bool) -> list[tuple[float, int, Reparto]
 # mismo sitio. Si se escribieran por separado, la aprobacion valdria para una
 # imagen y no para lo que se acaba imprimiendo.
 
-CSS = """
+_CSS_LEGIBLE = """
 .album{display:grid;gap:%(sep)smm;padding:%(sep)smm;height:136mm;
   border:.3mm solid #d8dee7;border-top:.2mm solid #edf0f4;
   border-radius:0 0 2.7mm 2.7mm;background:#fbfcfe}
@@ -378,12 +379,26 @@ CSS = """
   padding:.35mm 1mm;letter-spacing:.05mm}
 """ % {"sep": SEPARACION_MM}
 
+# El CSS sale en UNA linea. Escrito arriba en varias porque asi se lee, y
+# entregado en una porque entra dentro de un hueco de la plantilla: si metiera
+# doce lineas donde el diseno tiene una, el documento generado dejaria de tener
+# las mismas lineas que el archivo aprobado, y la comprobacion que vigila que el
+# motor no toca el diseno se quedaria sin poder compararlos linea a linea.
+CSS = " ".join(_CSS_LEGIBLE.split())
+
 
 def _figura(foto: Foto, src: str, alt: str) -> str:
+    """Una figura del album.
+
+    El src y el alt se escapan SIEMPRE. El alt lleva el titulo del vehiculo,
+    que lo escribe una persona en el panel: un titulo con una comilla doble
+    cerraria el atributo y lo que viniera detras entraria en el documento como
+    marcado. Es la clase de agujero que no se nota hasta que alguien lo busca.
+    """
     clase = "photo destacada" if foto.destacada else "photo"
     return (
         f'<figure class="{clase}" data-photo-index="{foto.indice}">'
-        f'<img src="{src}" alt="{alt}">'
+        f'<img src="{escape(src, quote=True)}" alt="{escape(alt, quote=True)}">'
         f"<figcaption>{foto.indice:02d}</figcaption></figure>"
     )
 

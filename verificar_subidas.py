@@ -188,7 +188,20 @@ with Session() as db:
           f"{html.count('alt=\"2020 Mazda CX-5 Signature\"')} veces")
     check("y ya no describe al Audi de la maqueta", "Audi A3" not in html)
     check("y su archivo esta dentro del snapshot", (carpeta / "assets/img/logo.png").exists())
-    check("una sola pagina con fotos y logo", primera.paginas == 1, f"{primera.paginas}")
+    # Con fotografias, la pre-factura son DOS hojas: la segunda es el album.
+    # Antes esta comprobacion exigia una sola, que era lo correcto cuando la
+    # pagina 2 no existia. Se compara contra documents.paginas(), que es la
+    # misma funcion que usa el generador para decidir, y no contra un numero
+    # escrito aqui: asi las dos no pueden separarse.
+    esperadas = pdf_engine.documents.paginas(factura)
+    check("las hojas que salen son las que toca con álbum",
+          primera.paginas == esperadas == 2, f"{primera.paginas} vs {esperadas}")
+    # Y las fotografias del album estan dentro del snapshot con su nombre. Sin
+    # esto el PDF sale con la pagina 2 llena de imagenes rotas, y no se nota
+    # hasta abrirlo: el HTML es correcto, lo que falta es el archivo.
+    del_album = sorted((carpeta / "assets/img/album").glob("*.jpg")) if (carpeta / "assets/img/album").is_dir() else []
+    check("y el álbum del snapshot trae una imagen por fotografía",
+          len(del_album) == len(factura.photos), f"{len(del_album)} de {len(factura.photos)}")
 
     print("\n5 · Cambiar las fotos o el logotipo no toca lo ya emitido")
     nueva = uploads.guardar_imagen(imagen(color="#ff0000"), "otra.jpg", "facturas/1")
@@ -285,7 +298,9 @@ with Session() as db:
               f"{impreso_1} vs {esperado_1}")
 
     de_la_copia_pdf = pdf_engine.generar(db, copia)
-    check("la copia imprime con las fotografias heredadas", de_la_copia_pdf.paginas == 1)
+    check("la copia imprime con las fotografias heredadas",
+          de_la_copia_pdf.paginas == pdf_engine.documents.paginas(copia) == 2,
+          f"{de_la_copia_pdf.paginas}")
     for posicion in (2, 3, 4):
         nombre = pdf_engine.documents.ARCHIVO_FOTO[f"foto_{posicion}"]
         check(f"copia: hueco {posicion} relleno",

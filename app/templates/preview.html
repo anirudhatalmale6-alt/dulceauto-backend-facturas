@@ -15,7 +15,9 @@
   exactamente el mismo número.
 #}
 {% set ancho = tipo_doc.ancho %}
-{% set alto = 1360 if tipo_doc.clave == 'factura' else 1760 %}
+{# El alto lo calcula main.py: con album, el documento trae una segunda hoja
+   de 297mm y con el alto fijo de antes quedaba cortada por abajo. #}
+{% set alto = alto_documento %}
 {% block content %}
 
 <div class="card">

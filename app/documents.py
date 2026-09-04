@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 
-from . import doctypes
+from . import album, doctypes, verificaciones
 from .config import PROJECT_DIR
 from .fields import FIELD_MAP
 from .locales import (
@@ -302,7 +302,18 @@ CALCULADOS = (
 )
 
 # Huecos de los que solo se tocan atributos.
-SOLO_ATRIBUTOS = ("url_verificacion", "codigo_barras", "codigo_qr")
+#
+# "pagina2" y "verificaciones_panel" son de la pagina 2: del primero se cambia
+# el style para esconder la hoja entera cuando no hay album, y del segundo el
+# alto del panel segun cuantas verificaciones haya marcadas. De ninguno de los
+# dos se toca el contenido.
+SOLO_ATRIBUTOS = (
+    "url_verificacion",
+    "codigo_barras",
+    "codigo_qr",
+    "pagina2",
+    "verificaciones_panel",
+)
 
 # Las cuatro fotografias del vehiculo, en el orden en que salen en el diseno: la
 # grande y las tres pequenas. El nombre de archivo de cada una lo fija la
@@ -315,6 +326,12 @@ ARCHIVO_FOTO = {
     "foto_3": "vehicle-interior.jpg",
     "foto_4": "vehicle-main.jpg",
 }
+
+# Nombre que tendra cada fotografia del album dentro de la carpeta del snapshot.
+# Mismo criterio que ARCHIVO_FOTO: nombre fijo, decidido aqui, para que congelar
+# un documento sea copiar archivos encima y no reescribir rutas.
+def archivo_album(posicion: int) -> str:
+    return f"album/foto-{posicion:02d}.jpg"
 
 
 def _texto(valor) -> str:
@@ -402,7 +419,37 @@ def construir_valores(invoice, doc: str = doctypes.FACTURA) -> dict[str, str]:
     # diseno para nada.
     valores.update(_valores_por_clave(invoice, locale, moneda, entrega, modo))
     valores.update(doctypes.textos_de_estado(doc, invoice.status))
+
+    # --- pagina 2 -----------------------------------------------------------
+    #
+    # Los tres contadores del diseno eran texto fijo: "14 fotografias",
+    # "6 verificaciones clave" y "Pagina 2 de 2". Los tres pasan a calcularse.
+    # Un contador escrito a mano es una afirmacion que deja de ser cierta en
+    # cuanto cambia lo que cuenta, y ademas no avisa: sigue ahi, diciendo 14.
+    cuantas = len(fotos_album(invoice))
+    valores["album_cuenta"] = (
+        f"{cuantas} fotografía{'' if cuantas == 1 else 's'}" if cuantas else ""
+    )
+    n_verificadas = len(verificaciones.marcadas(invoice))
+    valores["verificaciones_cuenta"] = (
+        f"{n_verificadas} verificaci{'ón' if n_verificadas == 1 else 'ones'} clave"
+        if n_verificadas
+        else ""
+    )
+    valores["pagina_pie"] = doc_text(locale, "pagina_de").format(
+        pagina=2, total=paginas(invoice)
+    )
     return valores
+
+
+def paginas(invoice) -> int:
+    """Cuantas hojas tiene el documento. Dos cuando hay album, una si no.
+
+    Se calcula aqui, en un solo sitio, porque lo necesitan tanto el pie de la
+    pagina 2 como el generador del PDF. Si cada uno lo dedujera por su cuenta,
+    podria salir un documento de una hoja con un pie que dice "Pagina 2 de 2".
+    """
+    return 2 if fotos_album(invoice) else 1
 
 
 # Separador de linea permitido dentro de un hueco de texto. El motor escapa
@@ -525,6 +572,22 @@ def construir_atributos(
             if codigos == "panel":
                 atributos[campo]["src"] = f"/facturas/{invoice.id}/foto/{posicion}"
 
+    # --- pagina 2 -----------------------------------------------------------
+    #
+    # Dos alturas y dos "esto no se ensena", todo en el atributo style. Se hace
+    # con atributos y no escondiendo el contenido porque un panel vacio con su
+    # borde verde sigue ocupando sitio y sigue diciendo "Verificacion".
+    n_fotos = len(fotos_album(invoice))
+    atributos["pagina2"] = {} if n_fotos else {"style": "display:none"}
+
+    n_verificadas = len(verificaciones.marcadas(invoice))
+    if n_verificadas:
+        atributos["verificaciones_panel"] = {
+            "style": f"height:{alto_verificaciones(n_verificadas):.1f}mm"
+        }
+    else:
+        atributos["verificaciones_panel"] = {"style": "display:none"}
+
     atributos.update({
         "url_verificacion": {
             "href": _url_verificacion(invoice),
@@ -540,6 +603,112 @@ def construir_atributos(
         },
     })
     return atributos
+
+
+# --- pagina 2: album y verificaciones ---------------------------------------
+#
+# Estos tres huecos no llevan texto: llevan marcado que se genera aqui. El motor
+# los trata como al logotipo, sustituyendo el CONTENIDO del elemento y dejando
+# intacto el elemento en si.
+#
+# El CSS de la rejilla lo escribe album.py y entra por el hueco album_estilos,
+# en vez de estar copiado en la hoja de estilos. Es a proposito: la hoja de
+# contactos que aprobo el cliente sale de album.py, y si el documento pintara
+# con una copia del CSS, las dos podrian separarse sin que nadie se enterara.
+ALBUM = "album"
+ALBUM_ESTILOS = "album_estilos"
+VERIFICACIONES = "verificaciones"
+
+MARCADO = (ALBUM, ALBUM_ESTILOS, VERIFICACIONES)
+
+# Huecos que pueden salir vacios sin que eso signifique que falta un dato. Los
+# dos contadores de la pagina 2 se quedan en blanco cuando no hay album o no
+# hay ninguna verificacion marcada, y eso es un estado legitimo, no un olvido:
+# avisar de ellos en la vista previa haria que el aviso de "faltan datos"
+# saltara siempre y dejara de significar nada.
+OPCIONALES = ("album_cuenta", "verificaciones_cuenta")
+
+
+def fotos_album(invoice) -> list:
+    """Las fotografias del album, ya ordenadas por posicion y sin huecos.
+
+    Si faltara la posicion 7 -por ejemplo, porque se borro a mano en la base-
+    el album NO debe dejar un agujero ni saltarse un numero: se renumeran de
+    corrido. Lo que el documento ensena es "las fotografias de este vehiculo",
+    no "las posiciones ocupadas de una tabla".
+    """
+    fotos = sorted(getattr(invoice, "photos", []) or [], key=lambda f: f.position)
+    return fotos[: album.MAX_FOTOS]
+
+
+def _fuente_album(invoice, codigos: str | None):
+    """De donde sale la imagen de cada posicion del album."""
+    fotos = fotos_album(invoice)
+    titulo = invoice.vehicle_title or ""
+
+    def src(i: int) -> str:
+        if codigos == "panel":
+            return f"/facturas/{invoice.id}/foto/{fotos[i - 1].position}"
+        # Fuera del panel, el documento apunta al nombre que la fotografia
+        # tendra dentro de la carpeta del snapshot. Congelar es copiar los
+        # archivos con ese nombre; no hay que reescribir ninguna ruta.
+        return ASSETS_ORIGEN + "img/" + archivo_album(i)
+
+    def alt(i: int) -> str:
+        # El texto alternativo NO describe el coche del diseno. Decir "Audi A3
+        # plateado" en una factura de otro vehiculo seria una mentira en el
+        # unico sitio donde nadie la ve: el texto que solo leen los lectores de
+        # pantalla.
+        return f"{titulo} — fotografía {i}" if titulo else f"Fotografía {i} del vehículo"
+
+    return len(fotos), src, alt
+
+
+def _tarjeta_verificacion(v) -> str:
+    return (
+        '<div class="verify-card"><div class="verify-icon">'
+        '<svg class="icon" viewBox="0 0 24 24">' + v.icono + "</svg>"
+        '<span class="mini-check">✓</span></div><div>'
+        f"<strong>{html_mod.escape(v.titulo)}</strong>"
+        f"<p>{html_mod.escape(v.texto)}</p></div></div>"
+    )
+
+
+def construir_marcado(invoice, codigos: str | None = None) -> dict[str, str]:
+    """Los huecos de la pagina 2 que se rellenan con marcado generado."""
+    cuantas, src, alt = _fuente_album(invoice, codigos)
+    marcado_album = ""
+    if cuantas:
+        marcado_album = album.marcado(album.repartir(cuantas), src, alt)
+
+    marcadas = verificaciones.marcadas(invoice)
+    return {
+        ALBUM_ESTILOS: album.CSS,
+        ALBUM: marcado_album,
+        VERIFICACIONES: "".join(_tarjeta_verificacion(v) for v in marcadas),
+    }
+
+
+# Alto del panel de verificaciones, en milimetros, segun cuantas filas de
+# tarjetas haya. Las constantes salen del diseno: 25.1mm por tarjeta, 2.1mm de
+# separacion entre filas, y 18.7mm entre el relleno del panel y su cabecera.
+# Con dos filas da los 71mm exactos que el diseno tenia escritos a mano, y esa
+# igualdad la comprueba la bateria: es la forma de saber que la formula no se
+# ha inventado el numero.
+ALTO_TARJETA_MM = 25.1
+SEPARACION_TARJETAS_MM = 2.1
+CABECERA_VERIFICACIONES_MM = 18.7
+
+
+def alto_verificaciones(cuantas: int) -> float:
+    filas = verificaciones.filas(cuantas)
+    if not filas:
+        return 0.0
+    return (
+        CABECERA_VERIFICACIONES_MM
+        + filas * ALTO_TARJETA_MM
+        + (filas - 1) * SEPARACION_TARJETAS_MM
+    )
 
 
 # Barra de progreso. La mueve el estado de la operacion y nada mas: generar el
@@ -628,6 +797,7 @@ def render(
     plantilla = cargar(locale, doc)
     valores = construir_valores(invoice, doc)
     atributos = construir_atributos(invoice, codigos, qr_src)
+    generado = construir_marcado(invoice, codigos)
     vacios: list[str] = []
     # Un hueco que desaparece cuando esta vacio no es un dato que falte: el
     # descuento no existe en la mayoria de las operaciones.
@@ -653,6 +823,18 @@ def render(
             for nombre, valor in atributos[campo].items():
                 tag = _poner_atributo(tag, nombre, valor)
             cambios.append((hueco.tag_ini, hueco.tag_fin, tag))
+            continue
+
+        if campo in generado:
+            # Marcado que genera el servidor: el album y las tarjetas de
+            # verificacion. Va SIN escapar, a diferencia de todo lo demas,
+            # porque es HTML y no texto. Puede hacerse porque no lleva ni un
+            # solo dato de la base de datos: los nombres de archivo los inventa
+            # album.py y los textos son constantes de verificaciones.py. Lo
+            # unico que viene de fuera -el titulo del vehiculo, en el alt- se
+            # escapa dentro de album.marcado antes de llegar aqui.
+            if hueco.cont_ini is not None:
+                cambios.append((hueco.cont_ini, hueco.cont_fin, generado[campo]))
             continue
 
         if campo == LOGO:
@@ -688,7 +870,7 @@ def render(
             continue
 
         valor = valores[campo]
-        if not valor.strip() and campo not in ocultables:
+        if not valor.strip() and campo not in ocultables and campo not in OPCIONALES:
             vacios.append(campo)
         if not hueco.es_de_texto:
             # Marcado con data-field pero con hijos dentro: no se toca el
@@ -744,6 +926,15 @@ def _pasos(plantilla: Plantilla):
 # Nombre legible de cada hueco, para poder decir "falta la ciudad del cliente"
 # en lugar de "falta cliente_ciudad".
 ETIQUETAS_HUECO = {
+    # --- pagina 2 ---
+    "album": "Álbum de fotografías (página 2)",
+    "album_estilos": "Rejilla del álbum (la genera el servidor)",
+    "album_cuenta": "Cuántas fotografías tiene el álbum",
+    "verificaciones": "Tarjetas de verificación marcadas",
+    "verificaciones_cuenta": "Cuántas verificaciones se imprimen",
+    "verificaciones_panel": "Panel de verificaciones (alto y visibilidad)",
+    "pagina2": "La página 2 entera (se esconde sin álbum)",
+    "pagina_pie": "Pie «Página 2 de 2»",
     "folio": "Folio",
     "fecha_emision": "Fecha de emisión",
     "vigencia": "Vigencia de la protección",

@@ -364,12 +364,94 @@
         {% if fotos %}
           <div class="actions" style="margin-top:10px">
             {% for pos, _f in fotos.items() %}
-              <form method="post" action="/facturas/{{ invoice.id }}/fotos/{{ pos }}/quitar" style="display:inline">
-                <button class="btn ghost" type="submit">Quitar la {{ pos }}</button>
-              </form>
+              {% if pos <= 4 %}
+                <form method="post" action="/facturas/{{ invoice.id }}/fotos/{{ pos }}/quitar" style="display:inline">
+                  <button class="btn ghost" type="submit">Quitar la {{ pos }}</button>
+                </form>
+              {% endif %}
             {% endfor %}
           </div>
         {% endif %}
+
+        <hr style="margin:18px 0;border:0;border-top:1px solid #e6ebf2">
+
+        <h4 style="margin:0 0 6px">Álbum de la página 2</h4>
+        <p class="small muted">
+          Hasta {{ max_fotos }} fotografías, en un solo ZIP. Se ordenan por el nombre
+          del archivo, con orden natural: foto2 va antes que foto10. La primera es
+          la destacada del álbum.
+        </p>
+        <p class="small muted">
+          Subir un ZIP <strong>sustituye el álbum entero</strong>, incluidas las cuatro
+          de arriba. Es a propósito: mezclar dos cargas dejaría el álbum con fotografías
+          de dos vehículos distintos sin que nada lo avisara. Si alguna imagen del ZIP
+          no se puede abrir, no se cambia nada y se dice cuál.
+        </p>
+        <form method="post" action="/facturas/{{ invoice.id }}/album" enctype="multipart/form-data">
+          <input type="file" name="album_zip" accept=".zip,application/zip">
+          <button class="btn blue" type="submit" style="margin-left:8px">Cargar álbum desde ZIP</button>
+        </form>
+
+        {% if fotos %}
+          <p class="small" style="margin-top:14px">
+            <strong>{{ fotos|length }}</strong>
+            fotografía{{ '' if fotos|length == 1 else 's' }} en el álbum.
+            El documento sale de <strong>{{ 2 if fotos else 1 }} hojas</strong>.
+          </p>
+          <div class="album-tiras" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+            {% for pos, f in fotos.items() %}
+              <figure style="margin:0;width:82px">
+                <img src="/facturas/{{ invoice.id }}/foto/{{ pos }}"
+                     alt="Fotografía {{ pos }}"
+                     style="width:82px;height:62px;object-fit:cover;border-radius:4px;border:1px solid #d3dbe5;display:block">
+                <figcaption class="small muted" style="text-align:center">
+                  {{ '%02d'|format(pos) }}{% if pos == 1 %} · destacada{% endif %}
+                </figcaption>
+              </figure>
+            {% endfor %}
+          </div>
+          <form method="post" action="/facturas/{{ invoice.id }}/album/vaciar" style="margin-top:10px"
+                onsubmit="return confirm('Se quitan las {{ fotos|length }} fotografías del álbum. ¿Seguro?')">
+            <button class="btn ghost" type="submit">Vaciar el álbum</button>
+          </form>
+        {% else %}
+          <p class="small muted" style="margin-top:12px">
+            Sin fotografías, el documento es de una sola hoja: no se imprime la página 2.
+          </p>
+        {% endif %}
+      </div>
+    </details>
+</div>
+
+<div class="editor-panel" style="margin-top:16px">
+    <details class="section">
+      <summary>Verificaciones de la página 2 <span>⌄</span></summary>
+      <div class="section-body">
+        <p class="small muted">
+          Solo salen impresas las que marques aquí. Ninguna viene marcada de serie:
+          cada una afirma algo sobre esta unidad en un documento que se le entrega al
+          comprador, y el sistema no puede darlo por hecho por su cuenta.
+        </p>
+        <p class="small muted">
+          Sin ninguna marcada, el panel verde no aparece en el documento. Con menos de
+          cuatro, el panel encoge y el pie sigue pegado al borde de la hoja.
+        </p>
+        <form method="post" action="/facturas/{{ invoice.id }}/verificaciones">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:12px">
+            {% for v in verificaciones %}
+              <label style="display:flex;gap:8px;align-items:flex-start;padding:10px;border:1px solid #d8e4da;border-radius:8px;background:#fbfefb">
+                <input type="checkbox" name="verificacion" value="{{ v.clave }}"
+                       {% if v.clave in verificaciones_marcadas %}checked{% endif %}
+                       style="margin-top:3px">
+                <span>
+                  <strong class="small">{{ v.titulo }}</strong>
+                  <span class="small muted" style="display:block">{{ v.texto }}</span>
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+          <button class="btn blue" type="submit" style="margin-top:12px">Guardar verificaciones</button>
+        </form>
       </div>
     </details>
 </div>

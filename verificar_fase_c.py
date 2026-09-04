@@ -127,7 +127,12 @@ with sync_playwright() as p:
     hojas = marco.locator("link[rel=stylesheet]").evaluate_all(
         "els => els.map(e => e.getAttribute('href'))"
     )
-    check("el documento solo carga el CSS de la factura", hojas == ["/plantillas/assets/css/factura.css"], str(hojas))
+    # Dos hojas desde el Hito B: la de siempre y la de la pagina 2. Lo que esta
+    # comprobacion vigila no es cuantas son, sino que ninguna sea del panel: si
+    # el CSS del panel entrara, la vista previa dejaria de parecerse al PDF.
+    check("el documento solo carga CSS de la plantilla",
+          hojas == ["/plantillas/assets/css/factura.css",
+                    "/plantillas/assets/css/pagina2.css"], str(hojas))
     check("no hay ni rastro del CSS del panel", not any("panel" in (h or "") for h in hojas))
 
     # -------------------------------------------------------------------------
