@@ -111,6 +111,13 @@ class Hueco:
     muestra: str = ""
     hijos: bool = False
     ocultar_si_vacio: str | None = None
+    # Estilo en linea para el <img> del logotipo propio, cuando el hueco lo
+    # trae escrito. Sin el se usa el del tipo de documento. Existe porque la
+    # marca sale ahora en las dos hojas y las dos NO se dibujan en la misma
+    # unidad: la pagina 1 esta maquetada en pixeles y se escala al imprimir,
+    # y la pagina 2 esta maquetada en milimetros. El mismo "max-height:34px"
+    # en las dos daria dos logotipos de tamano distinto en el mismo PDF.
+    estilo: str | None = None
 
     @property
     def es_de_texto(self) -> bool:
@@ -149,6 +156,7 @@ class _Anotador(HTMLParser):
         diccionario = dict(attrs)
         campo = diccionario.get("data-field")
         oculta = diccionario.get("data-hide-if-empty")
+        estilo = diccionario.get("data-logo-estilo")
         if "data-logo" in diccionario:
             campo = campo or LOGO
         if "data-safe-icon" in diccionario:
@@ -170,6 +178,7 @@ class _Anotador(HTMLParser):
                         muestra="",
                         hijos=True,
                         ocultar_si_vacio=oculta,
+                        estilo=estilo,
                     )
                 )
             return
@@ -179,6 +188,7 @@ class _Anotador(HTMLParser):
                 "tag": tag,
                 "campo": campo,
                 "oculta": oculta,
+                "estilo": estilo,
                 "tag_ini": ini,
                 "tag_fin": ini + len(crudo),
                 "hijos": False,
@@ -204,6 +214,7 @@ class _Anotador(HTMLParser):
                         muestra=self.fuente[marco["tag_fin"] : fin],
                         hijos=marco["hijos"],
                         ocultar_si_vacio=marco["oculta"],
+                        estilo=marco["estilo"],
                     )
                 )
             if marco["tag"] == tag:
@@ -313,6 +324,7 @@ SOLO_ATRIBUTOS = (
     "codigo_qr",
     "pagina2",
     "verificaciones_panel",
+    "resumen_soporte",
 )
 
 # Las cuatro fotografias del vehiculo, en el orden en que salen en el diseno: la
@@ -614,6 +626,15 @@ def construir_atributos(
     else:
         atributos["verificaciones_panel"] = {"style": "display:none"}
 
+    # La franja de resumen. Solo sale cuando, DESPUES de estirar el album hasta
+    # su tope, sigue sobrando sitio para ella entera. No se encoge ni se estira:
+    # o cabe con su alto o no se ensena.
+    atributos["resumen_soporte"] = (
+        {}
+        if n_fotos and hay_resumen(album.repartir(n_fotos), n_verificadas)
+        else {"style": "display:none"}
+    )
+
     atributos.update({
         "url_verificacion": {
             "href": _url_verificacion(invoice),
@@ -813,6 +834,40 @@ def _estilo_estirado(reparto, cuantas_verificaciones: int) -> str:
     )
 
 
+# --- la franja de resumen cierra el blanco que el tope deja abierto -----------
+#
+# Cuando el tope de 0.88 llega antes que el hueco, el album para y queda una
+# franja de blanco encima del pie. Es correcto -estirar mas recortaria los
+# coches por el centro de la puerta- pero deja la hoja con cara de inacabada.
+#
+# Lo que va ahi NO es contenido nuevo: son tres datos que ya salen en el
+# documento -cuantas fotografias tiene el album, el folio y el estado de la
+# reserva- puestos en horizontal. Ni una verificacion mas, ni un dato que no
+# estuviera ya impreso en la misma hoja.
+#
+# Y no se estira ni se encoge. Tiene un alto fijo y sale solo si cabe entero,
+# por dos razones: una franja de alto variable seria un cuarto elemento con
+# geometria propia que mantener, y una franja apretada se ve peor que un poco
+# de aire. Con lo que hay hoy, o sobran mas de 41mm o sobra menos de 1,2mm: no
+# hay ningun caso intermedio en el que la decision sea dudosa.
+ALTO_RESUMEN_MM = 38.0
+SEPARACION_RESUMEN_MM = 3.5
+
+
+def hueco_sobrante(reparto, cuantas_verificaciones: int) -> float:
+    """Blanco que queda encima del pie DESPUES de estirar el album."""
+    estiron = alto_album_de(reparto, cuantas_verificaciones) - album.ALTO_BASE_MM
+    return hueco_libre(cuantas_verificaciones) - estiron
+
+
+def hay_resumen(reparto, cuantas_verificaciones: int) -> bool:
+    """Si la franja de resumen cabe entera en lo que sobra."""
+    return (
+        hueco_sobrante(reparto, cuantas_verificaciones)
+        >= ALTO_RESUMEN_MM + SEPARACION_RESUMEN_MM
+    )
+
+
 # Barra de progreso. La mueve el estado de la operacion y nada mas: generar el
 # PDF o enviarlo no la tocan, porque no significan que el cliente haya pagado.
 #
@@ -945,7 +1000,7 @@ def render(
                     (hueco.cont_ini, hueco.cont_fin,
                      f'<img class="brand-logo" src="{html_mod.escape(logo, quote=True)}" '
                      f'alt="{html_mod.escape(marca, quote=True)}" '
-                     f'style="{tipo.logo_estilo}">')
+                     f'style="{hueco.estilo or tipo.logo_estilo}">')
                 )
             continue
 
@@ -1035,6 +1090,7 @@ ETIQUETAS_HUECO = {
     "verificaciones": "Tarjetas de verificación marcadas",
     "verificaciones_cuenta": "Cuántas verificaciones se imprimen",
     "verificaciones_panel": "Panel de verificaciones (alto y visibilidad)",
+    "resumen_soporte": "Franja de resumen (sale solo si sobra sitio)",
     "pagina2": "La página 2 entera (se esconde sin álbum)",
     "pagina_pie": "Pie «Página 2 de 2»",
     "folio": "Folio",

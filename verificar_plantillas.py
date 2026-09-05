@@ -219,8 +219,13 @@ for locale in MUESTRAS:
 # --- 2 · las plantillas solo llevan atributos anadidos ------------------------
 
 print("\n2 · A la plantilla aprobada solo se le han anadido atributos")
+# data-logo-estilo va en el primer grupo -el de los que llevan valor- y ANTES
+# que el data-logo pelado del segundo. Si estuviera solo en el segundo, el
+# " data-logo\b" casaria con el trozo " data-logo" de " data-logo-estilo=..." y
+# dejaria un "-estilo=..." suelto en el texto comparado.
 QUITAR = re.compile(
-    r' data-(field|step|hide-if-empty)="[^"]*"| data-(logo|safe-icon|doc-title)\b'
+    r' data-(field|step|hide-if-empty|logo-estilo)="[^"]*"'
+    r'| data-(logo|safe-icon|doc-title)\b'
 )
 
 # La calibracion de impresion es un valor CALCULADO, no diseno: la propia
@@ -515,7 +520,7 @@ check("sin representante, sin iniciales", documents.iniciales(None) == "")
 # faltara uno, ese dato dejaria de salir en su documento sin que nadie avisara.
 DE_LA_PAGINA_2 = set(documents.MARCADO) | {
     "album_cuenta", "verificaciones_cuenta", "verificaciones_panel",
-    "pagina2", "pagina_pie",
+    "pagina2", "pagina_pie", "resumen_soporte",
 }
 comunes = set(documents.huecos_de("es-MX")) - DE_LA_PAGINA_2
 check("en y es-AR no han perdido ningún hueco de la página 1",

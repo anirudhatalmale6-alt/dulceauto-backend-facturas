@@ -45,17 +45,39 @@
   padding-bottom: 3mm;
   flex: 0 0 auto;
 }
+/*
+   La marca es la MISMA que la de la página 1: el mismo dibujo, la misma
+   tipografía y los mismos colores. Antes era una pastilla azul con un círculo
+   dorado y las iniciales "DA" dentro, y en un PDF de dos hojas eso se lee como
+   dos marcas distintas.
+
+   Lo único que no puede copiarse tal cual son los números. La página 1 está
+   maquetada en píxeles sobre un lienzo de 900px que se encoge al imprimir
+   (--print-scale, 0,8044 en es-MX), y ésta está maquetada en milímetros y se
+   encoge 0,9238. Para que las dos salgan del mismo tamaño EN EL PAPEL, cada
+   medida de allí se convierte:
+
+       mm de aquí = px de allí × 0,8044 × 25,4/96 ÷ 0,9238
+
+   que para las cuatro medidas de la marca da:
+
+       26px de ancho del dibujo   ->  5,99mm      28px de letra   ->  6,45mm
+       24px de alto del dibujo    ->  5,53mm       8px de hueco   ->  1,84mm
+                                                -1,45px de kerning -> -0,33mm
+
+   La tipografía es Inter, la de la página 1, no la Arial del resto de esta
+   hoja: en un logotipo la letra es parte del dibujo. Va incrustada en
+   factura.css, que este mismo documento ya carga.
+*/
 .pagina2 .p2-brand {
-  display: inline-flex; align-items: center; gap: 2.2mm;
-  background: #0b2d56; color: #fff; padding: 2.15mm 3.1mm;
-  border-radius: 1.8mm; box-shadow: 0 .9mm 2.2mm rgba(11, 31, 58, .16);
+  display: inline-flex; align-items: center; gap: 1.84mm;
+  color: #0b1f3a;
 }
-.pagina2 .p2-brand-mark {
-  width: 7.5mm; height: 7.5mm; border-radius: 50%;
-  background: #e0aa35; color: #0b2d56;
-  display: grid; place-items: center; font-weight: 800; font-size: 3.25mm;
+.pagina2 .p2-brand svg { width: 5.99mm; height: 5.53mm; color: #003ec6; }
+.pagina2 .p2-brand-name {
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  font-weight: 800; font-size: 6.45mm; letter-spacing: -.33mm;
 }
-.pagina2 .p2-brand-name { font-weight: 700; font-size: 4mm; }
 .pagina2 .p2-title { text-align: right; line-height: 1.08; }
 .pagina2 .p2-title small {
   display: block; font-size: 3.2mm; font-weight: 700;
@@ -219,6 +241,61 @@
   display: block; font-size: 2.7mm; color: #19743b; line-height: 1.12; margin-bottom: .65mm;
 }
 .pagina2 .verify-card p { margin: 0; font-size: 2.25mm; line-height: 1.25; color: #46566c; }
+
+/* --- franja de resumen --------------------------------------------------- */
+/*
+   Cierra el blanco que queda cuando el álbum llega a su tope de 0,88 antes de
+   agotar el hueco. El motor la esconde entera si no cabe con su alto completo:
+   no se encoge ni se estira, para que no haya dos versiones de la misma franja.
+
+   Los tres datos ya salen en el documento. No se añade ninguno.
+
+   El prefijo p2- no es decorativo: factura.css ya usa .summary-grid para las
+   tres tarjetas de la página 1, sin acotar a ninguna hoja. Sin prefijo, esa
+   regla se aplicaría también aquí y partiría la franja en tres columnas de
+   anchos 1.02/0.92/1.08.
+*/
+.pagina2 .p2-summary {
+  margin-top: 3.5mm; height: 38mm;
+  border: .3mm solid #dfe4ec; border-radius: 2.8mm;
+  padding: 2.6mm; background: linear-gradient(180deg, #fff, #fbfcfe);
+  display: flex; flex-direction: column; flex: 0 0 auto;
+}
+.pagina2 .p2-summary-head {
+  display: flex; align-items: center; gap: 2.1mm; margin-bottom: 2.4mm;
+}
+.pagina2 .p2-summary-icon {
+  width: 6.8mm; height: 6.8mm; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; background: #fff5dc; color: #d49417;
+}
+.pagina2 .p2-summary-icon svg { width: 4.4mm; height: 4.4mm; }
+.pagina2 .p2-summary-head strong { display: block; font-size: 3.55mm; }
+.pagina2 .p2-summary-head span {
+  display: block; font-size: 2.45mm; color: #617184; margin-top: .35mm;
+}
+.pagina2 .p2-summary-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2.1mm; flex: 1 1 auto;
+}
+.pagina2 .p2-summary-card {
+  border: .27mm solid #dde3ec; border-radius: 2.1mm; background: #fbfcfe;
+  padding: 2.6mm 3mm; min-width: 0;
+  display: flex; align-items: center; gap: 2.4mm;
+}
+.pagina2 .p2-summary-card-icon {
+  width: 8.4mm; height: 8.4mm; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; background: #fff; color: #23436f;
+  border: .27mm solid #e2e7ee;
+}
+.pagina2 .p2-summary-card-icon svg { width: 5mm; height: 5mm; }
+.pagina2 .p2-summary-card-text { min-width: 0; }
+.pagina2 .p2-summary-card small {
+  display: block; font-size: 2.2mm; color: #77869a;
+  text-transform: uppercase; letter-spacing: .22mm; margin-bottom: .9mm;
+}
+.pagina2 .p2-summary-card strong {
+  display: block; font-size: 4mm; line-height: 1.15; word-break: break-word;
+}
 
 /* --- pie ----------------------------------------------------------------- */
 /*

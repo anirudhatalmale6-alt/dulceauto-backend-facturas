@@ -315,9 +315,12 @@
     <article class="pagina2">
 
       <header class="p2-header">
-        <div class="p2-brand">
-          <div class="p2-brand-mark">DA</div>
-          <div class="p2-brand-name">DulceAuto</div>
+        <div class="p2-brand" data-logo data-logo-estilo="max-height:7.8mm;max-width:50.7mm" aria-label="DulceAuto">
+          <svg viewBox="0 0 24 21" fill="none" aria-hidden="true">
+            <path d="M4 8.5 6.1 3h11.8L20 8.5m-17 0h18v8.2H3V8.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+            <circle cx="6.5" cy="14" r="1.5" fill="currentColor"></circle><circle cx="17.5" cy="14" r="1.5" fill="currentColor"></circle>
+          </svg>
+          <span class="p2-brand-name">DulceAuto</span>
         </div>
         <div class="p2-title">
           <small>Pre-factura de reserva &mdash; P&aacute;gina 2</small>
@@ -394,6 +397,39 @@
           <div class="verify-proof" data-field="verificaciones_cuenta">6 verificaciones clave</div>
         </div>
         <div class="verify-grid" data-field="verificaciones"><!-- las marcadas por el administrador --></div>
+      </section>
+
+      <section class="p2-summary" data-field="resumen_soporte">
+        <div class="p2-summary-head">
+          <div class="p2-summary-icon"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M9 4h6v2.4H9V4Zm-3 2.4h12V20H6V6.4Zm3.2 5.6h5.6m-5.6 4h3.6"></path></svg></div>
+          <div>
+            <strong>Resumen del soporte visual</strong>
+            <span>Datos de referencia de esta reserva, ya recogidos en el documento.</span>
+          </div>
+        </div>
+        <div class="p2-summary-grid">
+          <div class="p2-summary-card">
+            <span class="p2-summary-card-icon"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M4 7h4l2-2h4l2 2h4v12H4V7Zm8 9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path></svg></span>
+            <span class="p2-summary-card-text">
+              <small>&Aacute;lbum fotogr&aacute;fico</small>
+              <strong data-field="album_cuenta">20 fotograf&iacute;as</strong>
+            </span>
+          </div>
+          <div class="p2-summary-card">
+            <span class="p2-summary-card-icon"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M7 3.5h7l3.5 3.5v13.5H7V3.5Zm7 0V7h3.5M9.8 12h5.2m-5.2 3.6h3.4"></path></svg></span>
+            <span class="p2-summary-card-text">
+              <small>Folio de la reserva</small>
+              <strong data-field="folio">RES-87241</strong>
+            </span>
+          </div>
+          <div class="p2-summary-card">
+            <span class="p2-summary-card-icon"><svg class="p2-icon" viewBox="0 0 24 24"><path d="M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Zm0 4v4.6l3 1.8"></path></svg></span>
+            <span class="p2-summary-card-text">
+              <small>Estado de la reserva</small>
+              <strong data-field="estado">Pago pendiente</strong>
+            </span>
+          </div>
+        </div>
       </section>
 
       <footer class="p2-footer">

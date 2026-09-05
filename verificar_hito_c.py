@@ -137,7 +137,13 @@ MEDIDA = """() => {
   const mm = rp.height / 14;
   const mm_css = parseFloat(getComputedStyle(pie).height) / 14;
   const visible = e => getComputedStyle(e).display !== 'none';
-  const ultimo = (visible(verif) ? verif : principal).getBoundingClientRect();
+  // El ultimo bloque de contenido antes del pie. Desde el cierre del Hito C
+  // puede ser la franja de resumen, que sale cuando el tope del album deja
+  // sitio de sobra. Si esto se quedara mirando siempre .p2-main, el blanco
+  // medido incluiria la franja y esta comprobacion dejaria de ver la hoja.
+  const bloques = [principal, verif, document.querySelector('.pagina2 .p2-summary')]
+    .filter(e => e && visible(e));
+  const ultimo = bloques[bloques.length - 1].getBoundingClientRect();
   const fotos = [...document.querySelectorAll('.pagina2 .photo')].map(f => {
     const c = f.getBoundingClientRect();
     return c.width / c.height;
