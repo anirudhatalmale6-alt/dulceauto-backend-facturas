@@ -359,9 +359,17 @@ def main() -> None:
                 medida["badge"].strip().startswith(str(cuantas)),
                 repr(medida["badge"]),
             )
+            # Hasta el Hito C el album median siempre 136mm y aqui se exigia
+            # ese numero. Desde el Hito C mide 136 con la hoja llena y se
+            # estira cuando faltan verificaciones, asi que lo que se exige es
+            # el alto que le toca a ESTE caso. La comprobacion no se ha
+            # aflojado: sigue clavando un numero, solo que el numero ya no es
+            # el mismo para todos los casos.
+            esperado = doc_engine.alto_album(cuantas, cuantas_v)
             check(
-                f"{cuantas:2d} fotos: el álbum sigue midiendo 136mm en la hoja",
-                abs(medida["album"]["h"] - 136 * px_mm) < 1.0,
+                f"{cuantas:2d} fotos y {cuantas_v} verificaciones: "
+                f"el álbum mide los {esperado:.1f}mm que le tocan",
+                abs(medida["album"]["h"] - esperado * px_mm) < 1.0,
                 f'{medida["album"]["h"] / px_mm:.1f}mm',
             )
             check(

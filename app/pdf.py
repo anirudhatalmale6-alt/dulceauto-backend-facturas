@@ -375,12 +375,60 @@ def _ajustar_imagenes(page, carpeta: Path, escala: float) -> list[str]:
         "Array.from(document.querySelectorAll('img[src^=\"assets/\"]')).map("
         " i => ({ src: i.getAttribute('src'), w: i.getBoundingClientRect().width }))"
     )
+
+    # La FORMA del hueco se mide aparte, y con dos cuidados que no son manias:
+    #
+    #   · con la hoja en modo IMPRESION, porque hay huecos que cambian de forma
+    #     al imprimir -la foto principal del vehiculo es uno- y lo que se va a
+    #     imprimir es esto;
+    #
+    #   · leyendo el width/height CALCULADO y no el rectangulo en pantalla. El
+    #     rectangulo viene ya multiplicado por el transform:scale de impresion,
+    #     y el recorte de object-fit no se calcula sobre eso: se calcula sobre
+    #     la caja de maquetacion, que el transform no toca. Son centesimas de
+    #     diferencia, y con centesimas Chromium ya recorta.
+    page.emulate_media(media="print")
+    try:
+        # Y se descuentan bordes y relleno. object-fit reparte la CAJA DE
+        # CONTENIDO, no la caja con su borde: las fotografias de la pagina 1
+        # llevan un borde de 1px y son 2px por lado que no le tocan a la imagen.
+        # Sobre 216px son centesimas, y con centesimas Chromium ya recorta.
+        formas = page.evaluate(
+            "Array.from(document.querySelectorAll('img[src^=\"assets/\"]')).map("
+            " i => { const c = getComputedStyle(i);"
+            "        const n = v => parseFloat(v) || 0;"
+            "        const dentro = c.boxSizing === 'border-box';"
+            "        const hor = dentro ? n(c.borderLeftWidth) + n(c.borderRightWidth)"
+            "                           + n(c.paddingLeft) + n(c.paddingRight) : 0;"
+            "        const ver = dentro ? n(c.borderTopWidth) + n(c.borderBottomWidth)"
+            "                           + n(c.paddingTop) + n(c.paddingBottom) : 0;"
+            "        return { src: i.getAttribute('src'), w: n(c.width) - hor,"
+            "                 h: n(c.height) - ver, ajuste: c.objectFit }; })"
+        )
+    finally:
+        # "null" quita la emulacion y deja la pagina como estaba. Poner "screen"
+        # NO es lo mismo: eso la fija en pantalla, y page.pdf() imprimiria con
+        # los estilos de pantalla. Se probo, y el PDF salio con cuatro hojas.
+        page.emulate_media(media="null")
     # Una misma imagen puede salir dos veces con tamanos distintos: manda la
     # mas grande, o la mas pequena saldria pixelada.
     ancho_por_archivo: dict[str, float] = {}
     for m in medidas:
         rel = m["src"][len("assets/"):]
-        ancho_por_archivo[rel] = max(ancho_por_archivo.get(rel, 0), m["w"])
+        if m["w"] > ancho_por_archivo.get(rel, 0):
+            ancho_por_archivo[rel] = m["w"]
+
+    forma_por_archivo: dict[str, float | None] = {}
+    for m in formas:
+        rel = m["src"][len("assets/"):]
+        forma = m["w"] / m["h"] if m["ajuste"] == "cover" and m["h"] else None
+        if rel in forma_por_archivo:
+            # Dos huecos con formas distintas para el mismo archivo: recortarlo
+            # a una dejaria la otra deformada. Se renuncia al recorte.
+            anterior = forma_por_archivo[rel]
+            if anterior is None or forma is None or abs(anterior - forma) > 0.01:
+                forma = None
+        forma_por_archivo[rel] = forma
 
     tocadas = []
     for rel, ancho_css in ancho_por_archivo.items():
@@ -389,18 +437,97 @@ def _ajustar_imagenes(page, carpeta: Path, escala: float) -> list[str]:
             continue
         suelo = LADO_MINIMO_QR if Path(rel).stem == NOMBRE_QR else LADO_MINIMO
         objetivo = max(suelo, int(ancho_css * escala * DPI_IMPRESION / CSS_PPI))
+        forma = forma_por_archivo.get(rel)
         with Image.open(ruta) as img:
-            if img.width <= objetivo:
+            recorte = _recorte_a(img, forma)
+            if img.width <= objetivo and recorte is None:
                 continue
-            alto = round(img.height * objetivo / img.width)
             # El modo de trabajo se elige segun la imagen, no segun el destino:
             # una con transparencia se reduce en RGBA para no perder el alfa por
             # el camino, y es _guardar_imagen quien decide si hay que aplanarla.
             modo = "RGBA" if tiene_transparencia(img) else "RGB"
-            reducida = img.convert(modo).resize((objetivo, alto), Image.LANCZOS)
-            _guardar_imagen(reducida, ruta)
+            trabajada = img.convert(modo)
+            if recorte is not None:
+                trabajada = trabajada.crop(recorte)
+            ancho, alto = _medida_exacta(min(objetivo, trabajada.width), forma, trabajada)
+            _guardar_imagen(trabajada.resize((ancho, alto), Image.LANCZOS), ruta)
         tocadas.append(rel)
     return tocadas
+
+
+def _medida_exacta(ancho: int, forma: float | None, img) -> tuple[int, int]:
+    """Los pixeles con los que la imagen queda mas pegada a la forma del hueco.
+
+    Con un ancho fijo no se puede: el alto tiene que ser un numero entero de
+    pixeles, y al redondearlo la imagen se queda unas milesimas mas ancha o mas
+    estrecha que el hueco. Parece nada. No lo es: a Chromium esas milesimas le
+    bastan para decidir que la imagen no encaja, recortarla y, con eso, dejar de
+    copiar el JPEG y escribir el mapa de bits entero.
+
+    Asi que no se fija el ancho: se prueban los altos de alrededor y se elige el
+    par (ancho, alto) cuyo cociente cae mas cerca de la forma del hueco. Es una
+    aproximacion racional a mano, y con margen de sobra: entre cien candidatos
+    siempre hay alguno que se queda a menos de una centesima de pixel, mientras
+    que redondear a secas se queda a media.
+
+    Se busca solo HACIA ARRIBA. El ancho que llega aqui ya trae aplicado el
+    suelo de resolucion del propio motor, asi que quedarse por debajo seria
+    entregar la fotografia mas pobre de lo que pide el papel -y hay una
+    comprobacion que lo vigila, que es la que lo caso-. Como mucho se sube un
+    12%, y nunca por encima de los pixeles que la imagen tiene.
+    """
+    if not forma:
+        alto = max(1, round(img.height * ancho / img.width))
+        return ancho, alto
+
+    mejor, mejor_error = (ancho, max(1, round(ancho / forma))), None
+    alto_ideal = ancho / forma
+    for alto in range(max(1, round(alto_ideal)), int(alto_ideal * 1.12) + 2):
+        candidato = max(1, round(alto * forma))
+        # Ni por debajo del ancho pedido ni por encima de lo que hay: agrandar
+        # una foto no le anade informacion, solo le anade peso.
+        if candidato < ancho or candidato > img.width or alto > img.height:
+            continue
+        error = abs(candidato - alto * forma)
+        if mejor_error is None or error < mejor_error:
+            mejor, mejor_error = (candidato, alto), error
+    return mejor
+
+
+def _recorte_a(img, forma: float | None) -> tuple[int, int, int, int] | None:
+    """El recorte centrado que deja la imagen con la forma del hueco.
+
+    Esto es lo que mas adelgaza el PDF, y el motivo no es obvio.
+
+    Chromium incrusta el JPEG tal cual -sin tocarlo, sin recomprimirlo- SIEMPRE
+    QUE no tenga que recortarlo. En cuanto un object-fit:cover le pide un
+    recorte, tiene que decodificar, recortar y volver a codificar, y lo que
+    escribe entonces es un mapa de bits sin comprimir. Una sola fotografia del
+    album pasaba asi de 42 kB a 1,3 MB. No es la resolucion: es el recorte.
+
+    Asi que el recorte se hace aqui, con Pillow, antes de que lo vea el
+    navegador. Lo que se ve en el documento no cambia ni un pixel -es
+    exactamente el mismo recorte centrado que hacia object-fit:cover-, pero la
+    imagen le llega a Chromium ya con la forma del hueco y ya no tiene nada que
+    recortar, asi que la copia entera.
+
+    Devuelve None cuando no hay nada que recortar.
+    """
+    if not forma:
+        return None
+    if img.width / img.height > forma:
+        ancho = min(img.width, max(1, round(img.height * forma)))
+        margen = (img.width - ancho) // 2
+        caja = (margen, 0, margen + ancho, img.height)
+    else:
+        alto = min(img.height, max(1, round(img.width / forma)))
+        margen = (img.height - alto) // 2
+        caja = (0, margen, img.width, margen + alto)
+    # Sin margen de tolerancia: si sobra aunque sea una fila de pixeles, se
+    # quita. Con una tolerancia del medio por ciento, una foto de 542x310 en un
+    # hueco de 216x123,4 se daba por buena, Chromium le recortaba las dos filas
+    # que sobraban y el PDF se llevaba 350 kB de mapa de bits por esas dos filas.
+    return None if caja == (0, 0, img.width, img.height) else caja
 
 
 # --- suelo de legibilidad ----------------------------------------------------

@@ -437,19 +437,45 @@ def construir_valores(invoice, doc: str = doctypes.FACTURA) -> dict[str, str]:
         else ""
     )
     valores["pagina_pie"] = doc_text(locale, "pagina_de").format(
-        pagina=2, total=paginas(invoice)
+        pagina=2, total=paginas(invoice, doc)
     )
     return valores
 
 
-def paginas(invoice) -> int:
+def tiene_pagina2(locale: str | None, doc: str = doctypes.FACTURA) -> bool:
+    """Si la plantilla de ese mercado trae la hoja del album.
+
+    Hoy solo la trae Mexico. Argentina e Inglaterra siguen con la pre-factura de
+    una sola hoja, que es la que se aprobo para esos dos mercados.
+
+    Se pregunta a la PLANTILLA y no a una lista de mercados escrita aqui: el dia
+    que la pagina 2 se lleve a otro mercado, basta con anadirsela al archivo y
+    esto se entera solo. Una lista habria que acordarse de tocarla.
+    """
+    try:
+        plantilla = cargar(locale or "es-MX", doc)
+    except (OSError, KeyError):
+        return False
+    return any(h.campo == "pagina2" for h in plantilla.huecos)
+
+
+def paginas(invoice, doc: str = doctypes.FACTURA) -> int:
     """Cuantas hojas tiene el documento. Dos cuando hay album, una si no.
 
     Se calcula aqui, en un solo sitio, porque lo necesitan tanto el pie de la
     pagina 2 como el generador del PDF. Si cada uno lo dedujera por su cuenta,
     podria salir un documento de una hoja con un pie que dice "Pagina 2 de 2".
+
+    Tener fotografias no basta: la plantilla del mercado tiene que traer la hoja.
+    Sin esta condicion, subirle un album a una factura de Argentina o de
+    Inglaterra dejaba el documento en una hoja y el generador de PDF esperando
+    dos, y lo que veia el operador era "El PDF ha salido con 1 pagina y este
+    documento es de 2. Revise si algun texto se ha alargado mucho": un aviso que
+    apunta al sitio equivocado, sobre un PDF que ya no se llegaba a generar.
     """
-    return 2 if fotos_album(invoice) else 1
+    if not fotos_album(invoice):
+        return 1
+    return 2 if tiene_pagina2(invoice.locale, doc) else 1
 
 
 # Separador de linea permitido dentro de un hueco de texto. El motor escapa
@@ -677,13 +703,16 @@ def _tarjeta_verificacion(v) -> str:
 def construir_marcado(invoice, codigos: str | None = None) -> dict[str, str]:
     """Los huecos de la pagina 2 que se rellenan con marcado generado."""
     cuantas, src, alt = _fuente_album(invoice, codigos)
-    marcado_album = ""
-    if cuantas:
-        marcado_album = album.marcado(album.repartir(cuantas), src, alt)
-
     marcadas = verificaciones.marcadas(invoice)
+
+    marcado_album, estilos = "", album.CSS
+    if cuantas:
+        reparto = album.repartir(cuantas)
+        marcado_album = album.marcado(reparto, src, alt)
+        estilos += _estilo_estirado(reparto, len(marcadas))
+
     return {
-        ALBUM_ESTILOS: album.CSS,
+        ALBUM_ESTILOS: estilos,
         ALBUM: marcado_album,
         VERIFICACIONES: "".join(_tarjeta_verificacion(v) for v in marcadas),
     }
@@ -708,6 +737,79 @@ def alto_verificaciones(cuantas: int) -> float:
         CABECERA_VERIFICACIONES_MM
         + filas * ALTO_TARJETA_MM
         + (filas - 1) * SEPARACION_TARJETAS_MM
+    )
+
+
+# --- el album aprovecha el hueco que dejan las verificaciones que faltan ------
+#
+# Con seis verificaciones la hoja va llena y el album ocupa sus 136mm. Con menos
+# el panel de abajo encoge, y como el pie esta pegado al borde inferior, lo que
+# aparecia era una franja de blanco en mitad de la pagina.
+#
+# Lo que se hace NO es recalcular el album para el hueco nuevo. El reparto de
+# 1 a 20 esta congelado a 136mm -es el que se aprobo- y sigue siendo el mismo:
+# lo unico que cambia es a que alto se pinta. Dos reglas de CSS, ni una foto de
+# sitio.
+#
+# Y no se estira todo lo que cabe. Estirar sin freno pone las fotografias mas
+# altas que anchas y un coche recortado en vertical se ve por el centro de la
+# puerta. El tope es el mismo suelo de forma que ya usaba la regla, 0.88, y lo
+# marca la fotografia mas cuadrada del reparto. Cuando el tope llega antes que
+# el hueco, sobra blanco: eso es lo correcto, no un defecto.
+
+# Lo que separa el panel de verificaciones de lo que tiene encima. Sale del
+# margin-top de .verify-wrap en pagina2.css. Cuando no hay ninguna marcada el
+# panel entero desaparece y esta separacion se va con el.
+SEPARACION_VERIFICACIONES_MM = 3.5
+
+# La cabecera del album -el titulo y la pastilla con el numero de fotografias-
+# va encima del album y dentro del mismo bloque, asi que el bloque mide siempre
+# esto mas el album.
+ALTO_CABECERA_ALBUM_MM = 9.0
+
+
+def _alto_bloque_verificaciones(cuantas: int) -> float:
+    alto = alto_verificaciones(cuantas)
+    return alto + SEPARACION_VERIFICACIONES_MM if alto else 0.0
+
+
+def hueco_libre(cuantas_verificaciones: int) -> float:
+    """Milimetros que sobran respecto a la hoja llena de seis verificaciones.
+
+    Se mide contra el caso de seis y no contra el borde de la hoja a proposito.
+    Con seis verificaciones la pagina 2 ya deja algo de aire encima del pie: ese
+    aire es parte del diseno aprobado y no se toca. El album solo se queda con
+    lo que liberan las verificaciones que NO estan.
+    """
+    completo = _alto_bloque_verificaciones(len(verificaciones.CLAVES))
+    return completo - _alto_bloque_verificaciones(cuantas_verificaciones)
+
+
+def alto_album(cuantas_fotos: int, cuantas_verificaciones: int) -> float:
+    """A que alto se pinta el album. Nunca menos que el congelado."""
+    if cuantas_fotos < 1:
+        return album.ALTO_BASE_MM
+    return alto_album_de(album.repartir(cuantas_fotos), cuantas_verificaciones)
+
+
+def alto_album_de(reparto, cuantas_verificaciones: int) -> float:
+    cabe = album.ALTO_BASE_MM + hueco_libre(cuantas_verificaciones)
+    return min(cabe, album.alto_maximo(reparto))
+
+
+def _estilo_estirado(reparto, cuantas_verificaciones: int) -> str:
+    """Las dos medidas que cambian cuando el album se estira, y nada mas.
+
+    Sale por el hueco album_estilos, detras del CSS de la rejilla, en vez de
+    tocar pagina2.css: asi la hoja de estilos sigue diciendo lo que dice el
+    diseno aprobado y el estiron se ve entero en un solo sitio.
+    """
+    alto = alto_album_de(reparto, cuantas_verificaciones)
+    if alto - album.ALTO_BASE_MM < 0.05:
+        return ""
+    return (
+        f".pagina2 .p2-main{{height:{ALTO_CABECERA_ALBUM_MM + alto:.1f}mm}}"
+        f".album{{height:{alto:.1f}mm}}"
     )
 
 

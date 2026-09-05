@@ -340,15 +340,39 @@ def main() -> int:
     # --- 5 · la guia de respuestas ------------------------------------------
     print("\n5 · Guia de respuestas (FAQ)")
 
+    # La guia se llena AQUI, desde Administracion, antes de mirarla. Antes se
+    # daba por hecho que la base traia entradas, y en una instalacion recien
+    # hecha la tabla operator_faq esta vacia: las dos comprobaciones de abajo
+    # salian en rojo sin que nada estuviera mal. Una comprobacion tiene que
+    # traerse los datos que necesita.
+    admin.post("/guia/guardar", data={
+        "category": "Garantía",
+        "question": "¿Qué garantía tiene la unidad?",
+        "answer": "La unidad conserva la garantía de fábrica vigente.",
+        "active": "1",
+    })
+    # Y una pregunta recogida SIN respuesta: es la que no debe poder leerse.
+    admin.post("/guia/guardar", data={
+        "category": "Entrega",
+        "question": "¿Se puede entregar en domingo?",
+        "answer": "",
+        "active": "",
+    })
+
     r = operador.get(f"/operador?{completo}&paso=4")
+    # El texto se compara con los espacios normalizados. En la plantilla la
+    # frase esta partida en dos lineas, asi que buscarla tal cual no la
+    # encontraba nunca -- ni con la entrada delante.
+    plano = " ".join(r.text.split())
     check(
         "el Operador ve respuestas aprobadas",
-        "Respuesta recomendada" in r.text,
+        "Respuesta recomendada" in plano,
     )
     check(
         "una pregunta sin respuesta aprobada NO se ofrece como respuesta",
-        "sin respuesta aprobada" in r.text
-        and "Esta respuesta debe definirse" not in r.text,
+        "sin respuesta aprobada" in plano
+        and "¿Se puede entregar en domingo?" in plano
+        and "Esta respuesta debe definirse" not in plano,
     )
 
     r = operador.get(f"/operador?{completo}&paso=4&q=garantia")

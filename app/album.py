@@ -48,8 +48,23 @@ from html import escape
 SEPARACION_MM = 1.8
 BORDE_MM = 0.3
 BORDE_SUPERIOR_MM = 0.2
+
+# Alto del hueco del album en la hoja. Este numero esta CONGELADO: es el alto
+# con el que se calculo el reparto que el cliente aprobo viendo las cuatro
+# laminas, y el reparto no se vuelve a calcular nunca con otro. Lo que puede
+# cambiar -y solo hacia abajo en la hoja, nunca en el reparto- es el alto al que
+# se PINTA ese mismo reparto: ver `alto_maximo` mas abajo.
+ALTO_BASE_MM = 136.0
+
 ANCHO_MM = 149.0 - 2 * SEPARACION_MM - 2 * BORDE_MM
-ALTO_MM = 136.0 - 2 * SEPARACION_MM - BORDE_SUPERIOR_MM - BORDE_MM
+
+
+def _alto_util(alto_mm: float) -> float:
+    """De los milimetros que ocupa el album, los que quedan para las fotos."""
+    return alto_mm - 2 * SEPARACION_MM - BORDE_SUPERIOR_MM - BORDE_MM
+
+
+ALTO_MM = _alto_util(ALTO_BASE_MM)
 
 MAX_FOTOS = 20
 
@@ -212,9 +227,9 @@ def _desviacion(proporcion: float) -> float:
     return abs(math.log(proporcion / PROPORCION_OBJETIVO))
 
 
-def _alto_fila(total_filas: int) -> float:
+def _alto_fila(total_filas: int, alto_album_mm: float = ALTO_BASE_MM) -> float:
     """Alto de una fila, ya descontadas las separaciones entre filas."""
-    return (ALTO_MM - (total_filas - 1) * SEPARACION_MM) / total_filas
+    return (_alto_util(alto_album_mm) - (total_filas - 1) * SEPARACION_MM) / total_filas
 
 
 def _ancho_celda(disponible: float, cuantas: int) -> float:
@@ -358,6 +373,78 @@ def _buscar(n: int, *, laterales_fijas: bool) -> list[tuple[float, int, Reparto]
     return candidatos
 
 
+# --- estirar el mismo reparto ------------------------------------------------
+#
+# El reparto se calcula SIEMPRE a ALTO_BASE_MM y no se vuelve a tocar. Lo que
+# sigue no elige otro reparto: coge el que ya salio y calcula hasta que alto se
+# puede pintar el mismo.
+#
+# Se puede pintar a otro alto sin recalcular nada porque las filas del album son
+# `repeat(R, minmax(0,1fr))`: reparten en proporcion el alto que tenga el
+# contenedor, sea el que sea. Cambiar el alto cambia una sola medida del CSS y
+# no mueve ni una fotografia de sitio.
+#
+# El limite es la forma de las fotografias: el ancho del album no cambia, asi
+# que todo lo que crece de alto lo pierden de proporcion.
+#
+# Lo que NO se puede hacer es multiplicar el alto util por un factor y dividir
+# las proporciones por ese mismo factor. Suena bien y esta mal: de los
+# milimetros del album, las separaciones entre filas son fijas y NO se estiran.
+# Al crecer, las fotografias se llevan tambien la parte proporcional de unas
+# separaciones que siguen midiendo lo mismo, asi que crecen mas que el factor.
+# Con veinte fotografias esa diferencia dejaba la mas cuadrada en 0.867 con el
+# modelo diciendo 0.880, y lo canto Chromium midiendo el documento de verdad.
+#
+# Asi que se hace al reves: se despeja el alto de FILA que deja a la fotografia
+# mas cuadrada justo en el suelo, y de ahi sale el alto del album.
+
+
+def _filas_que_ocupa(foto: Foto) -> int:
+    return FILAS_DESTACADA if foto.destacada else 1
+
+
+def alto_fila_maximo(reparto: Reparto, suelo: float = PROPORCION_MINIMA) -> float:
+    """El alto de fila mas grande con el que ninguna foto baja del suelo.
+
+    Una foto que ocupa k filas mide k alturas de fila mas las k-1 separaciones
+    que se traga por el camino. Despejando de ancho/alto >= suelo sale el tope
+    que impone cada fotografia; manda la mas exigente.
+    """
+    topes = []
+    for foto in reparto.todas_las_fotos():
+        k = _filas_que_ocupa(foto)
+        topes.append((foto.ancho_mm / suelo - (k - 1) * SEPARACION_MM) / k)
+    return min(topes)
+
+
+def alto_maximo(reparto: Reparto, suelo: float = PROPORCION_MINIMA) -> float:
+    """El alto TOTAL del album, en milimetros, al que llega ese tope.
+
+    Nunca devuelve menos que el congelado: estirar es opcional, encoger no esta
+    previsto.
+    """
+    filas = reparto.total_filas
+    util = alto_fila_maximo(reparto, suelo) * filas + (filas - 1) * SEPARACION_MM
+    return max(ALTO_BASE_MM, util + (ALTO_BASE_MM - ALTO_MM))
+
+
+def peor_proporcion(reparto: Reparto, alto_mm: float = ALTO_BASE_MM) -> float:
+    """La forma de la fotografia mas cuadrada si el album se pinta a ese alto.
+
+    Es la que hay que mirar para saber si un alto respeta el suelo: las demas
+    fotografias del reparto son mas apaisadas que ella, asi que si ella aguanta,
+    aguantan todas.
+    """
+    alto_fila = _alto_fila(reparto.total_filas, alto_mm)
+    peor = None
+    for foto in reparto.todas_las_fotos():
+        k = _filas_que_ocupa(foto)
+        alto = k * alto_fila + (k - 1) * SEPARACION_MM
+        prop = foto.ancho_mm / alto
+        peor = prop if peor is None else min(peor, prop)
+    return peor
+
+
 # --- el marcado -------------------------------------------------------------
 #
 # El HTML lo escribe esta misma funcion, no la plantilla, para que la hoja de
@@ -366,7 +453,7 @@ def _buscar(n: int, *, laterales_fijas: bool) -> list[tuple[float, int, Reparto]
 # imagen y no para lo que se acaba imprimiendo.
 
 _CSS_LEGIBLE = """
-.album{display:grid;gap:%(sep)smm;padding:%(sep)smm;height:136mm;
+.album{display:grid;gap:%(sep)smm;padding:%(sep)smm;height:%(alto)smm;
   border:.3mm solid #d8dee7;border-top:.2mm solid #edf0f4;
   border-radius:0 0 2.7mm 2.7mm;background:#fbfcfe}
 .album .banda,.album .lateral,.album .fila{display:grid;gap:%(sep)smm;min-width:0;min-height:0}
@@ -377,7 +464,7 @@ _CSS_LEGIBLE = """
 .photo figcaption{position:absolute;right:1.2mm;bottom:1mm;
   background:rgba(11,31,58,.76);color:#fff;font-size:2mm;border-radius:5mm;
   padding:.35mm 1mm;letter-spacing:.05mm}
-""" % {"sep": SEPARACION_MM}
+""" % {"sep": SEPARACION_MM, "alto": f"{ALTO_BASE_MM:g}"}
 
 # El CSS sale en UNA linea. Escrito arriba en varias porque asi se lee, y
 # entregado en una porque entra dentro de un hueco de la plantilla: si metiera
